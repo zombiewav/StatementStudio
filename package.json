@@ -1,0 +1,11 @@
+{
+  "name": "financial-stat-root",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix finance-app run dev",
+    "build": "npm --prefix finance-app run build",
+    "lint": "npm --prefix finance-app run lint",
+    "type-check": "npm --prefix finance-app run type-check",
+    "install:app": "npm --prefix finance-app install"
+  }
+}

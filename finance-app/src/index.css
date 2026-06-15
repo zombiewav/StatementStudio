@@ -1,0 +1,161 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: light;
+  --bg: #f8fafc;
+  --card: #ffffff;
+  --card-muted: #f8fafc;
+  --text: #0f172a;
+  --text-muted: #475569;
+  --text-soft: #94a3b8;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --hover: #f1f5f9;
+  --scrollbar: #cbd5e1;
+  --scrollbar-track: #020617;
+  --scrollbar-thumb: #1d4ed8;
+  --scrollbar-thumb-hover: #2563eb;
+}
+
+.dark {
+  color-scheme: dark;
+  --bg: #020617;
+  --card: #0f172a;
+  --card-muted: #111827;
+  --text: #f8fafc;
+  --text-muted: #cbd5e1;
+  --text-soft: #94a3b8;
+  --border: #1e293b;
+  --border-strong: #334155;
+  --hover: #172033;
+  --scrollbar: #334155;
+  --scrollbar-track: #020617;
+  --scrollbar-thumb: #1d4ed8;
+  --scrollbar-thumb-hover: #2563eb;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+html,
+body {
+  background-color: var(--bg);
+  color: var(--text);
+}
+
+body {
+  transition: background-color 180ms ease, color 180ms ease;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+@layer components {
+  .app-shell {
+    @apply bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100;
+  }
+
+  .app-surface {
+    @apply bg-white border border-slate-200 shadow-sm dark:bg-slate-900 dark:border-slate-800;
+  }
+
+  .app-surface-muted {
+    @apply bg-slate-50 border border-slate-200 dark:bg-slate-800/70 dark:border-slate-700;
+  }
+
+  .app-divider {
+    @apply border-slate-200 dark:border-slate-800;
+  }
+
+  .app-input {
+    @apply bg-slate-50 border border-slate-200 text-slate-700 placeholder:text-slate-400 outline-none transition-colors focus:border-blue-900 focus:bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:bg-slate-900;
+  }
+
+  .app-input-plain {
+    @apply bg-transparent border-none outline-none text-slate-700 dark:text-slate-100;
+  }
+
+  .app-filter {
+    @apply bg-slate-50 border border-slate-200 text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100;
+  }
+
+  .app-table-head {
+    @apply bg-slate-50/80 text-slate-500 dark:bg-slate-900/80 dark:text-slate-400;
+  }
+
+  .app-row-hover {
+    @apply hover:bg-slate-50/60 dark:hover:bg-slate-800/60;
+  }
+
+  .app-chip {
+    @apply bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200;
+  }
+
+  .app-chip-primary {
+    @apply bg-blue-50 text-blue-900 dark:bg-blue-950/50 dark:text-blue-200;
+  }
+
+  .app-muted {
+    @apply text-slate-500 dark:text-slate-400;
+  }
+
+  .app-soft {
+    @apply text-slate-400 dark:text-slate-500;
+  }
+
+  .app-strong {
+    @apply text-slate-900 dark:text-slate-100;
+  }
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+  border-radius: 9999px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border-radius: 9999px;
+  background-clip: padding-box;
+  border: 2px solid transparent;
+  transition: background-color 180ms ease;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+  border-radius: 9999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border-radius: 9999px;
+  background-clip: padding-box;
+  border: 2px solid transparent;
+  transition: background-color 180ms ease;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
