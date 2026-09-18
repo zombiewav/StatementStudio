@@ -5,6 +5,7 @@ import { Sidebar } from './components/Sidebar';
 import { Navbar } from './components/Navbar';
 import { Dashboard } from './pages/Dashboard';
 import { Transactions } from './pages/Transactions';
+import { Review } from './pages/Review';
 import { JournalEntries } from './pages/JournalEntries';
 import { GeneralLedger } from './pages/GeneralLedger';
 import { TrialBalance } from './pages/TrialBalance';
@@ -29,6 +30,8 @@ function DashboardLayout() {
         return <Dashboard />;
       case 'transactions':
         return <Transactions />;
+      case 'review':
+        return <Review />;
       case 'journals':
         return <JournalEntries />;
       case 'ledger':

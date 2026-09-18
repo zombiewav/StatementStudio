@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, ListFilter } from 'lucide-react';
+import { Search, ListFilter, ArrowLeftRight } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 
 
@@ -114,6 +114,11 @@ export function GeneralLedger(): React.ReactElement {
 
 
       {/* Ledger Cards list */}
+      <div className="md:hidden flex items-center gap-1.5 px-1 text-[10px] font-semibold text-slate-400 dark:text-slate-500">
+        <ArrowLeftRight className="w-3 h-3 shrink-0" />
+        Swipe each table sideways to see Debit, Credit &amp; Running Balance
+      </div>
+
       <div className="space-y-6">
         {filteredAccounts.map(acc => {
           const lines = ledgerData[acc.code] || [];

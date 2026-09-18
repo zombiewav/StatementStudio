@@ -118,7 +118,11 @@ export function Navbar({ onMenuToggle, searchTerm, setSearchTerm }: NavbarProps)
 
         <NavActionButton
           variant="ghost"
-          onClick={() => navigate("/")}
+          onClick={() => {
+            localStorage.removeItem('isLoggedIn');
+            localStorage.removeItem('currentUser');
+            navigate("/login");
+          }}
           ariaLabel="Logout"
         >
           <LogOut className="w-3.5 h-3.5" />

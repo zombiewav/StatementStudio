@@ -1,56 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  PlusCircle, 
-  Sparkles, 
-  ArrowRightLeft, 
-  Scale, 
-  Layers, 
-  TrendingDown, 
-  TrendingUp,
-  ClipboardList
+import {
+  PlusCircle,
+  Sparkles,
+  ArrowRightLeft,
+  Scale,
+  Layers,
+  TrendingDown,
+  TrendingUp
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { useFinance } from '../context/FinanceContext';
+import { useFinance, PurposeOption } from '../context/FinanceContext';
 import { Account } from '../types';
+import { FUNDING_SOURCE_OPTIONS, buildJournalLines, buildCompoundJournalLines } from '../lib/journalEngine';
+import { CASH_ACCOUNT_CODES } from '../lib/cashAccounts';
 
-// --- Program -> Expense -> Journal Entry workflow option sets -----------------
-// These lists are presentation-only for now. No accounting rules, debit/credit
-// mappings, or posting logic are attached to them yet. They exist so the form
-// can capture Program + Expense Type classification ahead of time, ready for
-// when the accounting rules for this workflow are defined.
-const PROGRAM_OPTIONS = [
-  'Student Development Program',
-  'Community Outreach Program',
-  'Faculty Development Program',
-  'Research Program',
-  'Extension Program',
-] as const;
-
-const EXPENSE_TYPE_OPTIONS = [
-  'Office Supplies',
-  'Utilities',
-  'Training Expense',
-  'Travel Expense',
-  'Equipment Expense',
-  'Maintenance Expense',
-  'Miscellaneous Expense',
-] as const;
-
-// Lightweight record that bundles the Program/Expense Type classification
-// together with the posted transaction's identifying details. This is
-// groundwork for the future Program -> Expense -> Journal Entry workflow.
-// It is purely descriptive metadata and does NOT feed into any ledger,
-// trial balance, or financial statement calculation.
-interface ProgramExpenseWorkflowRecord {
-  reference: string;
-  transactionName: string;
-  program: string;
-  expenseType: string;
-  amount: number;
-  date: string;
-  description: string;
-  status: 'Ready for Journal Posting';
-}
+const GENERAL_FUND_PROJECT = 'General Fund Operations';
+// Working paper's Situation 5.1/5.2/5.3 branch: a donor-restricted
+// contribution whose event hasn't happened yet this period.
+const RESTRICTED_REVENUE_CODE = '4035';
+const UNRESTRICTED_REVENUE_CODE = '4030';
+const MEMBERSHIP_DUES_RECEIVABLE_CODE = '1300';
 
 export function Transactions(): React.ReactElement {
   const { 
@@ -68,28 +37,72 @@ export function Transactions(): React.ReactElement {
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState<number>(0);
   const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
-  const [selectedProject, setSelectedProject] = useState('General Fund Operations');
+  const [selectedProject, setSelectedProject] = useState(GENERAL_FUND_PROJECT);
   const [debitCode, setDebitCode] = useState('5030'); // default Utilities
   const [creditCode, setCreditCode] = useState('1010'); // default Cash
   const [isSmartMatched, setIsSmartMatched] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
-  // Program / Expense Type workflow fields (workflow preparation only —
-  // no accounting calculations are derived from these yet)
-  const [program, setProgram] = useState<string>(PROGRAM_OPTIONS[0]);
-  const [expenseType, setExpenseType] = useState<string>(EXPENSE_TYPE_OPTIONS[0]);
-  const [lastWorkflowRecord, setLastWorkflowRecord] = useState<ProgramExpenseWorkflowRecord | null>(null);
+  // "Whose money paid for it?" (Question B from the posting-engine build
+  // plan). Only meaningful when the credit side is a cash account — for a
+  // revenue, loan, or on-account match the money isn't coming out of the
+  // org's cash at all, so this question doesn't apply and stays hidden.
+  const [fundingSourceId, setFundingSourceId] = useState<string>(FUNDING_SOURCE_OPTIONS[0].id);
+
+  // Donation/Restriction branching (working paper Situations 5.1/5.2/5.3):
+  // two mandatory, chained questions, shown only for a cash contribution
+  // (Dr Cash / Cr Contributions Revenue - Unrestricted). The first
+  // ("restricted?") is asked whenever the question applies; the second
+  // ("same period?") only branches out once the first is answered "yes" —
+  // both must be answered before the transaction can post.
+  const [restrictionAnswer, setRestrictionAnswer] = useState<'' | 'no' | 'yes'>('');
+  const [samePeriodAnswer, setSamePeriodAnswer] = useState<'' | 'yes' | 'no'>('');
+
+  // Membership Fees accrual completion (working paper row 3-4): a second
+  // mandatory question that posts a second journal-line pair, so revenue
+  // is never understated relative to what's actually still owed this
+  // period. Kept as a string so "not yet answered" and "answered 0" are
+  // distinguishable — both are valid, only the former blocks posting.
+  const [remainingUnpaid, setRemainingUnpaid] = useState<string>('');
+
+  // "What was it for?" (Question A). Only shown when the matched category
+  // is genuinely ambiguous — see purposeOptions on the classification rule
+  // in FinanceContext.tsx. Unlike the funding-source question, this does
+  // not change the debit account (the keyword match already fixed that);
+  // it only changes the description and whether the expense defaults to
+  // Event-Related.
+  const [purposeIndex, setPurposeIndex] = useState(0);
+
   const [classificationPreview, setClassificationPreview] = useState<{
-    expenseType: string;
-    suggestedProgram: string;
     debitAccountCode: string;
     creditAccountCode: string;
     defaultDesc: string;
+    purposeOptions?: PurposeOption[];
+    requiresAccrualCompletion?: boolean;
   } | null>(null);
 
   // active accounts
   const activeAccounts = accounts.filter(a => a.isActive);
+
+  // The funding-source question only makes sense while the credit side is
+  // still a cash account — once it points at a revenue, loan, or accounts
+  // payable account, "whose money paid for it?" no longer applies.
+  const showFundingSource = CASH_ACCOUNT_CODES.includes(creditCode);
+
+  // Only a cash contribution matched to Contributions Revenue - Unrestricted
+  // can raise the restriction question — a release-from-restriction entry
+  // (which also credits 4030, but debits 4035, not cash) is a different
+  // transaction and must not ask it again.
+  const showRestrictionQuestion = creditCode === UNRESTRICTED_REVENUE_CODE && debitCode === '1010';
+  const showSamePeriodQuestion = showRestrictionQuestion && restrictionAnswer === 'yes';
+  const isRestricted = showRestrictionQuestion && restrictionAnswer === 'yes' && samePeriodAnswer === 'no';
+  const effectiveCreditCode = isRestricted ? RESTRICTED_REVENUE_CODE : creditCode;
+
+  // The working paper's own accrual-completion example: Membership Fees
+  // for the current school year needs a second mandatory answer (how much
+  // remains unpaid) before it can post.
+  const requiresAccrualCompletion = !!classificationPreview?.requiresAccrualCompletion;
 
   // Trigger classification suggestion on Name input change
   useEffect(() => {
@@ -99,31 +112,76 @@ export function Transactions(): React.ReactElement {
       setCreditCode(match.creditAccountCode);
       setIsSmartMatched(true);
       setClassificationPreview(match);
+      setRestrictionAnswer('');
+      setSamePeriodAnswer('');
+      setRemainingUnpaid('');
 
-      if ('suggestedProgram' in match) {
-        setProgram(match.suggestedProgram);
+      // Keep the funding-source dropdown in sync with whichever cash
+      // account the matched rule assumed, so the two controls never
+      // silently disagree about who's paying.
+      const matchingSource = FUNDING_SOURCE_OPTIONS.find(o => o.creditAccountCode === match.creditAccountCode);
+      if (matchingSource) {
+        setFundingSourceId(matchingSource.id);
       }
 
-      if ('expenseType' in match) {
-        setExpenseType(match.expenseType);
-      }
-
-      if (!description) {
+      if (match.purposeOptions && match.purposeOptions.length > 0) {
+        // Ambiguous category — default to its first purpose, same as
+        // every other auto-filled field, but leave the dropdown editable.
+        setPurposeIndex(0);
+        setDescription(match.purposeOptions[0].description);
+      } else if (!description) {
         setDescription(match.defaultDesc);
       }
     } else {
       setClassificationPreview(null);
       setIsSmartMatched(false);
+      setRestrictionAnswer('');
+      setSamePeriodAnswer('');
+      setRemainingUnpaid('');
     }
   }, [txName, suggestTransactionClassification]);
 
+  // When the funding source is changed by hand, apply it to the credit
+  // account immediately — same "user override" behavior as changing the
+  // Credit Account select manually.
+  const handleFundingSourceChange = (id: string) => {
+    setFundingSourceId(id);
+    const option = FUNDING_SOURCE_OPTIONS.find(o => o.id === id);
+    if (option) {
+      setCreditCode(option.creditAccountCode);
+      setIsSmartMatched(false);
+      setRestrictionAnswer('');
+      setSamePeriodAnswer('');
+    }
+  };
+
+  // When the purpose is changed by hand, apply its description. It never
+  // touches the debit/credit accounts — the keyword match already fixed
+  // those.
+  const handlePurposeChange = (index: number) => {
+    setPurposeIndex(index);
+    const option = classificationPreview?.purposeOptions?.[index];
+    if (option) {
+      setDescription(option.description);
+    }
+  };
+
+  // Cash-advance sequencing check (working paper: "Caution: Please record
+  // the cash advance transaction first before recording expenses paid
+  // using a cash advance"). Spending more than the org currently has
+  // outstanding as advances means the underlying cash-advance-given
+  // transaction was never recorded — or was already fully spent — so this
+  // expense would silently understate what's actually owed.
+  const advancesOutstanding = accountBalances['1250'] || 0;
+  const showCashAdvanceWarning = fundingSourceId === 'officer-cash-advance' && amount > advancesOutstanding;
+
   // Derived Account lookups
   const debitAccount = activeAccounts.find(a => a.code === debitCode);
-  const creditAccount = activeAccounts.find(a => a.code === creditCode);
+  const creditAccount = activeAccounts.find(a => a.code === effectiveCreditCode);
 
   // Live balance changes
   const debitBefore = accountBalances[debitCode] || 0;
-  const creditBefore = accountBalances[creditCode] || 0;
+  const creditBefore = accountBalances[effectiveCreditCode] || 0;
 
   // Normal balance calculations
   const calculateNextBalance = (acc: Account | undefined, currentBal: number, delta: number, action: 'debit' | 'credit') => {
@@ -153,40 +211,44 @@ export function Transactions(): React.ReactElement {
       setErrorMessage('Please enter a valid amount greater than zero.');
       return;
     }
-    if (debitCode === creditCode) {
+    if (debitCode === effectiveCreditCode) {
       setErrorMessage('Debit and Credit accounts must be different for double-entry matching.');
+      return;
+    }
+    if (showRestrictionQuestion && restrictionAnswer === '') {
+      setErrorMessage('Please answer: did the donor impose a strict restriction that the money be used for this event only?');
+      return;
+    }
+    if (showSamePeriodQuestion && samePeriodAnswer === '') {
+      setErrorMessage('Please answer: will the event happen in the same reporting period the donation is received?');
+      return;
+    }
+    if (requiresAccrualCompletion && remainingUnpaid.trim() === '') {
+      setErrorMessage('Please enter how much remains unpaid this period (enter 0 if none).');
+      return;
+    }
+    if (showCashAdvanceWarning) {
+      setErrorMessage('Caution: please record the cash advance transaction first before recording expenses paid using a cash advance — the amount given exceeds what’s currently outstanding.');
       return;
     }
 
     try {
       // Post Journal Entry
-      const lines = [
-        { accountCode: debitCode, debit: amount, credit: 0 },
-        { accountCode: creditCode, debit: 0, credit: amount }
-      ];
-      
-      const je = addJournalEntry(
-        date, 
-        description || txName, 
-        selectedProject, 
-        lines
-      );
+      const lines = requiresAccrualCompletion
+        ? buildCompoundJournalLines([
+            { debitAccountCode: debitCode, creditAccountCode: effectiveCreditCode, amount },
+            { debitAccountCode: MEMBERSHIP_DUES_RECEIVABLE_CODE, creditAccountCode: effectiveCreditCode, amount: Number(remainingUnpaid) || 0 },
+          ])
+        : buildJournalLines(debitCode, effectiveCreditCode, amount);
 
-      // Capture the Program / Expense Type classification alongside this
-      // transaction for the upcoming Program -> Expense -> Journal Entry
-      // workflow. This is additive metadata only — it does not alter the
-      // journal entry, ledger, trial balance, or statement calculations
-      // performed above.
-      setLastWorkflowRecord({
-        reference: je.reference,
-        transactionName: txName,
-        program,
-        expenseType,
-        amount,
+      const isProgramSpecific = selectedProject !== GENERAL_FUND_PROJECT;
+      const je = addJournalEntry(
         date,
-        description: description || txName,
-        status: 'Ready for Journal Posting',
-      });
+        description || txName,
+        selectedProject,
+        lines,
+        isProgramSpecific ? selectedProject : undefined
+      );
 
       // Trigger Confetti micro-animation!
       confetti({
@@ -202,7 +264,11 @@ export function Transactions(): React.ReactElement {
       setDescription('');
       setAmount(0);
       setIsSmartMatched(false);
-      
+      setPurposeIndex(0);
+      setRestrictionAnswer('');
+      setSamePeriodAnswer('');
+      setRemainingUnpaid('');
+
       // Auto-hide success
       setTimeout(() => setSuccessMessage(''), 5000);
     } catch (err: any) {
@@ -267,30 +333,116 @@ export function Transactions(): React.ReactElement {
             </div>
 
             <div>
-              <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Activity / Program</label>
+              <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Program / Project Allocation</label>
               <select
-                value={program}
-                onChange={(e) => setProgram(e.target.value)}
+                value={selectedProject}
+                onChange={(e) => setSelectedProject(e.target.value)}
                 className="w-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-blue-900 focus:ring-blue-900/10 rounded-xl text-xs font-semibold p-2.5 outline-none transition-colors dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/20"
               >
-                {PROGRAM_OPTIONS.map((opt) => (
-                  <option key={opt} value={opt}>{opt}</option>
+                {projects.map((proj) => (
+                  <option key={proj.id} value={proj.name}>{proj.name}</option>
                 ))}
               </select>
+              <p className="text-[10px] text-slate-500 mt-1 font-medium dark:text-slate-400">Which budget this counts against — and, unless it's General Fund Operations, which program it shows under as Event-Related on the Statement of Activities.</p>
             </div>
 
-            <div>
-              <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Expense Category</label>
-              <select
-                value={expenseType}
-                onChange={(e) => setExpenseType(e.target.value)}
-                className="w-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-blue-900 focus:ring-blue-900/10 rounded-xl text-xs font-semibold p-2.5 outline-none transition-colors dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/20"
-              >
-                {EXPENSE_TYPE_OPTIONS.map((opt) => (
-                  <option key={opt} value={opt}>{opt}</option>
-                ))}
-              </select>
-            </div>
+            {classificationPreview?.purposeOptions && classificationPreview.purposeOptions.length > 0 && (
+              <div className="sm:col-span-2">
+                <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">What Was It For?</label>
+                <select
+                  value={purposeIndex}
+                  onChange={(e) => handlePurposeChange(Number(e.target.value))}
+                  className="w-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-blue-900 focus:ring-blue-900/10 rounded-xl text-xs font-semibold p-2.5 outline-none transition-colors dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/20"
+                >
+                  {classificationPreview.purposeOptions.map((opt, i) => (
+                    <option key={opt.label} value={i}>{opt.label}</option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-slate-500 mt-1 font-medium dark:text-slate-400">Determines the memo for this transaction.</p>
+              </div>
+            )}
+
+            {showFundingSource && (
+              <div className="sm:col-span-2">
+                <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Whose Money Paid For This?</label>
+                <select
+                  value={fundingSourceId}
+                  onChange={(e) => handleFundingSourceChange(e.target.value)}
+                  className="w-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-blue-900 focus:ring-blue-900/10 rounded-xl text-xs font-semibold p-2.5 outline-none transition-colors dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/20"
+                >
+                  {FUNDING_SOURCE_OPTIONS.map((opt) => (
+                    <option key={opt.id} value={opt.id}>{opt.label}</option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-slate-500 mt-1 font-medium dark:text-slate-400">Determines which account this transaction is credited against.</p>
+              </div>
+            )}
+
+            {showRestrictionQuestion && (
+              <div className="sm:col-span-2 space-y-3 p-3.5 bg-amber-50 border border-amber-100 rounded-xl dark:bg-amber-500/10 dark:border-amber-500/20">
+                <div>
+                  <label className="block text-[11px] font-bold text-amber-900 dark:text-amber-300 mb-1.5">Did the donor impose a strict restriction that the money be used for this event only? <span className="text-amber-600">*required</span></label>
+                  <select
+                    value={restrictionAnswer}
+                    onChange={(e) => { setRestrictionAnswer(e.target.value as '' | 'no' | 'yes'); setSamePeriodAnswer(''); }}
+                    className="w-full bg-white border border-amber-200 text-slate-900 rounded-lg text-xs font-semibold p-2.5 outline-none dark:bg-slate-800 dark:border-amber-500/30 dark:text-slate-100"
+                    required
+                  >
+                    <option value="" disabled>Select an answer…</option>
+                    <option value="no">No</option>
+                    <option value="yes">Yes</option>
+                  </select>
+                </div>
+
+                {showSamePeriodQuestion && (
+                  <div>
+                    <label className="block text-[11px] font-bold text-amber-900 dark:text-amber-300 mb-1.5">Will the event happen in the same reporting period the donation is received? <span className="text-amber-600">*required</span></label>
+                    <select
+                      value={samePeriodAnswer}
+                      onChange={(e) => setSamePeriodAnswer(e.target.value as '' | 'yes' | 'no')}
+                      className="w-full bg-white border border-amber-200 text-slate-900 rounded-lg text-xs font-semibold p-2.5 outline-none dark:bg-slate-800 dark:border-amber-500/30 dark:text-slate-100"
+                      required
+                    >
+                      <option value="" disabled>Select an answer…</option>
+                      <option value="yes">Yes</option>
+                      <option value="no">No</option>
+                    </select>
+                  </div>
+                )}
+
+                <p className="text-[10px] text-amber-700 dark:text-amber-400 font-medium">
+                  {isRestricted
+                    ? 'Recorded against Contributions Revenue - Restricted. Once the event happens, post a "Release from Restriction" transaction to reclassify it as Unrestricted.'
+                    : 'Recorded against Contributions Revenue - Unrestricted.'}
+                </p>
+              </div>
+            )}
+
+            {requiresAccrualCompletion && (
+              <div className="sm:col-span-2 p-3.5 bg-amber-50 border border-amber-100 rounded-xl dark:bg-amber-500/10 dark:border-amber-500/20">
+                <label className="block text-[11px] font-bold text-amber-900 dark:text-amber-300 mb-1.5">How much remains unpaid this period? <span className="text-amber-600">*required</span></label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-amber-500">{settings.currencySymbol}</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={remainingUnpaid}
+                    onChange={(e) => setRemainingUnpaid(e.target.value)}
+                    placeholder="0.00 if none"
+                    className="w-full bg-white border border-amber-200 text-slate-900 rounded-lg text-xs font-bold p-2.5 pl-8 outline-none dark:bg-slate-800 dark:border-amber-500/30 dark:text-slate-100"
+                    required
+                  />
+                </div>
+                <p className="text-[10px] text-amber-700 dark:text-amber-400 font-medium mt-1.5">Posted to Membership Dues Receivable, so full-period revenue isn't understated just because it wasn't all collected in cash.</p>
+              </div>
+            )}
+
+            {showCashAdvanceWarning && (
+              <div className="sm:col-span-2 p-3 bg-rose-50 border border-rose-100 text-rose-700 text-[11px] font-semibold rounded-xl dark:bg-rose-500/10 dark:border-rose-500/20 dark:text-rose-300">
+                Caution: this amount exceeds the {formatCurrency(advancesOutstanding)} currently outstanding as cash advances. Record the cash-advance-given transaction first.
+              </div>
+            )}
 
             <div>
               <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Amount</label>
@@ -332,6 +484,10 @@ export function Transactions(): React.ReactElement {
               />
             </div>
 
+            <div className="sm:col-span-2 pt-1 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+              Advanced: override accounts manually
+            </div>
+
             <div>
               <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Debit Account (Increase Assets/Expenses)</label>
               <select
@@ -357,6 +513,8 @@ export function Transactions(): React.ReactElement {
                 onChange={(e) => {
                   setCreditCode(e.target.value);
                   setIsSmartMatched(false);
+                  setRestrictionAnswer('');
+                  setSamePeriodAnswer('');
                 }}
                 className="w-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-blue-900 focus:ring-blue-900/10 rounded-xl text-xs font-semibold p-2.5 outline-none transition-colors dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/20"
               >
@@ -408,14 +566,34 @@ export function Transactions(): React.ReactElement {
               <div className="flex justify-between items-center text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800/50 p-2 rounded-xl pl-6">
                 <div>
                   <p className="text-slate-900 dark:text-slate-100">{creditAccount?.name || 'Credit Account'}</p>
-                  <p className="text-[9px] text-slate-500 dark:text-slate-400">Code: {creditCode} • Normal: {creditAccount?.normalBalance}</p>
+                  <p className="text-[9px] text-slate-500 dark:text-slate-400">Code: {effectiveCreditCode} • Normal: {creditAccount?.normalBalance}</p>
                 </div>
                 <span className="font-bold text-slate-100 w-12 text-right">
                   {amount > 0 ? formatCurrency(amount) : `${settings.currencySymbol}0.00`}
                 </span>
               </div>
+
+              {/* Accrual-completion: second line pair (remaining unpaid) */}
+              {requiresAccrualCompletion && Number(remainingUnpaid) > 0 && (
+                <>
+                  <div className="flex justify-between items-center text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800/50 p-2 rounded-xl border-t border-dashed border-amber-200 dark:border-amber-500/30 pt-3">
+                    <div>
+                      <p className="text-slate-900 dark:text-slate-100">Membership Dues Receivable</p>
+                      <p className="text-[9px] text-slate-500 dark:text-slate-400">Code: 1300 • Normal: Debit</p>
+                    </div>
+                    <span className="font-bold text-slate-100 w-12 text-right">{formatCurrency(Number(remainingUnpaid))}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800/50 p-2 rounded-xl pl-6">
+                    <div>
+                      <p className="text-slate-900 dark:text-slate-100">{creditAccount?.name}</p>
+                      <p className="text-[9px] text-slate-500 dark:text-slate-400">Code: {effectiveCreditCode} • accrued portion</p>
+                    </div>
+                    <span className="font-bold text-slate-100 w-12 text-right">{formatCurrency(Number(remainingUnpaid))}</span>
+                  </div>
+                </>
+              )}
             </div>
-            
+
             <div className="p-3.5 bg-emerald-50 border border-emerald-100 rounded-2xl text-[10px] text-emerald-700 font-semibold flex justify-between items-center dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-400">
               <span>Equation Status</span>
               <span className="flex items-center gap-1 text-emerald-700 dark:text-emerald-400">
@@ -487,57 +665,6 @@ export function Transactions(): React.ReactElement {
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Program -> Expense -> Journal Entry Workflow Preview (below the form) */}
-      <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm p-6 sm:p-8 space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
-          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-            <ClipboardList className="w-5 h-5 text-blue-700 dark:text-blue-400" /> Journal Entry Preview
-          </h3>
-          <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-            Program &rarr; Expense &rarr; Journal Entry Workflow
-          </span>
-        </div>
-
-        <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
-          This is only a preview. No journal entry is created from this section — it reflects the Program and
-          Expense Type that will be attached to the transaction once posted.
-        </p>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
-            <span className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Program</span>
-            <span className="block text-xs font-bold text-slate-900 dark:text-slate-100">{program}</span>
-          </div>
-
-          <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
-            <span className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Expense Type</span>
-            <span className="block text-xs font-bold text-slate-900 dark:text-slate-100">{expenseType}</span>
-          </div>
-
-          <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
-            <span className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Amount</span>
-            <span className="block text-xs font-bold text-slate-900 dark:text-slate-100">
-              {amount > 0 ? formatCurrency(amount) : `${settings.currencySymbol}0.00`}
-            </span>
-          </div>
-
-          <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20">
-            <span className="block text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider mb-1">Status</span>
-            <span className="flex items-center gap-1 text-xs font-bold text-emerald-700 dark:text-emerald-400">
-              <Sparkles className="w-3.5 h-3.5" /> Ready for Journal Posting
-            </span>
-          </div>
-        </div>
-
-        {lastWorkflowRecord && (
-          <div className="text-[10px] text-slate-500 dark:text-slate-400 font-medium pt-1">
-            Last posted transaction <span className="font-semibold text-slate-700 dark:text-slate-300">{lastWorkflowRecord.reference}</span> ("{lastWorkflowRecord.transactionName}")
-            was tagged with <span className="font-semibold text-slate-700 dark:text-slate-300">{lastWorkflowRecord.program}</span> /{' '}
-            <span className="font-semibold text-slate-700 dark:text-slate-300">{lastWorkflowRecord.expenseType}</span> for {formatCurrency(lastWorkflowRecord.amount)}.
-          </div>
-        )}
       </div>
     </div>
   );

@@ -7,7 +7,8 @@
     "build": "vite build",
     "type-check": "tsc --noEmit",
     "dev": "vite",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "test": "vitest run"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",
@@ -75,7 +76,8 @@
     "@vitejs/plugin-react": "4.7.0",
     "tailwindcss": "4.1.12",
     "typescript": "latest",
-    "vite": "^6.4.1"
+    "vite": "^6.4.1",
+    "vitest": "^5.0.0"
   },
   "peerDependencies": {
     "react": "18.3.1",

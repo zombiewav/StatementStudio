@@ -8,6 +8,9 @@ import {
   Eye
 } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
+import { CASH_ACCOUNT_CODES } from '../lib/cashAccounts';
+import { computeActivitiesExpenseBreakdown } from '../lib/activitiesBreakdown';
+import { computeAccountBalances, computeTypeTotals, isContraAccount } from '../lib/accountTotals';
 
 type ActiveStatementTab = 'position' | 'activities' | 'cashflow' | 'changes';
 
@@ -31,52 +34,29 @@ export function FinancialStatements(): React.ReactElement {
   }, [journalEntries, startDate, endDate]);
 
   // Compute Account Balances specifically for the filtered date range
-  const filteredBalances = useMemo(() => {
-    const balances: Record<string, number> = {};
-    accounts.forEach(acc => {
-      balances[acc.code] = 0;
-    });
-
-    filteredEntries.forEach(je => {
-      je.lines.forEach(line => {
-        const acc = accounts.find(a => a.code === line.accountCode);
-        if (!acc) return;
-        
-        const debitChange = line.debit;
-        const creditChange = line.credit;
-
-        if (acc.normalBalance === 'Debit') {
-          balances[acc.code] = (balances[acc.code] || 0) + debitChange - creditChange;
-        } else {
-          balances[acc.code] = (balances[acc.code] || 0) + creditChange - debitChange;
-        }
-      });
-    });
-
-    return balances;
-  }, [filteredEntries, accounts]);
+  const filteredBalances = useMemo(
+    () => computeAccountBalances(filteredEntries, accounts),
+    [filteredEntries, accounts]
+  );
 
   // Compute Statements totals from filtered balances
-  const filteredTotals = useMemo(() => {
-    const t: Record<string, number> = {
-      Assets: 0,
-      Liabilities: 0,
-      'Fund Balance': 0,
-      Revenue: 0,
-      Expenses: 0
-    };
-
-    accounts.forEach(acc => {
-      const bal = filteredBalances[acc.code] || 0;
-      t[acc.type] = (t[acc.type] || 0) + bal;
-    });
-
-    return t;
-  }, [filteredBalances, accounts]);
+  const filteredTotals = useMemo(
+    () => computeTypeTotals(filteredBalances, accounts),
+    [filteredBalances, accounts]
+  );
 
   const fNetIncome = filteredTotals.Revenue - filteredTotals.Expenses;
   const fEndingFundBalance = filteredTotals['Fund Balance'] + fNetIncome;
   const fTotalLiabilitiesAndFund = filteredTotals.Liabilities + fEndingFundBalance;
+
+  // Splits Operating Expenses on the Statement of Activities into
+  // Event-Related (grouped by the specific event name entered on the
+  // Transactions form) versus General & Administrative — see
+  // computeActivitiesExpenseBreakdown for the rule.
+  const activitiesExpenseBreakdown = useMemo(
+    () => computeActivitiesExpenseBreakdown(filteredEntries, accounts),
+    [filteredEntries, accounts]
+  );
 
   // Print function
   const handlePrint = () => {
@@ -105,7 +85,9 @@ export function FinancialStatements(): React.ReactElement {
       if (activeTab === 'position') {
         csvContent += "ASSETS\n";
         accounts.filter(a => a.type === 'Assets').forEach(acc => {
-          csvContent += `"${acc.name}",${filteredBalances[acc.code] || 0}\n`;
+          const bal = filteredBalances[acc.code] || 0;
+          const isContra = isContraAccount(acc);
+          csvContent += `"${isContra ? `Less: ${acc.name}` : acc.name}",${isContra ? -bal : bal}\n`;
         });
         csvContent += `"Total Assets",${filteredTotals.Assets}\n\n`;
 
@@ -129,10 +111,25 @@ export function FinancialStatements(): React.ReactElement {
         });
         csvContent += `"Total Revenue",${filteredTotals.Revenue}\n\n`;
 
-        csvContent += "EXPENSES\n";
+        csvContent += "GENERAL & ADMINISTRATIVE EXPENSES\n";
         accounts.filter(a => a.type === 'Expenses').forEach(acc => {
-          csvContent += `"${acc.name}",${filteredBalances[acc.code] || 0}\n`;
+          csvContent += `"${acc.name}",${activitiesExpenseBreakdown.generalAdminByAccount[acc.code] || 0}\n`;
         });
+        csvContent += `"Total General & Administrative",${activitiesExpenseBreakdown.generalAdminTotal}\n\n`;
+
+        if (activitiesExpenseBreakdown.eventNames.length > 0) {
+          csvContent += "EVENT-RELATED EXPENSES\n";
+          activitiesExpenseBreakdown.eventNames.forEach(eventName => {
+            const byAccount = activitiesExpenseBreakdown.eventGroups[eventName];
+            csvContent += `"${eventName}"\n`;
+            Object.entries(byAccount).forEach(([code, amount]) => {
+              const acc = accounts.find(a => a.code === code);
+              csvContent += `"  ${acc?.name || code}",${amount}\n`;
+            });
+          });
+          csvContent += `"Total Event-Related",${activitiesExpenseBreakdown.eventRelatedTotal}\n\n`;
+        }
+
         csvContent += `"Total Expenses",${filteredTotals.Expenses}\n\n`;
         csvContent += `"Net Surplus/(Deficit)",${fNetIncome}\n`;
       } else if (activeTab === 'cashflow') {
@@ -186,9 +183,9 @@ export function FinancialStatements(): React.ReactElement {
 
     sorted.forEach((je, idx) => {
       // 1. Identify starting opening cash
-      if (idx === 0 && je.description.toLowerCase().includes('capital') || je.description.toLowerCase().includes('initial')) {
+      if (idx === 0 && (je.description.toLowerCase().includes('capital') || je.description.toLowerCase().includes('initial'))) {
         je.lines.forEach(l => {
-          if (l.accountCode === '1010') {
+          if (CASH_ACCOUNT_CODES.includes(l.accountCode)) {
             beginningCash += l.debit;
           }
         });
@@ -200,12 +197,12 @@ export function FinancialStatements(): React.ReactElement {
         if (!acc) return;
 
         // Check if Cash is affected
-        const isCashDebit = line.accountCode === '1010' && line.debit > 0;
-        const isCashCredit = line.accountCode === '1010' && line.credit > 0;
+        const isCashDebit = CASH_ACCOUNT_CODES.includes(line.accountCode) && line.debit > 0;
+        const isCashCredit = CASH_ACCOUNT_CODES.includes(line.accountCode) && line.credit > 0;
 
         if (isCashDebit) {
           // Cash Inflow: Determine source (Revenue or Loan or Receivables)
-          const otherLines = je.lines.filter(l => l.accountCode !== '1010');
+          const otherLines = je.lines.filter(l => !CASH_ACCOUNT_CODES.includes(l.accountCode));
           const isLoan = otherLines.some(l => l.accountCode === '2200');
           const isAR = otherLines.some(l => l.accountCode === '1200');
           
@@ -220,7 +217,7 @@ export function FinancialStatements(): React.ReactElement {
 
         if (isCashCredit) {
           // Cash Outflow: Determine source (Expenses, Equip, AP)
-          const otherLines = je.lines.filter(l => l.accountCode !== '1010');
+          const otherLines = je.lines.filter(l => !CASH_ACCOUNT_CODES.includes(l.accountCode));
           const isEquip = otherLines.some(l => l.accountCode === '1500');
           
           if (isEquip) {
@@ -267,7 +264,7 @@ export function FinancialStatements(): React.ReactElement {
             className="flex items-center gap-2 bg-white dark:bg-slate-900 hover:bg-gray-50 dark:hover:bg-slate-800 text-gray-700 dark:text-slate-200 font-semibold text-xs px-3.5 py-2 rounded-xl border border-gray-100 dark:border-slate-800 shadow-sm transition-colors cursor-pointer"
             type="button"
           >
-            <Printer className="w-3.5 h-3.5 text-blue-900" /> Print Statement
+            <Printer className="w-3.5 h-3.5 text-blue-900 dark:text-blue-400" /> Print Statement
           </button>
           
           {/* Export PDF */}
@@ -296,7 +293,7 @@ export function FinancialStatements(): React.ReactElement {
       {isExporting && (
         <div className="fixed inset-0 bg-slate-900/10 backdrop-blur-xs flex items-center justify-center z-50 print:hidden">
           <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-gray-100 dark:border-slate-800 shadow-xl flex items-center gap-3">
-            <svg className="animate-spin h-5 w-5 text-blue-900" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <svg className="animate-spin h-5 w-5 text-blue-900 dark:text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
             </svg>
@@ -307,8 +304,8 @@ export function FinancialStatements(): React.ReactElement {
 
       {/* Export Toast Alert */}
       {exportSuccess && (
-        <div className="p-3.5 bg-emerald-50 border border-emerald-100 text-emerald-800 text-xs font-bold rounded-xl flex items-center gap-2 max-w-xl animate-bounce print:hidden">
-          <CheckCircle className="w-4.5 h-4.5 text-emerald-500 shrink-0" />
+        <div className="p-3.5 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 text-emerald-800 dark:text-emerald-300 text-xs font-bold rounded-xl flex items-center gap-2 max-w-xl animate-bounce print:hidden">
+          <CheckCircle className="w-4.5 h-4.5 text-emerald-500 dark:text-emerald-400 shrink-0" />
           <span>{exportSuccess}</span>
         </div>
       )}
@@ -350,7 +347,7 @@ export function FinancialStatements(): React.ReactElement {
             type="button"
           >
             <span>Statement of Financial Position</span>
-            <Eye className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 text-blue-600 transition-opacity" />
+            <Eye className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 text-blue-600 dark:text-blue-400 transition-opacity" />
           </button>
 
           <button
@@ -361,7 +358,7 @@ export function FinancialStatements(): React.ReactElement {
             type="button"
           >
             <span>Statement of Activities</span>
-            <Eye className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 text-blue-600 transition-opacity" />
+            <Eye className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 text-blue-600 dark:text-blue-400 transition-opacity" />
           </button>
 
           <button
@@ -372,7 +369,7 @@ export function FinancialStatements(): React.ReactElement {
             type="button"
           >
             <span>Statement of Cash Flows</span>
-            <Eye className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 text-blue-600 transition-opacity" />
+            <Eye className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 text-blue-600 dark:text-blue-400 transition-opacity" />
           </button>
 
           <button
@@ -383,7 +380,7 @@ export function FinancialStatements(): React.ReactElement {
             type="button"
           >
             <span>Changes in Fund Balance</span>
-            <Eye className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 text-blue-600 transition-opacity" />
+            <Eye className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 text-blue-600 dark:text-blue-400 transition-opacity" />
           </button>
         </div>
 
@@ -418,10 +415,11 @@ export function FinancialStatements(): React.ReactElement {
                   <div className="space-y-1">
                     {accounts.filter(a => a.type === 'Assets').map(acc => {
                       const bal = filteredBalances[acc.code] || 0;
+                      const isContra = isContraAccount(acc);
                       return (
                         <div key={acc.code} className="flex justify-between py-1 px-4 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                          <span>{acc.name}</span>
-                          <span className="font-bold">{formatCurrency(bal)}</span>
+                          <span>{isContra ? `Less: ${acc.name}` : acc.name}</span>
+                          <span className="font-bold">{formatCurrency(isContra ? -bal : bal)}</span>
                         </div>
                       );
                     })}
@@ -509,12 +507,12 @@ export function FinancialStatements(): React.ReactElement {
                   </div>
                 </div>
 
-                {/* EXPENSES */}
+                {/* EXPENSES — split General & Administrative vs Event-Related */}
                 <div>
-                  <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wider text-[10px]">Operating Expenses</h3>
+                  <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wider text-[10px]">General & Administrative Expenses</h3>
                   <div className="space-y-1">
                     {accounts.filter(a => a.type === 'Expenses').map(acc => {
-                      const bal = filteredBalances[acc.code] || 0;
+                      const bal = activitiesExpenseBreakdown.generalAdminByAccount[acc.code] || 0;
                       return (
                         <div key={acc.code} className="flex justify-between py-1 px-4 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
                           <span>{acc.name}</span>
@@ -524,16 +522,56 @@ export function FinancialStatements(): React.ReactElement {
                     })}
                   </div>
                   <div className="flex justify-between py-2 border-t border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-slate-100 mt-2 px-2">
-                    <span className="uppercase text-[10px] tracking-wider">Total Expenses & Outflows</span>
-                    <span className="border-b border-slate-200 dark:border-slate-700">{formatCurrency(filteredTotals.Expenses)}</span>
+                    <span className="uppercase text-[10px] tracking-wider">Total General & Administrative</span>
+                    <span className="border-b border-slate-200 dark:border-slate-700">{formatCurrency(activitiesExpenseBreakdown.generalAdminTotal)}</span>
                   </div>
+                </div>
+
+                {activitiesExpenseBreakdown.eventNames.length > 0 && (
+                  <div>
+                    <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wider text-[10px]">Event-Related Expenses</h3>
+                    <div className="space-y-3">
+                      {activitiesExpenseBreakdown.eventNames.map(eventName => {
+                        const byAccount = activitiesExpenseBreakdown.eventGroups[eventName];
+                        const eventTotal = Object.values(byAccount).reduce((s, v) => s + v, 0);
+                        return (
+                          <div key={eventName} className="pl-2">
+                            <div className="flex justify-between py-1 px-2 text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                              <span>{eventName}</span>
+                              <span>{formatCurrency(eventTotal)}</span>
+                            </div>
+                            <div className="space-y-1">
+                              {Object.entries(byAccount).map(([code, amount]) => {
+                                const acc = accounts.find(a => a.code === code);
+                                return (
+                                  <div key={code} className="flex justify-between py-1 px-4 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-600 dark:text-slate-400">
+                                    <span>{acc?.name || code}</span>
+                                    <span className="font-bold">{formatCurrency(amount)}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="flex justify-between py-2 border-t border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-slate-100 mt-2 px-2">
+                      <span className="uppercase text-[10px] tracking-wider">Total Event-Related</span>
+                      <span className="border-b border-slate-200 dark:border-slate-700">{formatCurrency(activitiesExpenseBreakdown.eventRelatedTotal)}</span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-between py-2 border-t-2 border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-slate-100 mt-2 px-2">
+                  <span className="uppercase text-[10px] tracking-wider">Total Expenses & Outflows</span>
+                  <span className="border-b border-slate-200 dark:border-slate-700">{formatCurrency(filteredTotals.Expenses)}</span>
                 </div>
 
                 {/* NET EXCESS */}
                 <div className="pt-4 border-t-2 border-slate-200 dark:border-slate-700">
                   <div className="flex justify-between font-black text-sm px-2 text-slate-900 dark:text-slate-100">
                     <span className="uppercase tracking-wider text-[10px]">Net Surplus (Deficit) for Period</span>
-                    <span className={`border-b-4 border-double border-slate-200 dark:border-slate-700 ${fNetIncome >= 0 ? 'text-slate-900 dark:text-slate-100' : 'text-rose-600 font-bold'}`}>
+                    <span className={`border-b-4 border-double border-slate-200 dark:border-slate-700 ${fNetIncome >= 0 ? 'text-slate-900 dark:text-slate-100' : 'text-rose-600 dark:text-rose-400 font-bold'}`}>
                       {formatCurrency(fNetIncome)}
                     </span>
                   </div>
@@ -621,7 +659,7 @@ export function FinancialStatements(): React.ReactElement {
                   </div>
                   <div className="flex justify-between py-1.5 border-b border-slate-200 dark:border-slate-700 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
                     <span>Add: Net Surplus (Deficit) for the period</span>
-                    <span className={`font-semibold ${fNetIncome >= 0 ? 'text-slate-900 dark:text-slate-100' : 'text-rose-600'}`}>{formatCurrency(fNetIncome)}</span>
+                    <span className={`font-semibold ${fNetIncome >= 0 ? 'text-slate-900 dark:text-slate-100' : 'text-rose-600 dark:text-rose-400'}`}>{formatCurrency(fNetIncome)}</span>
                   </div>
                 </div>
 

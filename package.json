@@ -6,6 +6,7 @@
     "build": "npm --prefix finance-app run build",
     "lint": "npm --prefix finance-app run lint",
     "type-check": "npm --prefix finance-app run type-check",
+    "test": "npm --prefix finance-app run test",
     "install:app": "npm --prefix finance-app install"
   }
 }

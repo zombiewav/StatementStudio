@@ -7,14 +7,16 @@ import {
   Scale, 
   FileSpreadsheet, 
   LineChart, 
-  FolderKanban, 
-  Settings, 
-  ChevronLeft, 
+  FolderKanban,
+  Settings,
+  ChevronLeft,
   ChevronRight,
   LogOut,
-  Sparkles
+  Sparkles,
+  ClipboardCheck
 } from "lucide-react";
 import { useFinance } from '../context/FinanceContext';
+import { computePendingObligations } from '../lib/reviewEngine';
 
 interface SidebarProps {
   activePage: string;
@@ -39,11 +41,13 @@ export function Sidebar({
   isCollapsed,
   setIsCollapsed,
 }: SidebarProps): React.ReactElement {
-  const { loadSampleData, clearAllData } = useFinance();
+  const { loadSampleData, clearAllData, journalEntries, accounts } = useFinance();
+  const pendingReviewCount = computePendingObligations(journalEntries, accounts).length;
 
   const menuItems: MenuItem[] = [
     { id: 'dashboard', icon: LayoutDashboard, label: "Dashboard" },
     { id: 'transactions', icon: ArrowRightLeft, label: "Transactions" },
+    { id: 'review', icon: ClipboardCheck, label: "Review" },
     { id: 'journals', icon: BookOpen, label: "Journal Entries" },
     { id: 'ledger', icon: Layers, label: "General Ledger" },
     { id: 'trial-balance', icon: Scale, label: "Trial Balance" },
@@ -117,8 +121,13 @@ export function Sidebar({
                 type="button"
               >
                 <item.icon className={`w-4.5 h-4.5 shrink-0 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-blue-900 dark:group-hover:text-blue-200 transition-colors'}`} />
-                {!isCollapsed && <span className="truncate">{item.label}</span>}
-                
+                {!isCollapsed && <span className="truncate flex-1 text-left">{item.label}</span>}
+                {item.id === 'review' && pendingReviewCount > 0 && !isCollapsed && (
+                  <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${isActive ? 'bg-white text-blue-900' : 'bg-amber-500 text-white'}`}>
+                    {pendingReviewCount}
+                  </span>
+                )}
+
                 {/* Tooltip on Collapsed */}
                 {isCollapsed && (
                   <div className="absolute left-16 bg-slate-900 text-white text-[10px] font-bold px-2 py-1 rounded-md opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity ml-4 z-50 white-space-nowrap shadow-md">

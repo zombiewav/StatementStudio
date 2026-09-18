@@ -1,25 +1,35 @@
-import React, { useState } from 'react';
-import { 
-  Building, 
-  FolderTree, 
-  User as UserIcon, 
-  Plus, 
-  ToggleLeft, 
-  ToggleRight, 
-  Edit3, 
-  Check 
+import React, { useState, useRef } from 'react';
+import {
+  Building,
+  FolderTree,
+  User as UserIcon,
+  Plus,
+  ToggleLeft,
+  ToggleRight,
+  Edit3,
+  Check,
+  Wallet,
+  Database,
+  Download,
+  Upload,
+  AlertTriangle
 } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
-import { Account, AccountType, NormalBalanceType } from '../types';
+import { Account, AccountType, NormalBalanceType, BackupPayload } from '../types';
+import { validateBackupPayload } from '../lib/backupValidation';
 
 export function Settings(): React.ReactElement {
-  const { 
-    accounts, 
-    addAccount, 
-    updateAccount, 
-    settings, 
-    updateSettings, 
-    users 
+  const {
+    accounts,
+    addAccount,
+    updateAccount,
+    settings,
+    updateSettings,
+    users,
+    addJournalEntry,
+    formatCurrency,
+    exportBackupData,
+    restoreBackupData
   } = useFinance();
 
   // COA Form State
@@ -40,6 +50,118 @@ export function Settings(): React.ReactElement {
   const [orgName, setOrgName] = useState(settings.organizationName);
   const [fyName, setFyName] = useState(settings.fiscalYear);
   const [currency, setCurrency] = useState(settings.currencyCode);
+
+  // Beginning Balances (Sheet3 of the working paper: opening figures a
+  // first-time user fills in before recording regular transactions). Posts
+  // as one ordinary balanced journal entry — a debit line per asset account
+  // with a nonzero opening amount, credited in total to General Fund
+  // Balance — so every existing ledger, trial balance, and statement
+  // calculation picks it up with no new logic anywhere else in the app.
+  const assetAccounts = accounts.filter(a => a.type === 'Assets' && a.isActive);
+  const [beginningBalances, setBeginningBalances] = useState<Record<string, string>>({});
+  const [beginningBalanceError, setBeginningBalanceError] = useState('');
+  const [beginningBalanceSuccess, setBeginningBalanceSuccess] = useState('');
+
+  const handlePostBeginningBalances = (e: React.FormEvent) => {
+    e.preventDefault();
+    setBeginningBalanceError('');
+    setBeginningBalanceSuccess('');
+
+    const lines: { accountCode: string; debit: number; credit: number }[] = [];
+    let total = 0;
+
+    assetAccounts.forEach(acc => {
+      const amount = Number(beginningBalances[acc.code] || 0);
+      if (amount > 0) {
+        lines.push({ accountCode: acc.code, debit: amount, credit: 0 });
+        total += amount;
+      }
+    });
+
+    if (total <= 0) {
+      setBeginningBalanceError('Enter at least one beginning balance greater than zero.');
+      return;
+    }
+
+    lines.push({ accountCode: '3010', debit: 0, credit: total });
+
+    const date = new Date().toISOString().split('T')[0];
+    addJournalEntry(date, 'Beginning Balances', 'General Fund Operations', lines);
+
+    setBeginningBalances({});
+    setBeginningBalanceSuccess(`Posted beginning balances totaling ${formatCurrency(total)}.`);
+    setTimeout(() => setBeginningBalanceSuccess(''), 5000);
+  };
+
+  // Data Backup — this app persists only to this browser's localStorage,
+  // with no server and no sync. Export bundles everything into one JSON
+  // file; restore requires an explicit confirmation step (pendingRestore)
+  // before anything is overwritten, since it replaces the entire workspace
+  // and cannot be undone from within the app.
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [pendingRestore, setPendingRestore] = useState<BackupPayload | null>(null);
+  const [restoreError, setRestoreError] = useState('');
+  const [restoreSuccess, setRestoreSuccess] = useState('');
+
+  const handleExportBackup = () => {
+    const payload = exportBackupData();
+    const json = JSON.stringify(payload, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const orgSlug = payload.organizationName.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'statementstudio';
+    const dateSlug = new Date().toISOString().split('T')[0];
+    link.download = `${orgSlug}_backup_${dateSlug}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setRestoreError('');
+    setRestoreSuccess('');
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(reader.result as string);
+        const validation = validateBackupPayload(parsed);
+        if (!validation.valid) {
+          setRestoreError(validation.reason || 'Invalid backup file.');
+          return;
+        }
+        setPendingRestore(parsed as BackupPayload);
+      } catch {
+        setRestoreError('Could not read this file as valid JSON.');
+      }
+    };
+    reader.onerror = () => setRestoreError('Could not read this file.');
+    reader.readAsText(file);
+
+    // Reset so selecting the same file again still fires onChange
+    e.target.value = '';
+  };
+
+  const handleConfirmRestore = () => {
+    if (!pendingRestore) return;
+    try {
+      restoreBackupData(pendingRestore);
+      setPendingRestore(null);
+      setRestoreSuccess('Backup restored successfully.');
+      setTimeout(() => setRestoreSuccess(''), 5000);
+    } catch (err: any) {
+      setRestoreError(err.message || 'Failed to restore backup.');
+    }
+  };
+
+  const handleCancelRestore = () => {
+    setPendingRestore(null);
+    setRestoreError('');
+  };
 
   const handleAddAccount = (e: React.FormEvent) => {
     e.preventDefault();
@@ -131,7 +253,7 @@ export function Settings(): React.ReactElement {
             
             <div className="space-y-3.5 text-xs">
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Company / Organization Name</label>
+                <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Organization Name</label>
                 <input
                   type="text"
                   value={orgName}
@@ -173,6 +295,123 @@ export function Settings(): React.ReactElement {
               Update Preferences
             </button>
           </form>
+
+          {/* Beginning Balances */}
+          <form onSubmit={handlePostBeginningBalances} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 pb-2.5 flex items-center gap-2">
+              <Wallet className="w-4.5 h-4.5 text-blue-900" /> Beginning Balances
+            </h3>
+            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+              First-time setup: enter each asset account's opening balance before recording regular transactions. Posts as one balanced entry against General Fund Balance.
+            </p>
+
+            {beginningBalanceError && (
+              <p className="text-[10px] text-rose-600 font-bold bg-rose-50 dark:bg-rose-500/10 dark:text-rose-300 p-2 rounded-lg">{beginningBalanceError}</p>
+            )}
+            {beginningBalanceSuccess && (
+              <p className="text-[10px] text-emerald-700 font-bold bg-emerald-50 dark:bg-emerald-500/10 dark:text-emerald-300 p-2 rounded-lg">{beginningBalanceSuccess}</p>
+            )}
+
+            <div className="space-y-3 text-xs">
+              {assetAccounts.map(acc => (
+                <div key={acc.code}>
+                  <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">{acc.name}</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 dark:text-slate-400">{settings.currencySymbol}</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={beginningBalances[acc.code] || ''}
+                      onChange={(e) => setBeginningBalances(prev => ({ ...prev, [acc.code]: e.target.value }))}
+                      placeholder="0.00"
+                      className="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl font-semibold text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 p-2.5 pl-7 outline-none focus:border-blue-900 dark:focus:border-blue-500 transition-colors"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <button
+              type="submit"
+              className="w-full bg-blue-900 hover:bg-blue-950 text-white font-bold text-xs p-2.5 rounded-xl transition-all shadow-md shadow-blue-900/10 cursor-pointer"
+            >
+              Post Beginning Balances
+            </button>
+          </form>
+
+          {/* Data Backup */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 pb-2.5 flex items-center gap-2">
+              <Database className="w-4.5 h-4.5 text-blue-900 dark:text-blue-400" /> Data Backup
+            </h3>
+            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+              Everything here is stored only in this browser. Export a backup regularly and keep it somewhere safe — clearing browser data or switching devices will otherwise lose everything.
+            </p>
+
+            {restoreError && (
+              <p className="text-[10px] text-rose-600 dark:text-rose-300 font-bold bg-rose-50 dark:bg-rose-500/10 p-2 rounded-lg">{restoreError}</p>
+            )}
+            {restoreSuccess && (
+              <p className="text-[10px] text-emerald-700 dark:text-emerald-300 font-bold bg-emerald-50 dark:bg-emerald-500/10 p-2 rounded-lg">{restoreSuccess}</p>
+            )}
+
+            <button
+              type="button"
+              onClick={handleExportBackup}
+              className="w-full flex items-center justify-center gap-2 bg-blue-900 hover:bg-blue-950 dark:bg-blue-600 dark:hover:bg-blue-500 text-white font-bold text-xs p-2.5 rounded-xl transition-all shadow-md shadow-blue-900/10 cursor-pointer"
+            >
+              <Download className="w-4 h-4" /> Export Full Backup
+            </button>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/json"
+              onChange={handleFileSelected}
+              className="hidden"
+              id="restore-file-input"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full flex items-center justify-center gap-2 bg-white dark:bg-slate-950 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-xs p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 transition-colors cursor-pointer"
+            >
+              <Upload className="w-4 h-4" /> Restore From Backup
+            </button>
+
+            {pendingRestore && (
+              <div className="p-3.5 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-xl space-y-2.5">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                  <p className="text-[11px] font-bold text-amber-800 dark:text-amber-300">
+                    This will replace ALL current data. This cannot be undone.
+                  </p>
+                </div>
+                <div className="text-[10px] text-amber-700 dark:text-amber-300/80 font-medium space-y-0.5 pl-6">
+                  <p>Organization: <span className="font-bold">{pendingRestore.organizationName}</span></p>
+                  <p>Exported: <span className="font-bold">{new Date(pendingRestore.exportedAt).toLocaleString()}</span></p>
+                  <p>{pendingRestore.accounts.length} accounts, {pendingRestore.journalEntries.length} journal entries, {pendingRestore.projects?.length || 0} projects</p>
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleCancelRestore}
+                    className="flex-1 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmRestore}
+                    className="flex-1 px-3 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-sm cursor-pointer"
+                  >
+                    Confirm Restore
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* User management list */}
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">

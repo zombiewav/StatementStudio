@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from 'react';
-import { 
-  Search, 
-  ChevronDown, 
-  ChevronUp, 
-  Trash2, 
+import {
+  Search,
+  ChevronDown,
+  ChevronUp,
+  RotateCcw,
+  Undo2,
   Calendar,
   Filter,
   ArrowUpDown
@@ -11,7 +12,7 @@ import {
 import { useFinance } from '../context/FinanceContext';
 
 export function JournalEntries(): React.ReactElement {
-  const { journalEntries, deleteJournalEntry, accounts, formatCurrency, projects } = useFinance();
+  const { journalEntries, reverseJournalEntry, accounts, formatCurrency, projects } = useFinance();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProject, setSelectedProject] = useState('All');
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
@@ -52,6 +53,8 @@ export function JournalEntries(): React.ReactElement {
 
     return result;
   }, [journalEntries, searchTerm, selectedProject, sortOrder, accounts]);
+
+  const entriesById = useMemo(() => new Map(journalEntries.map(e => [e.id, e])), [journalEntries]);
 
   return (
     <div className="space-y-6 bg-slate-50 dark:bg-slate-950">
@@ -124,12 +127,14 @@ export function JournalEntries(): React.ReactElement {
                 const isExpanded = expandedRow === je.id;
                 const totalDebits = je.lines.reduce((s, l) => s + l.debit, 0);
                 const totalCredits = je.lines.reduce((s, l) => s + l.credit, 0);
+                const reversedByRef = je.reversedByEntryId ? entriesById.get(je.reversedByEntryId)?.reference : undefined;
+                const reversalOfRef = je.reversalOfEntryId ? entriesById.get(je.reversalOfEntryId)?.reference : undefined;
 
                 return (
                   <React.Fragment key={je.id}>
                     {/* Header Row */}
-                    <tr 
-                      className={`hover:bg-slate-50/80 dark:hover:bg-slate-800/60 transition-colors cursor-pointer font-semibold ${isExpanded ? 'bg-slate-50/30 dark:bg-slate-800/30' : ''}` }
+                    <tr
+                      className={`hover:bg-slate-50/80 dark:hover:bg-slate-800/60 transition-colors cursor-pointer font-semibold ${isExpanded ? 'bg-slate-50/30 dark:bg-slate-800/30' : ''} ${reversedByRef ? 'opacity-60' : ''}` }
                       onClick={() => toggleExpand(je.id)}
                     >
                       <td className="py-3.5 px-6 text-slate-400 dark:text-slate-400">
@@ -137,7 +142,19 @@ export function JournalEntries(): React.ReactElement {
                       </td>
                       <td className="py-3.5 px-4 font-bold text-slate-900 dark:text-slate-100">{je.reference}</td>
                       <td className="py-3.5 px-4 text-slate-500 dark:text-slate-400">{new Date(je.date).toLocaleDateString()}</td>
-                      <td className="py-3.5 px-4 text-slate-900 dark:text-slate-100 font-medium">{je.description}</td>
+                      <td className="py-3.5 px-4 text-slate-900 dark:text-slate-100 font-medium">
+                        <div>{je.description}</div>
+                        {reversedByRef && (
+                          <span className="inline-block mt-1 px-2 py-0.5 rounded-full bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-300 font-semibold text-[9px] uppercase tracking-wide">
+                            Reversed via {reversedByRef}
+                          </span>
+                        )}
+                        {reversalOfRef && (
+                          <span className="inline-block mt-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300 font-semibold text-[9px] uppercase tracking-wide">
+                            Reversal of {reversalOfRef}
+                          </span>
+                        )}
+                      </td>
                       <td className="py-3.5 px-4">
                           <span className="px-2 py-0.5 rounded-full bg-blue-50/50 text-blue-900 dark:bg-blue-950/50 dark:text-blue-200 font-semibold text-[10px]">
                           {je.project}
@@ -146,14 +163,23 @@ export function JournalEntries(): React.ReactElement {
                       <td className="py-3.5 px-4 text-right font-bold text-slate-900 dark:text-slate-100">{formatCurrency(totalDebits)}</td>
                       <td className="py-3.5 px-4 text-right font-bold text-slate-900 dark:text-slate-100">{formatCurrency(totalCredits)}</td>
                       <td className="py-3.5 px-6 text-right" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          onClick={() => deleteJournalEntry(je.id)}
-                          className="p-1.5 text-slate-400 dark:text-slate-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors"
-                          title="Delete entry"
-                          type="button"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {reversedByRef ? (
+                          <span
+                            className="inline-flex p-1.5 text-slate-300 dark:text-slate-600 rounded-lg cursor-default"
+                            title={`Already reversed via ${reversedByRef}`}
+                          >
+                            <Undo2 className="w-3.5 h-3.5" />
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => reverseJournalEntry(je.id)}
+                            className="p-1.5 text-slate-400 dark:text-slate-300 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-500/10 rounded-lg transition-colors"
+                            title="Reverse entry (posts an offsetting correction; the original stays on record)"
+                            type="button"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </td>
                     </tr>
 

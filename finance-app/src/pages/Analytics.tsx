@@ -176,7 +176,7 @@ return (
                     );
                   }}
                 />
-                <Legend wrapperStyle={{ fontSize: '10px', fontWeight: 600, paddingTop: '10px', color: 'inherit' }} contentStyle={{ color: 'inherit' }} />
+                <Legend wrapperStyle={{ fontSize: '10px', fontWeight: 600, paddingTop: '10px', color: 'inherit' }} />
                 <Bar dataKey="Budget" fill="#1e3a8a" radius={[4, 4, 0, 0]} maxBarSize={20} />
                 <Bar dataKey="Revenue" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={20} />
                 <Bar dataKey="ActualSpending" fill="#f97316" radius={[4, 4, 0, 0]} maxBarSize={20} name="Actual Cost" />

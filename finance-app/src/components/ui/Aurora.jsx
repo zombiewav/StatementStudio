@@ -37,11 +37,14 @@ const Aurora = ({
       
       void main() {
         vUv = position * 0.5 + 0.5;
-        gl.Position = vec4(position, 0.0, 1.0);
+        gl_Position = vec4(position, 0.0, 1.0);
       }
     `
     );
     gl.compileShader(vertexShader);
+    if (!gl.getShaderParameter(vertexShader, gl.COMPILE_STATUS)) {
+      console.error('Aurora vertex shader failed to compile:', gl.getShaderInfoLog(vertexShader));
+    }
 
     // Fragment shader
     const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
@@ -106,12 +109,18 @@ const Aurora = ({
     `
     );
     gl.compileShader(fragmentShader);
+    if (!gl.getShaderParameter(fragmentShader, gl.COMPILE_STATUS)) {
+      console.error('Aurora fragment shader failed to compile:', gl.getShaderInfoLog(fragmentShader));
+    }
 
     // Create program
     const program = gl.createProgram();
     gl.attachShader(program, vertexShader);
     gl.attachShader(program, fragmentShader);
     gl.linkProgram(program);
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+      console.error('Aurora shader program failed to link:', gl.getProgramInfoLog(program));
+    }
     gl.useProgram(program);
 
     // Set up geometry

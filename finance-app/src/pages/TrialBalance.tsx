@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { CheckCircle2, AlertTriangle } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, ArrowLeftRight } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 
 export function TrialBalance(): React.ReactElement {
@@ -109,6 +109,11 @@ export function TrialBalance(): React.ReactElement {
           <h3 className="text-sm font-black uppercase text-gray-900 dark:text-slate-100 tracking-wider">{settings.organizationName}</h3>
           <h4 className="text-xs font-bold text-gray-500 dark:text-slate-400 mt-1">Trial Balance</h4>
           <p className="text-[9px] text-gray-400 dark:text-slate-400 mt-0.5">For Fiscal Period Ending {settings.fiscalYear}</p>
+        </div>
+
+        <div className="md:hidden flex items-center justify-center gap-1.5 py-2 text-[10px] font-semibold text-slate-400 dark:text-slate-500 border-b border-gray-50 dark:border-slate-800">
+          <ArrowLeftRight className="w-3 h-3" />
+          Swipe sideways to see Debit &amp; Credit
         </div>
 
         <div className="overflow-x-auto">

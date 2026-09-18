@@ -22,6 +22,7 @@ import {
 } from 'recharts';
 import { useFinance } from '../context/FinanceContext';
 import { useTheme } from '../context/ThemeContext';
+import { CASH_ACCOUNT_CODES } from '../lib/cashAccounts';
 
 export function Dashboard(): React.ReactElement {
   const { theme } = useTheme();
@@ -33,9 +34,9 @@ export function Dashboard(): React.ReactElement {
     netIncome,
     isBalanced,
     formatCurrency,
+    settings,
+    activeUser,
   } = useFinance();
-
-  const currentUser = JSON.parse(localStorage.getItem("currentUser") || "null");
 
   const endingFundBalance = totals['Fund Balance'] + netIncome;
   const totalLiabilitiesAndFund = totals.Liabilities + endingFundBalance;
@@ -73,7 +74,7 @@ export function Dashboard(): React.ReactElement {
 
     const trend = sorted.map((entry) => {
       entry.lines.forEach((line) => {
-        if (line.accountCode === '1010') {
+        if (CASH_ACCOUNT_CODES.includes(line.accountCode)) {
           runningCash += line.debit - line.credit;
         }
       });
@@ -125,21 +126,21 @@ export function Dashboard(): React.ReactElement {
         <div className="app-surface p-5 rounded-2xl">
           <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold mb-2">Welcome</p>
           <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-            Welcome back{currentUser?.name ? `, ${currentUser.name}` : ''}
+            Welcome back{activeUser?.name ? `, ${activeUser.name}` : ''}
           </h3>
         </div>
 
         <div className="app-surface p-5 rounded-2xl">
           <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold mb-2">Institution / Student Organization</p>
           <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-            {currentUser?.company || settings?.organizationName || 'Student Organization'}
+            {settings?.organizationName || 'Student Organization'}
           </h3>
         </div>
 
         <div className="app-surface p-5 rounded-2xl">
           <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold mb-2">Role</p>
           <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-            {currentUser?.role || 'User'}
+            {activeUser?.role || 'User'}
           </h3>
         </div>
       </div>

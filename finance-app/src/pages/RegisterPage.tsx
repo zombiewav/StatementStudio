@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ArrowRight, BarChart3, AlertCircle, CheckCircle } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import AuroraBackground from '../components/landing/AuroraBackground';
+import { useFinance } from '../context/FinanceContext';
 
 interface User {
   id: string;
@@ -15,6 +16,17 @@ interface User {
 
 export const RegisterPage: React.FC = () => {
   const navigate = useNavigate();
+  const { settings, updateSettings } = useFinance();
+
+  // Whether this is the very first account on this workspace, decided once
+  // at mount: the first registrant names the organization and becomes
+  // Administrator; everyone after joins the organization that's already
+  // there (as Accountant) instead of being asked to rename it.
+  const [isFirstAccount] = useState<boolean>(() => {
+    const existing: User[] = JSON.parse(localStorage.getItem('users') || '[]');
+    return existing.length === 0;
+  });
+
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
@@ -48,8 +60,8 @@ export const RegisterPage: React.FC = () => {
       return false;
     }
 
-    if (!formData.company.trim()) {
-      setError('Company/Organization name is required');
+    if (isFirstAccount && !formData.company.trim()) {
+      setError('Organization name is required');
       return false;
     }
 
@@ -101,14 +113,18 @@ export const RegisterPage: React.FC = () => {
       // Get existing users
       const users: User[] = JSON.parse(localStorage.getItem('users') || '[]');
 
+      // The first account on this workspace sets its name and runs it;
+      // everyone after joins that same organization as an Accountant.
+      const organizationName = isFirstAccount ? formData.company.trim() : settings.organizationName;
+
       // Create new user object
       const newUser: User = {
         id: Date.now().toString(),
         name: formData.fullName.trim(),
         email: formData.email.toLowerCase().trim(),
-        company: formData.company.trim(),
+        company: organizationName,
         password: formData.password, // Note: In production, this would be hashed
-        role: 'Administrator',
+        role: isFirstAccount ? 'Administrator' : 'Accountant',
         createdAt: new Date().toISOString(),
       };
 
@@ -118,12 +134,23 @@ export const RegisterPage: React.FC = () => {
       // Save to localStorage
       localStorage.setItem('users', JSON.stringify(users));
 
-      setSuccess('Account created successfully! Redirecting to login...');
+      if (isFirstAccount) {
+        updateSettings({ organizationName });
+      }
 
-      // Redirect to login after a brief delay
+      // Log straight in — no separate login screen — and land in the app.
+      localStorage.setItem('currentUser', JSON.stringify(newUser));
+      localStorage.setItem('isLoggedIn', 'true');
+
+      setSuccess('Account created! Taking you to your workspace...');
+
+      // A full page load, not client-side navigate(): FinanceProvider
+      // mounts once at the app root and reads currentUser/users from
+      // localStorage only at that first mount, so a SPA-only transition
+      // would land in the app still showing the guest fallback.
       setTimeout(() => {
-        navigate('/login');
-      }, 1500);
+        window.location.href = '/app/dashboard';
+      }, 800);
     } catch (err) {
       setError('An error occurred. Please try again.');
     } finally {
@@ -211,20 +238,31 @@ export const RegisterPage: React.FC = () => {
               </div>
 
               {/* COMPANY FIELD */}
-              <div>
-                <label htmlFor="company" className="block text-sm font-medium text-slate-300 mb-2">
-                  Company / Organization Name
-                </label>
-                <input
-                  id="company"
-                  type="text"
-                  value={formData.company}
-                  onChange={handleInputChange}
-                  placeholder="Your Company"
-                  disabled={isLoading}
-                  className="w-full bg-slate-950 border border-slate-700 text-white rounded-lg px-4 py-3 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all text-sm disabled:opacity-50"
-                />
-              </div>
+              {isFirstAccount ? (
+                <div>
+                  <label htmlFor="company" className="block text-sm font-medium text-slate-300 mb-2">
+                    Organization Name
+                  </label>
+                  <input
+                    id="company"
+                    type="text"
+                    value={formData.company}
+                    onChange={handleInputChange}
+                    placeholder="Your Organization"
+                    disabled={isLoading}
+                    className="w-full bg-slate-950 border border-slate-700 text-white rounded-lg px-4 py-3 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all text-sm disabled:opacity-50"
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Organization
+                  </label>
+                  <div className="w-full bg-slate-950/60 border border-slate-800 text-slate-400 rounded-lg px-4 py-3 text-sm">
+                    Joining <span className="text-slate-200 font-semibold">{settings.organizationName}</span>
+                  </div>
+                </div>
+              )}
 
               {/* PASSWORD FIELD */}
               <div>

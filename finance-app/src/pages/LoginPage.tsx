@@ -88,9 +88,12 @@ export const LoginPage: React.FC = () => {
       localStorage.setItem('currentUser', JSON.stringify(userByEmail));
       localStorage.setItem('isLoggedIn', 'true');
 
-      // Redirect to dashboard after a brief delay
+      // A full page load, not client-side navigate(): FinanceProvider
+      // mounts once at the app root and reads currentUser/users from
+      // localStorage only at that first mount, so a SPA-only transition
+      // would land in the app still showing whatever was there before.
       setTimeout(() => {
-        navigate('/app/dashboard');
+        window.location.href = '/app/dashboard';
       }, 1000);
     } catch (err) {
       setError('An error occurred. Please try again.');

@@ -176,9 +176,8 @@ const AboutSection = () => {
                           style={{
                             opacity,
                             animation: isVisible
-                              ? `pulse 2s ease-in-out infinite`
+                              ? `pulse 2s ease-in-out ${idx * 200}ms infinite`
                               : 'none',
-                            animationDelay: `${idx * 200}ms`,
                           }}
                         />
                       ))}
@@ -197,9 +196,8 @@ const AboutSection = () => {
               }`}
               style={{
                 animation: isVisible
-                  ? 'float 7s ease-in-out infinite'
+                  ? 'float 7s ease-in-out 0.2s infinite'
                   : 'none',
-                animationDelay: '0.2s',
               }}
             >
               <p className="text-xs text-blue-300 font-semibold mb-2">
@@ -218,9 +216,8 @@ const AboutSection = () => {
               }`}
               style={{
                 animation: isVisible
-                  ? 'float 8s ease-in-out infinite'
+                  ? 'float 8s ease-in-out 0.4s infinite'
                   : 'none',
-                animationDelay: '0.4s',
               }}
             >
               <p className="text-xs text-emerald-300 font-semibold mb-2">
