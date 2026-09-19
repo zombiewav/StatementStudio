@@ -6,9 +6,11 @@ import {
   computeAdvanceSettlement,
   buildAdvanceSettlementLines,
   buildSimpleSettlementLines,
+  buildPrepaidExpenseSettlementLines,
   obligationAccountLabel,
   PendingObligation,
   AdvanceSettlementStatus,
+  PREPAID_EXPENSE_CODE,
 } from '../lib/reviewEngine';
 
 const ADVANCE_STATUS_OPTIONS: { value: AdvanceSettlementStatus; label: string; needsAmount: boolean }[] = [
@@ -20,9 +22,20 @@ const ADVANCE_STATUS_OPTIONS: { value: AdvanceSettlementStatus; label: string; n
 ];
 
 function ObligationRow({ obligation }: { obligation: PendingObligation }): React.ReactElement {
-  const { accounts, formatCurrency, addJournalEntry } = useFinance();
+  const { accounts, journalEntries, formatCurrency, addJournalEntry } = useFinance();
   const [isOpen, setIsOpen] = useState(false);
-  const [settled, setSettled] = useState(false);
+  // A brief confirmation banner, not a permanent one: a PARTIAL settlement
+  // leaves this same obligation open with a smaller remainingAmount (this
+  // component stays mounted — same React key — and just gets updated
+  // props), so hiding the row for good after any settlement would wrongly
+  // bury a still-open balance. Only its absence from the next
+  // pendingObligations list (a full settlement) actually removes the row.
+  const [justSettled, setJustSettled] = useState(false);
+  const flashSettled = () => {
+    setIsOpen(false);
+    setJustSettled(true);
+    setTimeout(() => setJustSettled(false), 4000);
+  };
 
   // Due to Officers / Due to Supplier: single Full/None/Partial question.
   const [simpleChoice, setSimpleChoice] = useState<'' | 'full' | 'none' | 'partial'>('');
@@ -33,9 +46,38 @@ function ObligationRow({ obligation }: { obligation: PendingObligation }): React
   const [advancePartial, setAdvancePartial] = useState('');
   const [expenseAccountCode, setExpenseAccountCode] = useState('');
 
+  // Prepaid Expenses: "how much of this is now used?" + which account.
+  // Defaults the expense account to whatever the original entry already
+  // used (if any) — the same category almost always applies once more.
+  const originalEntry = journalEntries.find(je => je.id === obligation.entryId);
+  const defaultExpenseAccountCode = originalEntry?.lines.find(
+    l => l.debit > 0 && accounts.find(a => a.code === l.accountCode)?.type === 'Expenses'
+  )?.accountCode || '';
+  const [prepaidAmount, setPrepaidAmount] = useState('');
+  const [prepaidExpenseAccountCode, setPrepaidExpenseAccountCode] = useState(defaultExpenseAccountCode);
+
   const expenseAccounts = accounts.filter(a => a.type === 'Expenses' && a.isActive);
   const isAdvance = obligation.accountCode === '1250';
+  const isPrepaid = obligation.accountCode === PREPAID_EXPENSE_CODE;
   const cashAccountCode = '1010';
+
+  const handlePrepaidSubmit = () => {
+    const amount = Number(prepaidAmount) || 0;
+    const lines = buildPrepaidExpenseSettlementLines(prepaidExpenseAccountCode, amount);
+    if (lines.length > 0) {
+      addJournalEntry(
+        new Date().toISOString().slice(0, 10),
+        `Settlement of ${obligation.reference}: ${obligation.description}`,
+        obligation.project,
+        lines,
+        obligation.eventName,
+        obligation.entryId
+      );
+    }
+    setPrepaidAmount('');
+    setPrepaidExpenseAccountCode(defaultExpenseAccountCode);
+    flashSettled();
+  };
 
   const handleSimpleSubmit = () => {
     let amount = 0;
@@ -54,7 +96,9 @@ function ObligationRow({ obligation }: { obligation: PendingObligation }): React
         obligation.entryId
       );
     }
-    setSettled(true);
+    setSimpleChoice('');
+    setSimpleAmount('');
+    flashSettled();
   };
 
   const handleAdvanceSubmit = () => {
@@ -79,23 +123,23 @@ function ObligationRow({ obligation }: { obligation: PendingObligation }): React
       obligation.eventName,
       obligation.entryId
     );
-    setSettled(true);
+    setAdvanceStatus('');
+    setAdvancePartial('');
+    setExpenseAccountCode('');
+    flashSettled();
   };
 
   const advanceNeedsExpenseAccount = advanceStatus && advanceStatus !== 'not-used' &&
     computeAdvanceSettlement(advanceStatus, obligation.remainingAmount, Number(advancePartial) || 0).expenseAmount > 0;
   const advanceNeedsAmount = advanceStatus ? ADVANCE_STATUS_OPTIONS.find(o => o.value === advanceStatus)?.needsAmount : false;
 
-  if (settled) {
-    return (
-      <div className="p-4 rounded-xl border border-emerald-100 bg-emerald-50 dark:bg-emerald-500/10 dark:border-emerald-500/20 flex items-center gap-2 text-emerald-700 dark:text-emerald-300 text-xs font-semibold">
-        <CheckCircle2 className="w-4 h-4 shrink-0" /> Settlement posted for {obligation.reference}.
-      </div>
-    );
-  }
-
   return (
     <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+      {justSettled && (
+        <div className="p-3 flex items-center gap-2 bg-emerald-50 dark:bg-emerald-500/10 border-b border-emerald-100 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-[11px] font-semibold">
+          <CheckCircle2 className="w-4 h-4 shrink-0" /> Settlement posted for {obligation.reference}.
+        </div>
+      )}
       <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900">
         <div>
           <p className="text-xs font-bold text-slate-900 dark:text-slate-100">{obligation.description}</p>
@@ -121,7 +165,48 @@ function ObligationRow({ obligation }: { obligation: PendingObligation }): React
 
       {isOpen && (
         <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 space-y-3">
-          {!isAdvance ? (
+          {isPrepaid ? (
+            <>
+              <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                How much of this is now used, consumed, or benefited from?
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                max={obligation.remainingAmount}
+                value={prepaidAmount}
+                onChange={(e) => setPrepaidAmount(e.target.value)}
+                placeholder={`0.00, up to ${formatCurrency(obligation.remainingAmount)}`}
+                className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold p-2.5 outline-none text-slate-900 dark:text-slate-100"
+              />
+
+              {Number(prepaidAmount) > 0 && (
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1">Which expense is this?</label>
+                  <select
+                    value={prepaidExpenseAccountCode}
+                    onChange={(e) => setPrepaidExpenseAccountCode(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold p-2.5 outline-none text-slate-900 dark:text-slate-100"
+                  >
+                    <option value="" disabled>Select an expense account…</option>
+                    {expenseAccounts.map(acc => (
+                      <option key={acc.code} value={acc.code}>{acc.code} - {acc.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <button
+                type="button"
+                disabled={!prepaidAmount || (Number(prepaidAmount) > 0 && !prepaidExpenseAccountCode)}
+                onClick={handlePrepaidSubmit}
+                className="w-full bg-blue-700 hover:bg-blue-800 disabled:opacity-40 text-white font-bold text-xs p-2.5 rounded-lg transition-colors"
+              >
+                Post Settlement
+              </button>
+            </>
+          ) : !isAdvance ? (
             <>
               <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300">
                 {obligation.accountCode === '2050'
@@ -233,7 +318,7 @@ export function Review(): React.ReactElement {
           <ClipboardCheck className="w-5 h-5 text-blue-700 dark:text-blue-400" /> REVIEW
         </h2>
         <p className="text-xs text-slate-700 dark:text-slate-400 mt-1 font-medium">
-          Follow up on open balances — Due to Officers, Due to Supplier, and Advances to Officers — until each one is settled.
+          Follow up on open balances — Due to Officers, Due to Supplier, Advances to Officers, and Prepaid Expenses — until each one is settled.
         </p>
       </div>
 
@@ -241,7 +326,7 @@ export function Review(): React.ReactElement {
         <div className="p-8 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-center">
           <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
           <p className="text-sm font-bold text-slate-700 dark:text-slate-200">Nothing pending review.</p>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Every reimbursement, supplier bill, and cash advance is settled.</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Every reimbursement, supplier bill, cash advance, and prepaid item is settled.</p>
         </div>
       ) : (
         <div className="space-y-3">

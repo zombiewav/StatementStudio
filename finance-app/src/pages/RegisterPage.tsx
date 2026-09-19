@@ -1,36 +1,29 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ArrowRight, BarChart3, AlertCircle, CheckCircle } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import AuroraBackground from '../components/landing/AuroraBackground';
 import { useFinance } from '../context/FinanceContext';
 
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  company: string;
+interface OrgAccount {
+  organizationName: string;
   password: string;
-  role: string;
   createdAt: string;
 }
 
 export const RegisterPage: React.FC = () => {
   const navigate = useNavigate();
-  const { settings, updateSettings } = useFinance();
+  const { updateSettings } = useFinance();
 
-  // Whether this is the very first account on this workspace, decided once
-  // at mount: the first registrant names the organization and becomes
-  // Administrator; everyone after joins the organization that's already
-  // there (as Accountant) instead of being asked to rename it.
-  const [isFirstAccount] = useState<boolean>(() => {
-    const existing: User[] = JSON.parse(localStorage.getItem('users') || '[]');
-    return existing.length === 0;
-  });
+  // Only one organization lives in this browser's storage. If it's already
+  // set up, there's nothing to register — send them to sign in instead.
+  useEffect(() => {
+    if (localStorage.getItem('orgAccount')) {
+      navigate('/login', { replace: true });
+    }
+  }, [navigate]);
 
   const [formData, setFormData] = useState({
-    fullName: '',
-    email: '',
-    company: '',
+    organizationName: '',
     password: '',
     confirmPassword: '',
   });
@@ -44,23 +37,11 @@ export const RegisterPage: React.FC = () => {
       ...prev,
       [id]: value,
     }));
-    // Clear errors when user starts typing
     if (error) setError('');
   };
 
   const validateForm = (): boolean => {
-    // Check for empty fields
-    if (!formData.fullName.trim()) {
-      setError('Full name is required');
-      return false;
-    }
-
-    if (!formData.email.trim()) {
-      setError('Email address is required');
-      return false;
-    }
-
-    if (isFirstAccount && !formData.company.trim()) {
+    if (!formData.organizationName.trim()) {
       setError('Organization name is required');
       return false;
     }
@@ -75,21 +56,8 @@ export const RegisterPage: React.FC = () => {
       return false;
     }
 
-    if (!formData.confirmPassword) {
-      setError('Please confirm your password');
-      return false;
-    }
-
-    // Check for password mismatch
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
-      return false;
-    }
-
-    // Check for duplicate email
-    const users: User[] = JSON.parse(localStorage.getItem('users') || '[]');
-    if (users.some((user) => user.email === formData.email.toLowerCase())) {
-      setError('An account with this email already exists');
       return false;
     }
 
@@ -107,47 +75,24 @@ export const RegisterPage: React.FC = () => {
     setIsLoading(true);
 
     try {
-      // Simulate a brief delay for better UX
       await new Promise((resolve) => setTimeout(resolve, 500));
 
-      // Get existing users
-      const users: User[] = JSON.parse(localStorage.getItem('users') || '[]');
-
-      // The first account on this workspace sets its name and runs it;
-      // everyone after joins that same organization as an Accountant.
-      const organizationName = isFirstAccount ? formData.company.trim() : settings.organizationName;
-
-      // Create new user object
-      const newUser: User = {
-        id: Date.now().toString(),
-        name: formData.fullName.trim(),
-        email: formData.email.toLowerCase().trim(),
-        company: organizationName,
-        password: formData.password, // Note: In production, this would be hashed
-        role: isFirstAccount ? 'Administrator' : 'Accountant',
+      const orgAccount: OrgAccount = {
+        organizationName: formData.organizationName.trim(),
+        password: formData.password,
         createdAt: new Date().toISOString(),
       };
 
-      // Add user to array
-      users.push(newUser);
-
-      // Save to localStorage
-      localStorage.setItem('users', JSON.stringify(users));
-
-      if (isFirstAccount) {
-        updateSettings({ organizationName });
-      }
-
-      // Log straight in — no separate login screen — and land in the app.
-      localStorage.setItem('currentUser', JSON.stringify(newUser));
+      localStorage.setItem('orgAccount', JSON.stringify(orgAccount));
       localStorage.setItem('isLoggedIn', 'true');
+      updateSettings({ organizationName: orgAccount.organizationName });
 
-      setSuccess('Account created! Taking you to your workspace...');
+      setSuccess('Organization set up! Taking you to your workspace...');
 
       // A full page load, not client-side navigate(): FinanceProvider
-      // mounts once at the app root and reads currentUser/users from
-      // localStorage only at that first mount, so a SPA-only transition
-      // would land in the app still showing the guest fallback.
+      // mounts once at the app root and reads settings from localStorage
+      // only at that first mount, so a SPA-only transition would land in
+      // the app still showing the default organization name.
       setTimeout(() => {
         window.location.href = '/app/dashboard';
       }, 800);
@@ -160,18 +105,12 @@ export const RegisterPage: React.FC = () => {
 
   return (
     <div className="bg-black text-white min-h-screen overflow-hidden flex flex-col items-center justify-center relative">
-      {/* AURORA BACKGROUND */}
       <AuroraBackground />
-
-      {/* CONTENT */}
       <div className="relative z-10 w-full px-4 sm:px-6 lg:px-8">
         <div className="max-w-md mx-auto">
-          {/* CARD */}
           <div className="bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-8 sm:p-10 space-y-8">
-            
-            {/* HEADER */}
+
             <div className="space-y-4 text-center">
-              {/* LOGO */}
               <div className="flex justify-center mb-4">
                 <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
                   <BarChart3 className="w-7 h-7 text-white" />
@@ -179,15 +118,14 @@ export const RegisterPage: React.FC = () => {
               </div>
 
               <h1 className="text-3xl font-bold text-white">
-                Create Your Account
+                Set Up Your Organization
               </h1>
 
               <p className="text-slate-400 text-sm">
-                Set up your StatementStudio workspace.
+                Create one shared login your whole organization uses to access this workspace.
               </p>
             </div>
 
-            {/* ERROR MESSAGE */}
             {error && (
               <div className="bg-red-950/50 border border-red-800 rounded-lg p-4 flex items-start gap-3">
                 <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
@@ -195,7 +133,6 @@ export const RegisterPage: React.FC = () => {
               </div>
             )}
 
-            {/* SUCCESS MESSAGE */}
             {success && (
               <div className="bg-green-950/50 border border-green-800 rounded-lg p-4 flex items-start gap-3">
                 <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
@@ -203,71 +140,25 @@ export const RegisterPage: React.FC = () => {
               </div>
             )}
 
-            {/* FORM */}
             <form className="space-y-5" onSubmit={(e) => { e.preventDefault(); handleRegister(); }}>
-              {/* FULL NAME FIELD */}
               <div>
-                <label htmlFor="fullName" className="block text-sm font-medium text-slate-300 mb-2">
-                  Full Name
+                <label htmlFor="organizationName" className="block text-sm font-medium text-slate-300 mb-2">
+                  Organization Name
                 </label>
                 <input
-                  id="fullName"
+                  id="organizationName"
                   type="text"
-                  value={formData.fullName}
+                  value={formData.organizationName}
                   onChange={handleInputChange}
-                  placeholder="John Doe"
+                  placeholder="Your Organization"
                   disabled={isLoading}
                   className="w-full bg-slate-950 border border-slate-700 text-white rounded-lg px-4 py-3 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all text-sm disabled:opacity-50"
                 />
               </div>
 
-              {/* EMAIL FIELD */}
-              <div>
-                <label htmlFor="email" className="block text-sm font-medium text-slate-300 mb-2">
-                  Email Address
-                </label>
-                <input
-                  id="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={handleInputChange}
-                  placeholder="you@example.com"
-                  disabled={isLoading}
-                  className="w-full bg-slate-950 border border-slate-700 text-white rounded-lg px-4 py-3 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all text-sm disabled:opacity-50"
-                />
-              </div>
-
-              {/* COMPANY FIELD */}
-              {isFirstAccount ? (
-                <div>
-                  <label htmlFor="company" className="block text-sm font-medium text-slate-300 mb-2">
-                    Organization Name
-                  </label>
-                  <input
-                    id="company"
-                    type="text"
-                    value={formData.company}
-                    onChange={handleInputChange}
-                    placeholder="Your Organization"
-                    disabled={isLoading}
-                    className="w-full bg-slate-950 border border-slate-700 text-white rounded-lg px-4 py-3 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all text-sm disabled:opacity-50"
-                  />
-                </div>
-              ) : (
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Organization
-                  </label>
-                  <div className="w-full bg-slate-950/60 border border-slate-800 text-slate-400 rounded-lg px-4 py-3 text-sm">
-                    Joining <span className="text-slate-200 font-semibold">{settings.organizationName}</span>
-                  </div>
-                </div>
-              )}
-
-              {/* PASSWORD FIELD */}
               <div>
                 <label htmlFor="password" className="block text-sm font-medium text-slate-300 mb-2">
-                  Password
+                  Organization Password
                 </label>
                 <input
                   id="password"
@@ -278,9 +169,9 @@ export const RegisterPage: React.FC = () => {
                   disabled={isLoading}
                   className="w-full bg-slate-950 border border-slate-700 text-white rounded-lg px-4 py-3 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all text-sm disabled:opacity-50"
                 />
+                <p className="text-xs text-slate-500 mt-1.5">Anyone in your organization who knows this password can sign in.</p>
               </div>
 
-              {/* CONFIRM PASSWORD FIELD */}
               <div>
                 <label htmlFor="confirmPassword" className="block text-sm font-medium text-slate-300 mb-2">
                   Confirm Password
@@ -296,22 +187,20 @@ export const RegisterPage: React.FC = () => {
                 />
               </div>
 
-              {/* CREATE ACCOUNT BUTTON */}
               <button
                 onClick={handleRegister}
                 type="submit"
                 disabled={isLoading}
                 className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white font-semibold rounded-lg transition-all hover:shadow-lg hover:shadow-blue-500/20 flex items-center justify-center gap-2 mt-6 disabled:opacity-70"
               >
-                {isLoading ? 'Creating Account...' : 'Create Account'}
+                {isLoading ? 'Setting Up...' : 'Set Up Organization'}
                 {!isLoading && <ArrowRight className="w-4 h-4" />}
               </button>
             </form>
 
-            {/* FOOTER TEXT */}
             <div className="text-center">
               <p className="text-slate-400 text-sm">
-                Already have an account?{' '}
+                Already set up?{' '}
                 <button
                   onClick={() => navigate('/login')}
                   disabled={isLoading}
@@ -323,7 +212,6 @@ export const RegisterPage: React.FC = () => {
             </div>
           </div>
 
-          {/* BACK TO HOME */}
           <div className="text-center mt-6">
             <button
               onClick={() => navigate('/')}

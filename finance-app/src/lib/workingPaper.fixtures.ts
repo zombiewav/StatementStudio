@@ -6,14 +6,14 @@
 // the only source of truth for what the product actually offers.
 //
 // Methodology: of the paper's 79 labelled rows (43 in Sheet1, 36 in
-// ADDITIONAL), only 5 have BOTH a debit and a credit account that already
-// exist in StatementStudio's Chart of Accounts (Phase 1 deliberately added
-// just 4 new accounts, not the paper's full ~50-account vocabulary — see
-// the build plan). Those 5 are asserted end-to-end below: debit account,
-// credit account, and both Increase/Decrease effects, exactly as the paper
-// states them.
+// ADDITIONAL), 7 have BOTH a debit and a credit account that already
+// exist in StatementStudio's Chart of Accounts (the Chart of Accounts has
+// grown since Phase 1, but still doesn't cover the paper's full ~50-account
+// vocabulary — see the build plan). Those 7 are asserted end-to-end below:
+// debit account, credit account, and both Increase/Decrease effects,
+// exactly as the paper states them.
 //
-// The other 74 rows are not silently dropped — EXCLUDED_ROWS documents
+// The other 72 rows are not silently dropped — EXCLUDED_ROWS documents
 // every one of them, categorized by why the engine cannot yet check it.
 // Nothing here guesses at an answer the paper doesn't give (e.g. treating
 // a bare "Cash" as "Cash on Hand"): that guess is exactly the ambiguity
@@ -30,7 +30,7 @@ export interface CoveredRow {
   expectedCreditEffect: 'Increase' | 'Decrease';
 }
 
-// The 5 rows where both accounts already exist in the shipped Chart of
+// The 7 rows where both accounts already exist in the shipped Chart of
 // Accounts. Account-name normalization applied (documented per row): the
 // paper's wording differs cosmetically from ours, but names the same
 // account.
@@ -86,6 +86,28 @@ export const COVERED_ROWS: CoveredRow[] = [
     creditAccountCode: '1010',
     expectedDebitEffect: 'Increase',
     expectedCreditEffect: 'Decrease',
+  },
+  {
+    sheet: 'Sheet1',
+    row: 20,
+    label: 'Depreciation of Laptop for the current period',
+    // Paper: "Depreciation Expense-Equipment" -> our 5090
+    debitAccountCode: '5090',
+    // Paper: "Accumulated Depreciation-Equipment" -> our 1550
+    creditAccountCode: '1550',
+    expectedDebitEffect: 'Increase',
+    expectedCreditEffect: 'Increase',
+  },
+  {
+    sheet: 'Sheet1',
+    row: 28,
+    label: 'Depreciation of Chairs for the current period',
+    // Paper: "Depreciation Expense-Furniture and Fixtures" -> our 5095
+    debitAccountCode: '5095',
+    // Paper: "Accumulated Depreciation-Furniture & Fixtures" -> our 1660
+    creditAccountCode: '1660',
+    expectedDebitEffect: 'Increase',
+    expectedCreditEffect: 'Increase',
   },
 ];
 
@@ -162,7 +184,7 @@ export type ExclusionReason =
 // label text) to keep this file reviewable; cross-reference against the
 // source workbook by sheet + row number.
 export const EXCLUDED_ROWS: { sheet: 'Sheet1' | 'ADDITIONAL'; row: number; reason: ExclusionReason }[] = [
-  // Sheet1 (38 excluded of 43 rows; 5 covered above)
+  // Sheet1 (36 excluded of 43 rows; 7 covered above)
   { sheet: 'Sheet1', row: 3, reason: 'missing-account' },   // Membership Dues
   { sheet: 'Sheet1', row: 4, reason: 'missing-account' },   // Membership Dues
   { sheet: 'Sheet1', row: 6, reason: 'missing-account' },   // Bank Charges
@@ -176,7 +198,6 @@ export const EXCLUDED_ROWS: { sheet: 'Sheet1' | 'ADDITIONAL'; row: number; reaso
   { sheet: 'Sheet1', row: 16, reason: 'incomplete' },
   { sheet: 'Sheet1', row: 18, reason: 'incomplete' },
   { sheet: 'Sheet1', row: 19, reason: 'incomplete' },
-  { sheet: 'Sheet1', row: 20, reason: 'missing-account' },  // Depreciation Expense / Accumulated Depreciation
   { sheet: 'Sheet1', row: 21, reason: 'incomplete' },
   { sheet: 'Sheet1', row: 22, reason: 'incomplete' },
   { sheet: 'Sheet1', row: 23, reason: 'incomplete' },
@@ -184,7 +205,6 @@ export const EXCLUDED_ROWS: { sheet: 'Sheet1' | 'ADDITIONAL'; row: number; reaso
   { sheet: 'Sheet1', row: 25, reason: 'missing-account' },  // Furniture and Fixtures
   { sheet: 'Sheet1', row: 26, reason: 'incomplete' },
   { sheet: 'Sheet1', row: 27, reason: 'incomplete' },
-  { sheet: 'Sheet1', row: 28, reason: 'missing-account' },  // Depreciation accounts
   { sheet: 'Sheet1', row: 29, reason: 'incomplete' },
   { sheet: 'Sheet1', row: 30, reason: 'incomplete' },
   { sheet: 'Sheet1', row: 31, reason: 'missing-account' },  // Other Income; also bare "Cash"

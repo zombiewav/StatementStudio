@@ -4,6 +4,7 @@ import {
   computeAdvanceSettlement,
   buildAdvanceSettlementLines,
   buildSimpleSettlementLines,
+  buildPrepaidExpenseSettlementLines,
   AdvanceSettlementStatus,
 } from './reviewEngine';
 import { Account, JournalEntry } from '../types';
@@ -11,9 +12,11 @@ import { Account, JournalEntry } from '../types';
 const accounts: Account[] = [
   { code: '1010', name: 'Cash on Hand', type: 'Assets', normalBalance: 'Debit', description: '', isActive: true },
   { code: '1250', name: 'Advances to Officers', type: 'Assets', normalBalance: 'Debit', description: '', isActive: true },
+  { code: '1260', name: 'Prepaid Expenses', type: 'Assets', normalBalance: 'Debit', description: '', isActive: true },
   { code: '2010', name: 'Due to Supplier', type: 'Liabilities', normalBalance: 'Credit', description: '', isActive: true },
   { code: '2050', name: 'Due to Officers', type: 'Liabilities', normalBalance: 'Credit', description: '', isActive: true },
   { code: '5020', name: 'Rent Expense', type: 'Expenses', normalBalance: 'Debit', description: '', isActive: true },
+  { code: '5160', name: 'Supplies Expense', type: 'Expenses', normalBalance: 'Debit', description: '', isActive: true },
 ];
 
 const baseEntry = (overrides: Partial<JournalEntry>): JournalEntry => ({
@@ -220,6 +223,60 @@ describe('buildSimpleSettlementLines', () => {
     expect(lines).toEqual([
       { accountCode: '2050', debit: 500, credit: 0 },
       { accountCode: '1010', debit: 0, credit: 500 },
+    ]);
+  });
+});
+
+describe('Prepaid Expenses (1260) as an obligation account', () => {
+  it('detects a Prepaid Expenses obligation on its DEBIT side, same as Advances to Officers', () => {
+    const entries: JournalEntry[] = [
+      baseEntry({
+        id: 'je-1',
+        lines: [
+          { accountCode: '5160', debit: 400, credit: 0 },
+          { accountCode: '1260', debit: 600, credit: 0 },
+          { accountCode: '1010', debit: 0, credit: 1000 },
+        ],
+      }),
+    ];
+    const pending = computePendingObligations(entries, accounts);
+    expect(pending).toHaveLength(1);
+    expect(pending[0].accountCode).toBe('1260');
+    expect(pending[0].remainingAmount).toBe(600);
+  });
+
+  it('nets a Prepaid Expenses settlement, which clears it via a CREDIT', () => {
+    const entries: JournalEntry[] = [
+      baseEntry({
+        id: 'je-1',
+        lines: [
+          { accountCode: '1260', debit: 600, credit: 0 },
+          { accountCode: '1010', debit: 0, credit: 600 },
+        ],
+      }),
+      baseEntry({
+        id: 'je-2',
+        settlesEntryId: 'je-1',
+        lines: [
+          { accountCode: '5160', debit: 600, credit: 0 },
+          { accountCode: '1260', debit: 0, credit: 600 },
+        ],
+      }),
+    ];
+    expect(computePendingObligations(entries, accounts)).toHaveLength(0);
+  });
+});
+
+describe('buildPrepaidExpenseSettlementLines', () => {
+  it('returns nothing when nothing is used yet', () => {
+    expect(buildPrepaidExpenseSettlementLines('5160', 0)).toEqual([]);
+  });
+
+  it('builds a balanced Dr expense / Cr Prepaid Expenses pair', () => {
+    const lines = buildPrepaidExpenseSettlementLines('5160', 250);
+    expect(lines).toEqual([
+      { accountCode: '5160', debit: 250, credit: 0 },
+      { accountCode: '1260', debit: 0, credit: 250 },
     ]);
   });
 });

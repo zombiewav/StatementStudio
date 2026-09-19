@@ -4,7 +4,6 @@ import {
   JournalEntry,
   Project,
   AuditLog,
-  User,
   AppSettings,
   ClassificationRule,
   BackupPayload
@@ -33,6 +32,18 @@ export interface ClassificationRuleWithWorkflow extends ClassificationRule {
   // revenue is never understated relative to what's actually collected in
   // cash. See the accrual-completion question on the Transactions form.
   requiresAccrualCompletion?: boolean;
+
+  // Marks a category where the money paid can plausibly outlive the
+  // period it was paid in — event supplies bought ahead of the event,
+  // materials not all used yet, and the like (the client's own flowchart:
+  // "what amount is not yet used/consumed/expired/benefited?"). Absent on
+  // routine, immediately-consumed categories (utilities, rent, salaries,
+  // bank charges) so THOSE stay a single question-free entry. Present
+  // rules drive the "How much of this is not yet used?" question on the
+  // Transactions form, which defers that portion into Prepaid Expenses
+  // (1260) instead of expensing it immediately — see PREPAID_EXPENSE_CODE
+  // in src/lib/reviewEngine.ts, which resolves it later.
+  mayDeferPortion?: boolean;
 }
 
 export interface PurposeOption {
@@ -53,6 +64,12 @@ export const INITIAL_ACCOUNTS: Account[] = [
   { code: '1015', name: 'Cash in Bank', type: 'Assets', normalBalance: 'Debit', description: 'Funds held in bank accounts, GCash, Maya, and other e-wallets', isActive: true },
   { code: '1200', name: 'Receivables', type: 'Assets', normalBalance: 'Debit', description: 'Uncollected amounts due from sponsors, partners, and other receivables', isActive: true },
   { code: '1250', name: 'Advances to Officers', type: 'Assets', normalBalance: 'Debit', description: 'Cash advances given to officers for organization expenses, pending liquidation', isActive: true },
+  // The matching principle, generalized: whenever a transaction's own
+  // classification rule allows it (mayDeferPortion — see DEFAULT_RULES),
+  // the portion not yet used/consumed/benefited this period lands here
+  // instead of being expensed immediately, and REVIEW (src/lib/reviewEngine.ts)
+  // reclassifies it into the real expense account once it's actually used.
+  { code: '1260', name: 'Prepaid Expenses', type: 'Assets', normalBalance: 'Debit', description: 'Cash paid for goods/services not yet used, consumed, or benefited from this period', isActive: true },
   { code: '1500', name: 'Equipment & Tools', type: 'Assets', normalBalance: 'Debit', description: 'Laptops, computers, hardware, tools, and other equipment used by the organization', isActive: true },
   // Contra-assets: Credit-normal despite being Assets-type accounts, so they
   // reduce Total Assets instead of adding to it (see isContraAccount in
@@ -105,7 +122,11 @@ export const INITIAL_ACCOUNTS: Account[] = [
   // Restricted", a Revenue account, not an equity/fund-balance one.
   { code: '4035', name: 'Contributions Revenue - Restricted', type: 'Revenue', normalBalance: 'Credit', description: 'Donor-restricted contributions whose triggering event has not yet occurred this period', isActive: true },
   { code: '4040', name: 'Membership Dues', type: 'Revenue', normalBalance: 'Credit', description: 'Dues collected from members', isActive: true },
-  { code: '4050', name: 'Other Income', type: 'Revenue', normalBalance: 'Credit', description: 'Miscellaneous income not covered by another revenue account (printing services, equipment rental, ticket sales, etc.)', isActive: true },
+  { code: '4050', name: 'Other Income', type: 'Revenue', normalBalance: 'Credit', description: 'Miscellaneous income not covered by another revenue account (cashback, advertising revenue, cash prizes received, ticket sales, etc.)', isActive: true },
+  // Split out from Other Income per the client's revised note sheet: renting
+  // out projector/extension wire/other equipment, and printing services, now
+  // get their own line instead of being lumped into Miscellaneous Income.
+  { code: '4055', name: 'Rental Revenues', type: 'Revenue', normalBalance: 'Credit', description: 'Income from renting out equipment (projector, extension wire, etc.) and from printing services', isActive: true },
   { code: '4060', name: 'Interest Income', type: 'Revenue', normalBalance: 'Credit', description: 'Interest earned on bank deposits or investments', isActive: true },
   { code: '4070', name: 'Merchandise Sales', type: 'Revenue', normalBalance: 'Credit', description: 'Revenue from selling organization merchandise or apparel', isActive: true },
   { code: '4080', name: 'Ticket Sales', type: 'Revenue', normalBalance: 'Credit', description: 'Revenue from ticket sales to events', isActive: true },
@@ -287,7 +308,7 @@ const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   { keyword: 'wifi', debitAccountCode: '5030', creditAccountCode: '1010', description: 'Wifi / Internet Subscription' },
   { keyword: 'utility', debitAccountCode: '5030', creditAccountCode: '1010', description: 'Utility Payments' },
 
-  // --- Miscellaneous Income (checked very early) ----------------------------
+  // --- Rental Revenues & Printing Services (checked very early) ------------------
   // Cash received from printing services or from renting out
   // projector/equipment/office supplies is revenue, not the matching
   // expense category — but the paper's own wording ("Cash received from
@@ -295,10 +316,14 @@ const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   // supplies") contains 'office supplies' and 'equipment' as literal
   // substrings, which would otherwise shadow this as an expense purchase.
   // Placed here, before every expense keyword that could collide, for
-  // exactly that reason.
-  { keyword: 'received from printing', debitAccountCode: '1010', creditAccountCode: '4050', description: 'Cash Received from Printing Services' },
-  { keyword: 'received from renting', debitAccountCode: '1010', creditAccountCode: '4050', description: 'Cash Received from Renting Equipment/Supplies' },
-  { keyword: 'rental income', debitAccountCode: '1010', creditAccountCode: '4050', description: 'Cash Received from Rental Income' },
+  // exactly that reason. Credits 4055 Rental Revenues (not 4050 Other
+  // Income) per the client's revised note sheet.
+  { keyword: 'income from printing', debitAccountCode: '1010', creditAccountCode: '4055', description: 'Income from Printing Services' },
+  { keyword: 'received from printing', debitAccountCode: '1010', creditAccountCode: '4055', description: 'Income from Printing Services' },
+  { keyword: 'income from projector rental', debitAccountCode: '1010', creditAccountCode: '4055', description: 'Income from Projector Rental' },
+  { keyword: 'income from extension wire rental', debitAccountCode: '1010', creditAccountCode: '4055', description: 'Income from Extension Wire Rental' },
+  { keyword: 'received from renting', debitAccountCode: '1010', creditAccountCode: '4055', description: 'Income from Renting Equipment/Supplies' },
+  { keyword: 'rental income', debitAccountCode: '1010', creditAccountCode: '4055', description: 'Rental Income Received' },
 
   // --- Office Supplies ------------------------------------------------------
   { keyword: 'bond paper', debitAccountCode: '5040', creditAccountCode: '1010', description: 'Office Supplies Purchase' },
@@ -352,6 +377,14 @@ const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   { keyword: 'loan to other organization', debitAccountCode: '1350', creditAccountCode: '1010', description: 'Loan Given to Other Organization' },
   { keyword: 'loans to other organization', debitAccountCode: '1350', creditAccountCode: '1010', description: 'Loans Given to Other Organizations' },
 
+  // --- Cash advance given to an officer (client note sheet, row 19) --------------
+  // This is the ORIGINAL "give the advance" transaction — a pure asset
+  // swap, no expense yet. It's what the REVIEW page's Advances to Officers
+  // settlement (src/lib/reviewEngine.ts) resolves once the officer reports
+  // back what it was actually used for.
+  { keyword: 'cash advances given to organization officers', debitAccountCode: '1250', creditAccountCode: '1010', description: 'Cash Advances Given to Organization Officers' },
+  { keyword: 'cash advance given to', debitAccountCode: '1250', creditAccountCode: '1010', description: 'Cash Advance Given to Officer' },
+
   // --- Training Expense -------------------------------------------------------
   { keyword: 'seminar', debitAccountCode: '5060', creditAccountCode: '1010', description: 'Seminar / Conference Attendance Fee' },
   { keyword: 'workshop', debitAccountCode: '5060', creditAccountCode: '1010', description: 'Workshop Training Fee' },
@@ -386,6 +419,9 @@ const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
     debitAccountCode: '5080',
     creditAccountCode: '1010',
     description: 'Meals and Refreshments',
+    // Food bought ahead of a future event isn't "used" until that event
+    // happens — see mayDeferPortion's doc comment.
+    mayDeferPortion: true,
     purposeOptions: [
       {
         label: 'Meals for event participants',
@@ -422,6 +458,13 @@ const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   // unpaid?"), which posts the other half to Membership Dues Receivable so
   // full-period revenue is never understated.
   { keyword: 'current school year', debitAccountCode: '1010', creditAccountCode: '4040', description: 'Cash Collection of Current School Year Membership Fees', requiresAccrualCompletion: true },
+  // "Cash prizes received" contains 'prize' as a substring, which would
+  // otherwise be shadowed by the Awards & Prizes EXPENSE rule below (money
+  // the org gives out, not receives) — checked here, ahead of it, for that
+  // reason. This is the org winning/receiving a prize, not awarding one.
+  { keyword: 'income from cash prizes', debitAccountCode: '1010', creditAccountCode: '4050', description: 'Income from Cash Prizes Received' },
+  { keyword: 'cash prizes received', debitAccountCode: '1010', creditAccountCode: '4050', description: 'Income from Cash Prizes Received' },
+  { keyword: 'advertising revenue', debitAccountCode: '1010', creditAccountCode: '4050', description: 'Advertising Revenue' },
 
   // --- Rent / Lease (Miscellaneous Expense) -----------------------------------
   { keyword: 'rent', debitAccountCode: '5020', creditAccountCode: '1010', description: 'Monthly Office Rental Payment' },
@@ -442,15 +485,20 @@ const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   // before 'paper').
   { keyword: 'bank charge', debitAccountCode: '5100', creditAccountCode: '1010', description: 'Bank Service Charge' },
   { keyword: 'miscellaneous', debitAccountCode: '5110', creditAccountCode: '1010', description: 'Miscellaneous Operating Expense' },
-  { keyword: 'award', debitAccountCode: '5120', creditAccountCode: '1010', description: 'Awards & Prizes Expense' },
-  { keyword: 'prize', debitAccountCode: '5120', creditAccountCode: '1010', description: 'Awards & Prizes Expense' },
+  // Awards/prizes, printing, event supplies, uniforms, and tokens are
+  // exactly the kind of thing the client's flowchart has in mind — bought
+  // ahead of an event, not necessarily all handed out/used immediately —
+  // so each carries mayDeferPortion. Routine bills just below (freight,
+  // shipping) don't: a shipment either arrived or it didn't.
+  { keyword: 'award', debitAccountCode: '5120', creditAccountCode: '1010', description: 'Awards & Prizes Expense', mayDeferPortion: true },
+  { keyword: 'prize', debitAccountCode: '5120', creditAccountCode: '1010', description: 'Awards & Prizes Expense', mayDeferPortion: true },
   { keyword: 'communication', debitAccountCode: '5130', creditAccountCode: '1010', description: 'Communication Expense' },
-  { keyword: 'printing', debitAccountCode: '5140', creditAccountCode: '1010', description: 'Printing Expense' },
+  { keyword: 'printing', debitAccountCode: '5140', creditAccountCode: '1010', description: 'Printing Expense', mayDeferPortion: true },
   { keyword: 'freight', debitAccountCode: '5150', creditAccountCode: '1010', description: 'Freight Expense' },
   { keyword: 'shipping', debitAccountCode: '5150', creditAccountCode: '1010', description: 'Shipping Expense' },
-  { keyword: 'supplies', debitAccountCode: '5160', creditAccountCode: '1010', description: 'Event & Operational Supplies' },
-  { keyword: 'uniform', debitAccountCode: '5180', creditAccountCode: '1010', description: 'Uniform Expense' },
-  { keyword: 'token', debitAccountCode: '5190', creditAccountCode: '1010', description: 'Tokens & Recognition Expense' },
+  { keyword: 'supplies', debitAccountCode: '5160', creditAccountCode: '1010', description: 'Event & Operational Supplies', mayDeferPortion: true },
+  { keyword: 'uniform', debitAccountCode: '5180', creditAccountCode: '1010', description: 'Uniform Expense', mayDeferPortion: true },
+  { keyword: 'token', debitAccountCode: '5190', creditAccountCode: '1010', description: 'Tokens & Recognition Expense', mayDeferPortion: true },
   { keyword: 'honorari', debitAccountCode: '5200', creditAccountCode: '1010', description: 'Honoraria Expense' },
   // 'national membership' (matching the paper's own real wording, "Paid
   // national membership fee") rather than bare 'membership fee': the org's
@@ -511,53 +559,12 @@ const INITIAL_LOGS: AuditLog[] = [
   { id: 'log-1', timestamp: '2026-05-27T01:00:00Z', action: 'System Init', details: 'Initialized Chart of Accounts. No transactions recorded yet.', user: 'System' },
 ];
 
-// Registration/login (RegisterPage.tsx, LoginPage.tsx) persist real accounts
-// under this key — a shape of their own, with a `password` field this
-// context has no business holding in React state. This reads that same
-// list and maps it down to the app's own User shape, so the roster driving
-// audit-log attribution and the profile switcher (below) is whoever
-// actually registered on this workspace, not a fixed demo cast.
-function loadRegisteredUsers(): User[] {
-  try {
-    const raw = localStorage.getItem('users');
-    if (!raw) return [];
-    const stored: Array<{ id: string; name: string; email: string; role?: string }> = JSON.parse(raw);
-    return stored.map(u => ({
-      id: u.id,
-      name: u.name,
-      email: u.email,
-      role: (u.role as User['role']) || 'Accountant',
-    }));
-  } catch {
-    return [];
-  }
-}
-
-// The account that actually logged in (Register/LoginPage write this key).
-// Falls back to the first registered account, then to a placeholder guest —
-// both only reachable if this context somehow renders outside the
-// login-gated /app route.
-function loadActiveUser(registered: User[]): User {
-  try {
-    const raw = localStorage.getItem('currentUser');
-    if (raw) {
-      const u = JSON.parse(raw);
-      return { id: u.id, name: u.name, email: u.email, role: (u.role as User['role']) || 'Administrator' };
-    }
-  } catch {
-    // fall through to the defaults below
-  }
-  return registered[0] || { id: 'guest', name: 'Guest', email: '', role: 'Administrator' };
-}
-
 interface FinanceContextType {
   accounts: Account[];
   journalEntries: JournalEntry[];
   projects: Project[];
   auditLogs: AuditLog[];
-  users: User[];
   settings: AppSettings;
-  activeUser: User;
   classificationRules: ClassificationRuleWithWorkflow[];
   
   addJournalEntry: (date: string, description: string, project: string, lines: { accountCode: string; debit: number; credit: number }[], eventName?: string, settlesEntryId?: string) => JournalEntry;
@@ -570,8 +577,7 @@ interface FinanceContextType {
   updateProject: (id: string, updated: Partial<Project>) => void;
   
   updateSettings: (updated: Partial<AppSettings>) => void;
-  changeActiveUser: (userId: string) => void;
-  
+
   formatCurrency: (value: number) => string;
   suggestTransactionClassification: (name: string) => {
     debitAccountCode: string;
@@ -579,6 +585,7 @@ interface FinanceContextType {
     defaultDesc: string;
     purposeOptions?: PurposeOption[];
     requiresAccrualCompletion?: boolean;
+    mayDeferPortion?: boolean;
   } | null;
   
   accountBalances: Record<string, number>;
@@ -640,8 +647,6 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     };
   });
 
-  const [users] = useState<User[]>(loadRegisteredUsers);
-  const [activeUser, setActiveUser] = useState<User>(() => loadActiveUser(loadRegisteredUsers()));
   const [classificationRules] = useState<ClassificationRuleWithWorkflow[]>(DEFAULT_RULES);
 
   // Sync to LocalStorage
@@ -671,7 +676,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       timestamp: new Date().toISOString(),
       action,
       details,
-      user: activeUser.name,
+      user: settings.organizationName,
     };
     setAuditLogs(prev => [newLog, ...prev].slice(0, 100)); // Cap at 100 logs
   };
@@ -684,6 +689,27 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   const suggestTransactionClassification = (name: string) => {
     if (!name || name.trim().length === 0) return null;
     const lowerName = name.toLowerCase();
+
+    // An exact match against a rule's own description always wins first —
+    // e.g. picking "Office Supplies Purchase" from the Transaction Name
+    // dropdown (Transactions.tsx). Not every description literally
+    // contains its trigger keyword as a substring (the description is
+    // meant to read naturally — "bond paper" -> "Office Supplies
+    // Purchase" — while the keyword only has to be distinctive), so
+    // without this, selecting a dropdown entry could fall through to the
+    // substring search below and match nothing.
+    const exactDescMatch = classificationRules.find(rule => rule.description.toLowerCase() === lowerName);
+    if (exactDescMatch) {
+      return {
+        debitAccountCode: exactDescMatch.debitAccountCode,
+        creditAccountCode: exactDescMatch.creditAccountCode,
+        defaultDesc: exactDescMatch.description,
+        purposeOptions: exactDescMatch.purposeOptions,
+        requiresAccrualCompletion: exactDescMatch.requiresAccrualCompletion,
+        mayDeferPortion: exactDescMatch.mayDeferPortion
+      };
+    }
+
     for (const rule of classificationRules) {
       if (lowerName.includes(rule.keyword)) {
         return {
@@ -691,7 +717,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
           creditAccountCode: rule.creditAccountCode,
           defaultDesc: rule.description,
           purposeOptions: rule.purposeOptions,
-          requiresAccrualCompletion: rule.requiresAccrualCompletion
+          requiresAccrualCompletion: rule.requiresAccrualCompletion,
+          mayDeferPortion: rule.mayDeferPortion
         };
       }
     }
@@ -806,24 +833,19 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateSettings = (updated: Partial<AppSettings>) => {
-    setSettings(prev => {
-      const next = { ...prev, ...updated };
-      logAudit('Update Settings', `Changed app settings: ${Object.keys(updated).join(', ')}`);
-      return next;
-    });
-  };
-
-  const changeActiveUser = (userId: string) => {
-    const usr = users.find(u => u.id === userId);
-    if (usr) {
-      setActiveUser(usr);
-      // Keep localStorage's `currentUser` in sync too — Dashboard reads
-      // `activeUser` from this context now, but a page refresh needs to
-      // rehydrate the same switched identity, not the original login.
-      localStorage.setItem('currentUser', JSON.stringify(usr));
-      // Wait for state to apply
-      setTimeout(() => logAudit('User Switch', `User switched to ${usr.name} (${usr.role})`), 50);
-    }
+    setSettings(prev => ({ ...prev, ...updated }));
+    // Not logAudit(): its `user` field reads the organizationName already in
+    // state, which is exactly what a rename hasn't updated yet — the org's
+    // own audit trail would misattribute its first-ever entry to the
+    // placeholder name it's in the middle of replacing.
+    const newLog: AuditLog = {
+      id: `log-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      timestamp: new Date().toISOString(),
+      action: 'Update Settings',
+      details: `Changed app settings: ${Object.keys(updated).join(', ')}`,
+      user: updated.organizationName ?? settings.organizationName,
+    };
+    setAuditLogs(prev => [newLog, ...prev].slice(0, 100));
   };
 
   const formatCurrency = (val: number): string => {
@@ -888,7 +910,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       timestamp: new Date().toISOString(),
       action: 'Restore Backup',
       details: `Restored data from backup exported ${payload.exportedAt || 'an unknown date'} (${payload.organizationName || 'unnamed organization'}).`,
-      user: activeUser.name,
+      user: settings.organizationName,
     };
 
     setAccounts(payload.accounts);
@@ -931,9 +953,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       journalEntries,
       projects,
       auditLogs,
-      users,
       settings,
-      activeUser,
       classificationRules,
       addJournalEntry,
       reverseJournalEntry,
@@ -942,7 +962,6 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       addProject,
       updateProject,
       updateSettings,
-      changeActiveUser,
       formatCurrency,
       suggestTransactionClassification,
       accountBalances,

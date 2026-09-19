@@ -35,7 +35,6 @@ export function Dashboard(): React.ReactElement {
     isBalanced,
     formatCurrency,
     settings,
-    activeUser,
   } = useFinance();
 
   const endingFundBalance = totals['Fund Balance'] + netIncome;
@@ -126,7 +125,7 @@ export function Dashboard(): React.ReactElement {
         <div className="app-surface p-5 rounded-2xl">
           <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold mb-2">Welcome</p>
           <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-            Welcome back{activeUser?.name ? `, ${activeUser.name}` : ''}
+            Welcome back, {settings?.organizationName || 'your organization'}
           </h3>
         </div>
 
@@ -138,9 +137,9 @@ export function Dashboard(): React.ReactElement {
         </div>
 
         <div className="app-surface p-5 rounded-2xl">
-          <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold mb-2">Role</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold mb-2">Fiscal Year</p>
           <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-            {activeUser?.role || 'User'}
+            {settings?.fiscalYear || 'FY 2026'}
           </h3>
         </div>
       </div>

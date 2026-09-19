@@ -13,6 +13,7 @@ import { useFinance, PurposeOption } from '../context/FinanceContext';
 import { Account } from '../types';
 import { FUNDING_SOURCE_OPTIONS, buildJournalLines, buildCompoundJournalLines } from '../lib/journalEngine';
 import { CASH_ACCOUNT_CODES } from '../lib/cashAccounts';
+import { PREPAID_EXPENSE_CODE } from '../lib/reviewEngine';
 
 const GENERAL_FUND_PROJECT = 'General Fund Operations';
 // Working paper's Situation 5.1/5.2/5.3 branch: a donor-restricted
@@ -22,11 +23,12 @@ const UNRESTRICTED_REVENUE_CODE = '4030';
 const MEMBERSHIP_DUES_RECEIVABLE_CODE = '1300';
 
 export function Transactions(): React.ReactElement {
-  const { 
-    accounts, 
-    projects, 
-    addJournalEntry, 
-    suggestTransactionClassification, 
+  const {
+    accounts,
+    projects,
+    addJournalEntry,
+    suggestTransactionClassification,
+    classificationRules,
     accountBalances,
     formatCurrency,
     settings
@@ -34,10 +36,21 @@ export function Transactions(): React.ReactElement {
 
   // Form State
   const [txName, setTxName] = useState('');
+  // Transaction Name search dropdown: open while the field has focus,
+  // filtered live as you type. Selecting an option fills txName with its
+  // description and applies that exact rule (see the exact-description
+  // match in suggestTransactionClassification) — typing something that
+  // matches nothing just posts as a free-text custom transaction name.
+  const [showTxDropdown, setShowTxDropdown] = useState(false);
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState<number>(0);
   const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [selectedProject, setSelectedProject] = useState(GENERAL_FUND_PROJECT);
+  // Program/Project Allocation only matters for a transaction that's
+  // actually tied to a specific program or event — most entries (a
+  // utility bill, a bank charge) aren't, and stay under General Fund
+  // Operations without ever showing this field.
+  const [isProgramSpecific, setIsProgramSpecific] = useState(false);
   const [debitCode, setDebitCode] = useState('5030'); // default Utilities
   const [creditCode, setCreditCode] = useState('1010'); // default Cash
   const [isSmartMatched, setIsSmartMatched] = useState(false);
@@ -66,6 +79,16 @@ export function Transactions(): React.ReactElement {
   // distinguishable — both are valid, only the former blocks posting.
   const [remainingUnpaid, setRemainingUnpaid] = useState<string>('');
 
+  // "How much of this is not yet used?" (client's flowchart Q4/Q5) — the
+  // general matching-principle question, shown on categories flagged
+  // mayDeferPortion. The not-yet-used portion defers into Prepaid Expenses
+  // (1260) instead of being expensed now; REVIEW reclassifies it once it's
+  // actually used. Doesn't apply when paid via an existing cash advance —
+  // that funding source already has its own "was it used" resolution in
+  // REVIEW, and stacking this on top would ask the same thing twice.
+  const [notYetUsedAmount, setNotYetUsedAmount] = useState<string>('');
+  const [expectedUsePeriod, setExpectedUsePeriod] = useState<'within' | 'next'>('within');
+
   // "What was it for?" (Question A). Only shown when the matched category
   // is genuinely ambiguous — see purposeOptions on the classification rule
   // in FinanceContext.tsx. Unlike the funding-source question, this does
@@ -80,10 +103,20 @@ export function Transactions(): React.ReactElement {
     defaultDesc: string;
     purposeOptions?: PurposeOption[];
     requiresAccrualCompletion?: boolean;
+    mayDeferPortion?: boolean;
   } | null>(null);
 
   // active accounts
   const activeAccounts = accounts.filter(a => a.isActive);
+  const realPrograms = projects.filter(p => p.name !== GENERAL_FUND_PROJECT);
+
+  // Deduped, alphabetized list of known transaction types (two rules —
+  // 'award'/'prize' — share the description "Awards & Prizes Expense",
+  // since they're the same category under two different trigger words).
+  const transactionTypeOptions = Array.from(new Set(classificationRules.map(r => r.description))).sort();
+  const filteredTxTypeOptions = txName.trim()
+    ? transactionTypeOptions.filter(d => d.toLowerCase().includes(txName.trim().toLowerCase()))
+    : transactionTypeOptions;
 
   // The funding-source question only makes sense while the credit side is
   // still a cash account — once it points at a revenue, loan, or accounts
@@ -104,6 +137,11 @@ export function Transactions(): React.ReactElement {
   // remains unpaid) before it can post.
   const requiresAccrualCompletion = !!classificationPreview?.requiresAccrualCompletion;
 
+  // The general "not yet used" question — see mayDeferPortion's doc
+  // comment in FinanceContext.tsx. officer-cash-advance is excluded: that
+  // funding source already resolves "was it used" in REVIEW.
+  const showDeferPortionQuestion = !!classificationPreview?.mayDeferPortion && fundingSourceId !== 'officer-cash-advance';
+
   // Trigger classification suggestion on Name input change
   useEffect(() => {
     const match = suggestTransactionClassification(txName);
@@ -115,6 +153,8 @@ export function Transactions(): React.ReactElement {
       setRestrictionAnswer('');
       setSamePeriodAnswer('');
       setRemainingUnpaid('');
+      setNotYetUsedAmount('');
+      setExpectedUsePeriod('within');
 
       // Keep the funding-source dropdown in sync with whichever cash
       // account the matched rule assumed, so the two controls never
@@ -138,6 +178,8 @@ export function Transactions(): React.ReactElement {
       setRestrictionAnswer('');
       setSamePeriodAnswer('');
       setRemainingUnpaid('');
+      setNotYetUsedAmount('');
+      setExpectedUsePeriod('within');
     }
   }, [txName, suggestTransactionClassification]);
 
@@ -174,6 +216,14 @@ export function Transactions(): React.ReactElement {
   // expense would silently understate what's actually owed.
   const advancesOutstanding = accountBalances['1250'] || 0;
   const showCashAdvanceWarning = fundingSourceId === 'officer-cash-advance' && amount > advancesOutstanding;
+
+  // Same sequencing idea, for the other direction (client note sheet row
+  // 17): collecting previous-period membership fees against the
+  // receivable requires that receivable to actually exist first — the
+  // fee must have been billed (via the current-school-year accrual
+  // question) before there's anything to collect.
+  const membershipReceivableOutstanding = accountBalances[MEMBERSHIP_DUES_RECEIVABLE_CODE] || 0;
+  const showMembershipReceivableWarning = debitCode === '1010' && creditCode === MEMBERSHIP_DUES_RECEIVABLE_CODE && amount > membershipReceivableOutstanding;
 
   // Derived Account lookups
   const debitAccount = activeAccounts.find(a => a.code === debitCode);
@@ -231,21 +281,42 @@ export function Transactions(): React.ReactElement {
       setErrorMessage('Caution: please record the cash advance transaction first before recording expenses paid using a cash advance — the amount given exceeds what’s currently outstanding.');
       return;
     }
+    if (showMembershipReceivableWarning) {
+      setErrorMessage('Caution: this exceeds the Membership Dues Receivable currently on the books — make sure the fee was billed this school year (via the accrual question) before collecting it.');
+      return;
+    }
+    if (showDeferPortionQuestion && notYetUsedAmount.trim() === '') {
+      setErrorMessage('Please enter how much of this is not yet used, consumed, or benefited from (enter 0 if it’s all used already).');
+      return;
+    }
+    if (showDeferPortionQuestion && Number(notYetUsedAmount) > amount) {
+      setErrorMessage('The not-yet-used amount can’t exceed the total amount paid.');
+      return;
+    }
 
     try {
       // Post Journal Entry
+      const deferredAmount = showDeferPortionQuestion ? (Number(notYetUsedAmount) || 0) : 0;
       const lines = requiresAccrualCompletion
         ? buildCompoundJournalLines([
             { debitAccountCode: debitCode, creditAccountCode: effectiveCreditCode, amount },
             { debitAccountCode: MEMBERSHIP_DUES_RECEIVABLE_CODE, creditAccountCode: effectiveCreditCode, amount: Number(remainingUnpaid) || 0 },
           ])
+        : deferredAmount > 0
+        ? buildCompoundJournalLines([
+            { debitAccountCode: debitCode, creditAccountCode: effectiveCreditCode, amount: amount - deferredAmount },
+            { debitAccountCode: PREPAID_EXPENSE_CODE, creditAccountCode: effectiveCreditCode, amount: deferredAmount },
+          ])
         : buildJournalLines(debitCode, effectiveCreditCode, amount);
 
-      const isProgramSpecific = selectedProject !== GENERAL_FUND_PROJECT;
+      const usePeriodNote = deferredAmount > 0
+        ? ` (${formatCurrency(deferredAmount)} not yet used — expected ${expectedUsePeriod === 'within' ? 'within this period' : 'next period'})`
+        : '';
+
       const je = addJournalEntry(
         date,
-        description || txName,
-        selectedProject,
+        (description || txName) + usePeriodNote,
+        isProgramSpecific ? selectedProject : GENERAL_FUND_PROJECT,
         lines,
         isProgramSpecific ? selectedProject : undefined
       );
@@ -268,6 +339,10 @@ export function Transactions(): React.ReactElement {
       setRestrictionAnswer('');
       setSamePeriodAnswer('');
       setRemainingUnpaid('');
+      setNotYetUsedAmount('');
+      setExpectedUsePeriod('within');
+      setIsProgramSpecific(false);
+      setSelectedProject(GENERAL_FUND_PROJECT);
 
       // Auto-hide success
       setTimeout(() => setSuccessMessage(''), 5000);
@@ -313,17 +388,43 @@ export function Transactions(): React.ReactElement {
 
           {/* Form Fields */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="sm:col-span-2">
+            <div className="sm:col-span-2 relative">
               <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Transaction Name</label>
               <input
                 type="text"
                 value={txName}
-                onChange={(e) => setTxName(e.target.value)}
-                placeholder="e.g. Electric Bill Payment, Laptop Purchase, Consulting Fee..."
+                onChange={(e) => { setTxName(e.target.value); setShowTxDropdown(true); }}
+                onFocus={() => setShowTxDropdown(true)}
+                onBlur={() => setTimeout(() => setShowTxDropdown(false), 150)}
+                placeholder="Search a transaction type, or type your own..."
+                autoComplete="off"
                 className="w-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-blue-900 focus:ring-blue-900/10 rounded-xl text-xs font-semibold p-3 outline-none transition-colors dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/20"
                 required
               />
-              <p className="text-[10px] text-slate-500 mt-1 font-medium dark:text-slate-400">Try typing: <span className="font-semibold text-slate-600 underline dark:text-slate-300">electric</span>, <span className="font-semibold text-slate-600 underline dark:text-slate-300">laptop</span>, or <span className="font-semibold text-slate-600 underline dark:text-slate-300">donation</span> to see the rule suggestion match.</p>
+
+              {showTxDropdown && (
+                <div className="absolute z-20 mt-1 w-full max-h-64 overflow-y-auto bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg py-1">
+                  {filteredTxTypeOptions.length > 0 ? (
+                    filteredTxTypeOptions.map((desc) => (
+                      <button
+                        key={desc}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => { setTxName(desc); setShowTxDropdown(false); }}
+                        className="w-full text-left px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-blue-50 dark:hover:bg-slate-700 transition-colors"
+                      >
+                        {desc}
+                      </button>
+                    ))
+                  ) : (
+                    <div className="px-3 py-2.5 text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                      No matching type — this will post as a custom transaction name.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <p className="text-[10px] text-slate-500 mt-1 font-medium dark:text-slate-400">Search a known transaction type, or type your own custom name.</p>
 
               {isSmartMatched && (
                 <div className="mt-2 text-xs font-semibold text-emerald-600">
@@ -332,18 +433,40 @@ export function Transactions(): React.ReactElement {
               )}
             </div>
 
-            <div>
-              <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Program / Project Allocation</label>
-              <select
-                value={selectedProject}
-                onChange={(e) => setSelectedProject(e.target.value)}
-                className="w-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-blue-900 focus:ring-blue-900/10 rounded-xl text-xs font-semibold p-2.5 outline-none transition-colors dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/20"
-              >
-                {projects.map((proj) => (
-                  <option key={proj.id} value={proj.name}>{proj.name}</option>
-                ))}
-              </select>
-              <p className="text-[10px] text-slate-500 mt-1 font-medium dark:text-slate-400">Which budget this counts against — and, unless it's General Fund Operations, which program it shows under as Event-Related on the Statement of Activities.</p>
+            <div className="sm:col-span-2">
+              <label className={`flex items-center gap-2 select-none ${realPrograms.length === 0 ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>
+                <input
+                  type="checkbox"
+                  checked={isProgramSpecific}
+                  disabled={realPrograms.length === 0}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setIsProgramSpecific(checked);
+                    setSelectedProject(checked ? realPrograms[0].name : GENERAL_FUND_PROJECT);
+                  }}
+                  className="w-3.5 h-3.5 rounded border-slate-300 text-blue-700 focus:ring-blue-500 dark:border-slate-600"
+                />
+                <span className="text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider">This is for a specific Program / Event</span>
+              </label>
+              {realPrograms.length === 0 && (
+                <p className="text-[10px] text-slate-500 mt-1 font-medium dark:text-slate-400">Create a program on Activities &amp; Programs first.</p>
+              )}
+
+              {isProgramSpecific && (
+                <div className="mt-2">
+                  <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Program / Project Allocation</label>
+                  <select
+                    value={selectedProject}
+                    onChange={(e) => setSelectedProject(e.target.value)}
+                    className="w-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-blue-900 focus:ring-blue-900/10 rounded-xl text-xs font-semibold p-2.5 outline-none transition-colors dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/20"
+                  >
+                    {realPrograms.map((proj) => (
+                      <option key={proj.id} value={proj.name}>{proj.name}</option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-slate-500 mt-1 font-medium dark:text-slate-400">Which budget this counts against — shows as Event-Related on the Statement of Activities.</p>
+                </div>
+              )}
             </div>
 
             {classificationPreview?.purposeOptions && classificationPreview.purposeOptions.length > 0 && (
@@ -438,9 +561,53 @@ export function Transactions(): React.ReactElement {
               </div>
             )}
 
+            {showDeferPortionQuestion && (
+              <div className="sm:col-span-2 space-y-3 p-3.5 bg-amber-50 border border-amber-100 rounded-xl dark:bg-amber-500/10 dark:border-amber-500/20">
+                <div>
+                  <label className="block text-[11px] font-bold text-amber-900 dark:text-amber-300 mb-1.5">How much of this is NOT yet used, consumed, or benefited from this period? <span className="text-amber-600">*required</span></label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-amber-500">{settings.currencySymbol}</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max={amount || undefined}
+                      value={notYetUsedAmount}
+                      onChange={(e) => setNotYetUsedAmount(e.target.value)}
+                      placeholder="0.00 if fully used already"
+                      className="w-full bg-white border border-amber-200 text-slate-900 rounded-lg text-xs font-bold p-2.5 pl-8 outline-none dark:bg-slate-800 dark:border-amber-500/30 dark:text-slate-100"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {Number(notYetUsedAmount) > 0 && (
+                  <div>
+                    <label className="block text-[11px] font-bold text-amber-900 dark:text-amber-300 mb-1.5">When will it be used?</label>
+                    <select
+                      value={expectedUsePeriod}
+                      onChange={(e) => setExpectedUsePeriod(e.target.value as 'within' | 'next')}
+                      className="w-full bg-white border border-amber-200 text-slate-900 rounded-lg text-xs font-semibold p-2.5 outline-none dark:bg-slate-800 dark:border-amber-500/30 dark:text-slate-100"
+                    >
+                      <option value="within">Within this sem/period</option>
+                      <option value="next">Next sem or a future period</option>
+                    </select>
+                  </div>
+                )}
+
+                <p className="text-[10px] text-amber-700 dark:text-amber-400 font-medium">Posted to Prepaid Expenses instead of expensed immediately — resolve it in REVIEW once it's actually used.</p>
+              </div>
+            )}
+
             {showCashAdvanceWarning && (
               <div className="sm:col-span-2 p-3 bg-rose-50 border border-rose-100 text-rose-700 text-[11px] font-semibold rounded-xl dark:bg-rose-500/10 dark:border-rose-500/20 dark:text-rose-300">
                 Caution: this amount exceeds the {formatCurrency(advancesOutstanding)} currently outstanding as cash advances. Record the cash-advance-given transaction first.
+              </div>
+            )}
+
+            {showMembershipReceivableWarning && (
+              <div className="sm:col-span-2 p-3 bg-rose-50 border border-rose-100 text-rose-700 text-[11px] font-semibold rounded-xl dark:bg-rose-500/10 dark:border-rose-500/20 dark:text-rose-300">
+                Caution: this exceeds the {formatCurrency(membershipReceivableOutstanding)} currently on the books as Membership Dues Receivable. Make sure the fee was billed this school year first.
               </div>
             )}
 

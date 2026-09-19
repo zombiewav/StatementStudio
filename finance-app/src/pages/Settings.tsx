@@ -25,7 +25,6 @@ export function Settings(): React.ReactElement {
     updateAccount,
     settings,
     updateSettings,
-    users,
     addJournalEntry,
     formatCurrency,
     exportBackupData,
@@ -50,6 +49,13 @@ export function Settings(): React.ReactElement {
   const [orgName, setOrgName] = useState(settings.organizationName);
   const [fyName, setFyName] = useState(settings.fiscalYear);
   const [currency, setCurrency] = useState(settings.currencyCode);
+
+  // Organization Password State
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordSuccess, setPasswordSuccess] = useState('');
 
   // Beginning Balances (Sheet3 of the working paper: opening figures a
   // first-time user fills in before recording regular transactions). Posts
@@ -231,7 +237,52 @@ export function Settings(): React.ReactElement {
       currencyCode: currency,
       currencySymbol: symbol
     });
+
+    // The login screen reads the organization's name from its own
+    // `orgAccount` record (outside FinanceContext, like the password), so a
+    // rename here has to be mirrored there or Login would keep showing the
+    // old name.
+    const rawOrgAccount = localStorage.getItem('orgAccount');
+    if (rawOrgAccount) {
+      const orgAccount = JSON.parse(rawOrgAccount);
+      orgAccount.organizationName = orgName;
+      localStorage.setItem('orgAccount', JSON.stringify(orgAccount));
+    }
+
     alert('General preferences updated successfully.');
+  };
+
+  const handleChangePassword = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError('');
+    setPasswordSuccess('');
+
+    const rawOrgAccount = localStorage.getItem('orgAccount');
+    const orgAccount = rawOrgAccount ? JSON.parse(rawOrgAccount) : null;
+
+    if (!orgAccount) {
+      setPasswordError('No organization account found.');
+      return;
+    }
+    if (currentPassword !== orgAccount.password) {
+      setPasswordError('Current password is incorrect.');
+      return;
+    }
+    if (newPassword.length < 6) {
+      setPasswordError('New password must be at least 6 characters.');
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      setPasswordError('New passwords do not match.');
+      return;
+    }
+
+    orgAccount.password = newPassword;
+    localStorage.setItem('orgAccount', JSON.stringify(orgAccount));
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmNewPassword('');
+    setPasswordSuccess('Organization password updated.');
   };
 
   return (
@@ -413,29 +464,58 @@ export function Settings(): React.ReactElement {
             )}
           </div>
 
-          {/* User management list */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
+          {/* Organization password */}
+          <form onSubmit={handleChangePassword} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
             <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 pb-2.5 flex items-center gap-2">
-              <UserIcon className="w-4.5 h-4.5 text-blue-900" /> Active Team Roles
+              <UserIcon className="w-4.5 h-4.5 text-blue-900" /> Organization Password
             </h3>
-            
-            <div className="space-y-3">
-              {users.map((usr) => (
-                <div key={usr.id} className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-50/50 transition-colors">
-                  <div className="w-8 h-8 rounded-lg bg-slate-100 text-blue-900 font-extrabold flex items-center justify-center text-xs">
-                    {usr.name.split(' ').map(n => n[0]).join('')}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate leading-tight">{usr.name}</p>
-                    <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium truncate">{usr.email}</p>
-                  </div>
-                  <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-900 border border-blue-100/50">
-                    {usr.role}
-                  </span>
-                </div>
-              ))}
+            <p className="text-[10px] text-slate-500 dark:text-slate-400 -mt-2">
+              Everyone in your organization signs in with this one shared password.
+            </p>
+
+            {passwordError && (
+              <p className="text-[10px] font-semibold text-rose-600 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">{passwordError}</p>
+            )}
+            {passwordSuccess && (
+              <p className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 rounded-lg px-3 py-2">{passwordSuccess}</p>
+            )}
+
+            <div className="space-y-3.5 text-xs">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Current Password</label>
+                <input
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  className="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl font-semibold text-slate-900 dark:text-slate-100 p-2.5 outline-none focus:border-blue-900 dark:focus:border-blue-500 transition-colors"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">New Password</label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl font-semibold text-slate-900 dark:text-slate-100 p-2.5 outline-none focus:border-blue-900 dark:focus:border-blue-500 transition-colors"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Confirm New Password</label>
+                <input
+                  type="password"
+                  value={confirmNewPassword}
+                  onChange={(e) => setConfirmNewPassword(e.target.value)}
+                  className="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl font-semibold text-slate-900 dark:text-slate-100 p-2.5 outline-none focus:border-blue-900 dark:focus:border-blue-500 transition-colors"
+                />
+              </div>
+              <button
+                type="submit"
+                className="w-full bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs py-2.5 rounded-xl transition-colors"
+              >
+                Update Password
+              </button>
             </div>
-          </div>
+          </form>
         </div>
 
         {/* Right Side: Chart of Accounts Editor */}

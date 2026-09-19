@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Bell, Calendar, Building2, ChevronDown, CheckCircle, LogOut } from "lucide-react";
+import { Search, Bell, Calendar, Building2, CheckCircle, LogOut } from "lucide-react";
 import { useNavigate } from 'react-router';
 import { useFinance } from '../context/FinanceContext';
 import { ThemeToggle } from './ThemeToggle';
@@ -42,16 +42,10 @@ function NavActionButton({
 
 export function Navbar({ onMenuToggle, searchTerm, setSearchTerm }: NavbarProps): React.ReactElement {
   const navigate = useNavigate();
-  const { settings, updateSettings, activeUser, users, changeActiveUser, auditLogs } = useFinance();
-  const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const { settings, updateSettings, auditLogs } = useFinance();
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false);
 
   const notifications = auditLogs.slice(0, 5); // Show latest 5 logs as notifications
-
-  const handleUserChange = (userId: string) => {
-    changeActiveUser(userId);
-    setShowUserDropdown(false);
-  };
 
   return (
     <header className="h-16 border-b border-slate-200 bg-white/80 dark:bg-slate-950/80 dark:border-slate-800 backdrop-blur-md px-6 flex items-center justify-between sticky top-0 z-30 select-none">
@@ -87,19 +81,12 @@ export function Navbar({ onMenuToggle, searchTerm, setSearchTerm }: NavbarProps)
           {/* Theme Toggle */}
           <ThemeToggle />
 
-        {/* Organization Quick Selector */}
-        
+        {/* Organization identity — renamed from Settings, not here */}
         <div className="app-filter hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl">
           <Building2 className="w-3.5 h-3.5 text-blue-900" />
-          <select 
-            value={settings.organizationName}
-            onChange={(e) => updateSettings({ organizationName: e.target.value })}
-            className="app-input-plain font-semibold text-blue-950 dark:text-blue-100 text-xs cursor-pointer focus:ring-0 pr-1 py-0"
-          >
-            <option value="Bicol University">Bicol University</option>
-            <option value="StatementStudio Corp">StatementStudio Corp</option>
-            <option value="Scholarship Foundation">Scholarship Foundation</option>
-          </select>
+          <span className="font-semibold text-blue-950 dark:text-blue-100 text-xs">
+            {settings.organizationName}
+          </span>
         </div>
 
         {/* Fiscal Year Selector */}
@@ -120,7 +107,6 @@ export function Navbar({ onMenuToggle, searchTerm, setSearchTerm }: NavbarProps)
           variant="ghost"
           onClick={() => {
             localStorage.removeItem('isLoggedIn');
-            localStorage.removeItem('currentUser');
             navigate("/login");
           }}
           ariaLabel="Logout"
@@ -175,43 +161,14 @@ export function Navbar({ onMenuToggle, searchTerm, setSearchTerm }: NavbarProps)
         </div>
 
         {/* User Profile Dropdown */}
-        <div className="relative">
-          <button
-            onClick={() => setShowUserDropdown(!showUserDropdown)}
-            onBlur={() => setTimeout(() => setShowUserDropdown(false), 200)}
-            className="app-surface flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-xl hover:border-slate-300 dark:hover:border-slate-700 transition-all text-left"
-            type="button"
-          >
-            <div className="w-7 h-7 rounded-lg bg-blue-900 text-white flex items-center justify-center font-bold text-xs uppercase shadow-sm">
-              {activeUser.name.split(' ').map(n => n[0]).join('')}
-            </div>
-            <div className="hidden lg:block">
-              <p className="text-xs font-bold text-blue-950 dark:text-blue-100 leading-tight">{activeUser.name}</p>
-              <p className="text-[9px] app-soft font-semibold leading-none">{activeUser.role}</p>
-            </div>
-            <ChevronDown className="w-3.5 h-3.5 app-soft" />
-          </button>
-
-          {showUserDropdown && (
-            <div className="absolute right-0 mt-2 w-56 app-surface rounded-2xl shadow-xl z-50 py-1.5 animate-in fade-in slide-in-from-top-2 duration-150">
-              <div className="px-3.5 py-2 border-b app-divider">
-                <p className="text-[10px] app-soft font-bold uppercase tracking-wider">Switch Active Role</p>
-              </div>
-              {users.map((usr) => (
-                <button
-                  key={usr.id}
-                  onClick={() => handleUserChange(usr.id)}
-                  className={`w-full px-3.5 py-2 text-left flex flex-col hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors ${
-                    activeUser.id === usr.id ? 'bg-blue-50/30 dark:bg-blue-950/30' : ''
-                  }`}
-                  type="button"
-                >
-                  <span className="text-xs font-bold app-strong">{usr.name}</span>
-                  <span className="text-[9px] app-soft font-semibold">{usr.role}</span>
-                </button>
-              ))}
-            </div>
-          )}
+        <div className="app-surface flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-xl">
+          <div className="w-7 h-7 rounded-lg bg-blue-900 text-white flex items-center justify-center font-bold text-xs uppercase shadow-sm">
+            {settings.organizationName.split(' ').map(n => n[0]).join('').slice(0, 2)}
+          </div>
+          <div className="hidden lg:block">
+            <p className="text-xs font-bold text-blue-950 dark:text-blue-100 leading-tight">{settings.organizationName}</p>
+            <p className="text-[9px] app-soft font-semibold leading-none">Organization Account</p>
+          </div>
         </div>
       </div>
     </header>

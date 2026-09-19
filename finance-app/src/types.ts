@@ -60,13 +60,6 @@ export interface AuditLog {
   user: string;
 }
 
-export interface User {
-  id: string;
-  name: string;
-  email: string;
-  role: 'Administrator' | 'Accountant' | 'Auditor';
-}
-
 export interface AppSettings {
   fiscalYear: string;
   organizationName: string;

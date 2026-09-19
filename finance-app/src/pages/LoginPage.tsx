@@ -1,91 +1,57 @@
-import React, { useState } from 'react';
-import { ArrowRight, BarChart3, AlertCircle, CheckCircle } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { ArrowRight, BarChart3, AlertCircle, CheckCircle, Building2 } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import AuroraBackground from '../components/landing/AuroraBackground';
 
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  company: string;
+interface OrgAccount {
+  organizationName: string;
   password: string;
-  role: string;
   createdAt: string;
 }
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
+  const [orgAccount, setOrgAccount] = useState<OrgAccount | null>(null);
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { id, value } = e.target;
-    if (id === 'email') {
-      setEmail(value);
-    } else if (id === 'password') {
-      setPassword(value);
+  // Nothing to sign into yet on this browser — send them to set one up.
+  useEffect(() => {
+    const raw = localStorage.getItem('orgAccount');
+    if (!raw) {
+      navigate('/register', { replace: true });
+      return;
     }
-    // Clear errors when user starts typing
-    if (error) setError('');
-  };
-
-  const validateForm = (): boolean => {
-    if (!email.trim()) {
-      setError('Email address is required');
-      return false;
-    }
-
-    if (!password) {
-      setError('Password is required');
-      return false;
-    }
-
-    return true;
-  };
+    setOrgAccount(JSON.parse(raw));
+  }, [navigate]);
 
   const handleLogin = async () => {
     setError('');
     setSuccess('');
 
-    if (!validateForm()) {
+    if (!password) {
+      setError('Password is required');
+      return;
+    }
+
+    if (!orgAccount) {
       return;
     }
 
     setIsLoading(true);
 
     try {
-      // Simulate a brief delay for better UX
       await new Promise((resolve) => setTimeout(resolve, 500));
 
-      // Get stored users
-      const users: User[] = JSON.parse(localStorage.getItem('users') || '[]');
-
-      // Find user by email
-      const userByEmail = users.find(
-        (u) => u.email === email.toLowerCase().trim()
-      );
-
-      if (!userByEmail) {
-        setError('Account not found.');
-        setIsLoading(false);
-        return;
-      }
-
-      // Check password
-      if (userByEmail.password !== password) {
+      if (password !== orgAccount.password) {
         setError('Incorrect password.');
         setIsLoading(false);
         return;
       }
 
-      // Successful login
       setSuccess('Login successful! Redirecting...');
-
-      // Store current user and login state
-      localStorage.setItem('currentUser', JSON.stringify(userByEmail));
       localStorage.setItem('isLoggedIn', 'true');
 
       // A full page load, not client-side navigate(): FinanceProvider
@@ -103,18 +69,13 @@ export const LoginPage: React.FC = () => {
 
   return (
     <div className="bg-black text-white min-h-screen overflow-hidden flex flex-col items-center justify-center relative">
-      {/* AURORA BACKGROUND */}
       <AuroraBackground />
 
-      {/* CONTENT */}
       <div className="relative z-10 w-full px-4 sm:px-6 lg:px-8">
         <div className="max-w-md mx-auto">
-          {/* CARD */}
           <div className="bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-8 sm:p-10 space-y-8">
-            
-            {/* HEADER */}
+
             <div className="space-y-4 text-center">
-              {/* LOGO */}
               <div className="flex justify-center mb-4">
                 <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
                   <BarChart3 className="w-7 h-7 text-white" />
@@ -125,12 +86,18 @@ export const LoginPage: React.FC = () => {
                 Welcome Back
               </h1>
 
+              {orgAccount && (
+                <div className="inline-flex items-center gap-2 bg-slate-950/60 border border-slate-800 rounded-full px-4 py-1.5 text-sm text-slate-200 font-medium">
+                  <Building2 className="w-3.5 h-3.5 text-blue-400" />
+                  {orgAccount.organizationName}
+                </div>
+              )}
+
               <p className="text-slate-400 text-sm">
-                Sign in to access your financial workspace.
+                Enter your organization's password to access the workspace.
               </p>
             </div>
 
-            {/* ERROR MESSAGE */}
             {error && (
               <div className="bg-red-950/50 border border-red-800 rounded-lg p-4 flex items-start gap-3">
                 <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
@@ -138,7 +105,6 @@ export const LoginPage: React.FC = () => {
               </div>
             )}
 
-            {/* SUCCESS MESSAGE */}
             {success && (
               <div className="bg-green-950/50 border border-green-800 rounded-lg p-4 flex items-start gap-3">
                 <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
@@ -146,41 +112,23 @@ export const LoginPage: React.FC = () => {
               </div>
             )}
 
-            {/* FORM */}
             <form className="space-y-5" onSubmit={(e) => { e.preventDefault(); handleLogin(); }}>
-              {/* EMAIL FIELD */}
-              <div>
-                <label htmlFor="email" className="block text-sm font-medium text-slate-300 mb-2">
-                  Email Address
-                </label>
-                <input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={handleInputChange}
-                  placeholder="you@example.com"
-                  disabled={isLoading}
-                  className="w-full bg-slate-950 border border-slate-700 text-white rounded-lg px-4 py-3 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all text-sm disabled:opacity-50"
-                />
-              </div>
-
-              {/* PASSWORD FIELD */}
               <div>
                 <label htmlFor="password" className="block text-sm font-medium text-slate-300 mb-2">
-                  Password
+                  Organization Password
                 </label>
                 <input
                   id="password"
                   type="password"
                   value={password}
-                  onChange={handleInputChange}
+                  onChange={(e) => { setPassword(e.target.value); if (error) setError(''); }}
                   placeholder="••••••••"
                   disabled={isLoading}
+                  autoFocus
                   className="w-full bg-slate-950 border border-slate-700 text-white rounded-lg px-4 py-3 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all text-sm disabled:opacity-50"
                 />
               </div>
 
-              {/* LOGIN BUTTON */}
               <button
                 onClick={handleLogin}
                 type="submit"
@@ -191,23 +139,8 @@ export const LoginPage: React.FC = () => {
                 {!isLoading && <ArrowRight className="w-4 h-4" />}
               </button>
             </form>
-
-            {/* FOOTER TEXT */}
-            <div className="text-center">
-              <p className="text-slate-400 text-sm">
-                Don't have an account?{' '}
-                <button
-                  onClick={() => navigate('/register')}
-                  disabled={isLoading}
-                  className="text-slate-300 hover:text-white font-medium transition-colors disabled:opacity-50"
-                >
-                  Create Account
-                </button>
-              </p>
-            </div>
           </div>
 
-          {/* BACK TO HOME */}
           <div className="text-center mt-6">
             <button
               onClick={() => navigate('/')}

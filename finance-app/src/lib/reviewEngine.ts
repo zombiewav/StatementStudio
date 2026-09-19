@@ -9,11 +9,20 @@
 // out, independently testable.
 import { Account, JournalEntry, JournalLine } from '../types';
 
-// The three accounts a transaction can leave open, each answering a
-// different REVIEW question ("did you reimburse them yet?", "have you
-// paid the supplier?", "did the officer actually use/settle the advance?").
-export const OBLIGATION_ACCOUNT_CODES = ['2050', '2010', '1250'] as const;
+// The accounts a transaction can leave open, each answering a different
+// REVIEW question ("did you reimburse them yet?", "have you paid the
+// supplier?", "did the officer actually use/settle the advance?", "has
+// this now been used/consumed/benefited from?").
+export const OBLIGATION_ACCOUNT_CODES = ['2050', '2010', '1250', '1260'] as const;
 export type ObligationAccountCode = typeof OBLIGATION_ACCOUNT_CODES[number];
+
+// Prepaid Expenses: the general "not yet used" holding account any
+// mayDeferPortion-flagged transaction (see DEFAULT_RULES in
+// FinanceContext.tsx) can defer part of its cost into, instead of
+// expensing it immediately. Kept as one shared constant since both
+// Transactions.tsx (the entry side) and Review.tsx (the settlement side)
+// need the exact same code.
+export const PREPAID_EXPENSE_CODE = '1260';
 
 export interface PendingObligation {
   entryId: string;
@@ -193,6 +202,28 @@ export function buildAdvanceSettlementLines(
     lines.push({ accountCode: dueToSupplierAccountCode, debit: 0, credit: result.dueToSupplierAmount });
   }
   return lines;
+}
+
+/**
+ * Prepaid Expenses settlement: "how much of this is now used?" against a
+ * chosen expense account. Reclassifies from the balance-sheet asset into
+ * the real expense — the matching principle finally catching up with the
+ * cash that already went out at entry time. Structurally the same shape
+ * as buildSimpleSettlementLines, but named separately since the two
+ * obligation kinds read in opposite directions (there, the settlement
+ * clears a liability by paying cash; here, it clears an asset by
+ * recognizing an expense) and mixing them up would silently invert which
+ * account gets debited.
+ */
+export function buildPrepaidExpenseSettlementLines(
+  expenseAccountCode: string,
+  amount: number
+): JournalLine[] {
+  if (amount <= 0) return [];
+  return [
+    { accountCode: expenseAccountCode, debit: amount, credit: 0 },
+    { accountCode: PREPAID_EXPENSE_CODE, debit: 0, credit: amount },
+  ];
 }
 
 export function obligationAccountLabel(accountCode: ObligationAccountCode, accounts: Account[]): string {

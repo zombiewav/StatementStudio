@@ -1,16 +1,18 @@
 import React, { useState, useMemo } from 'react';
-import { 
-  FileSpreadsheet, 
-  Printer, 
-  Download, 
-  Calendar, 
+import {
+  FileSpreadsheet,
+  Printer,
+  Download,
+  Calendar,
   CheckCircle,
-  Eye
+  Eye,
+  ClipboardCheck
 } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import { CASH_ACCOUNT_CODES } from '../lib/cashAccounts';
 import { computeActivitiesExpenseBreakdown } from '../lib/activitiesBreakdown';
 import { computeAccountBalances, computeTypeTotals, isContraAccount } from '../lib/accountTotals';
+import { computePendingObligations, obligationAccountLabel } from '../lib/reviewEngine';
 
 type ActiveStatementTab = 'position' | 'activities' | 'cashflow' | 'changes';
 
@@ -32,6 +34,20 @@ export function FinancialStatements(): React.ReactElement {
   const filteredEntries = useMemo(() => {
     return journalEntries.filter(je => je.date >= startDate && je.date <= endDate);
   }, [journalEntries, startDate, endDate]);
+
+  // Year-end gate: every REVIEW item has to be resolved before statements
+  // can be generated — an unresolved item (e.g. a donation not yet
+  // released, supplies not yet fully used) means part of the books is
+  // still an open question, not something a finished statement should
+  // paper over. Checked against ALL entries, not just the filtered range,
+  // since an open item from outside the selected period can still mean
+  // the period's own numbers (a receivable, a prepaid balance) aren't
+  // final yet either.
+  const pendingObligations = useMemo(
+    () => computePendingObligations(journalEntries, accounts),
+    [journalEntries, accounts]
+  );
+  const isGated = pendingObligations.length > 0;
 
   // Compute Account Balances specifically for the filtered date range
   const filteredBalances = useMemo(
@@ -261,17 +277,18 @@ export function FinancialStatements(): React.ReactElement {
           {/* Print Button */}
           <button
             onClick={handlePrint}
-            className="flex items-center gap-2 bg-white dark:bg-slate-900 hover:bg-gray-50 dark:hover:bg-slate-800 text-gray-700 dark:text-slate-200 font-semibold text-xs px-3.5 py-2 rounded-xl border border-gray-100 dark:border-slate-800 shadow-sm transition-colors cursor-pointer"
+            disabled={isGated}
+            className="flex items-center gap-2 bg-white dark:bg-slate-900 hover:bg-gray-50 dark:hover:bg-slate-800 text-gray-700 dark:text-slate-200 font-semibold text-xs px-3.5 py-2 rounded-xl border border-gray-100 dark:border-slate-800 shadow-sm transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             type="button"
           >
             <Printer className="w-3.5 h-3.5 text-blue-900 dark:text-blue-400" /> Print Statement
           </button>
-          
+
           {/* Export PDF */}
           <button
             onClick={() => handleExport('PDF')}
-            disabled={isExporting}
-            className="flex items-center gap-2 bg-white dark:bg-slate-900 hover:bg-gray-50 dark:hover:bg-slate-800 text-gray-700 dark:text-slate-200 font-semibold text-xs px-3.5 py-2 rounded-xl border border-gray-100 dark:border-slate-800 shadow-sm transition-colors cursor-pointer disabled:opacity-50"
+            disabled={isExporting || isGated}
+            className="flex items-center gap-2 bg-white dark:bg-slate-900 hover:bg-gray-50 dark:hover:bg-slate-800 text-gray-700 dark:text-slate-200 font-semibold text-xs px-3.5 py-2 rounded-xl border border-gray-100 dark:border-slate-800 shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             type="button"
           >
             <Download className="w-3.5 h-3.5 text-orange-500" /> Export PDF
@@ -280,8 +297,8 @@ export function FinancialStatements(): React.ReactElement {
           {/* Export Excel */}
           <button
             onClick={() => handleExport('Excel')}
-            disabled={isExporting}
-            className="flex items-center gap-2 bg-blue-700 hover:bg-blue-800 dark:bg-blue-600 dark:hover:bg-blue-500 text-white font-semibold text-xs px-3.5 py-2 rounded-xl shadow-md shadow-blue-900/10 transition-colors cursor-pointer disabled:opacity-50"
+            disabled={isExporting || isGated}
+            className="flex items-center gap-2 bg-blue-700 hover:bg-blue-800 dark:bg-blue-600 dark:hover:bg-blue-500 text-white font-semibold text-xs px-3.5 py-2 rounded-xl shadow-md shadow-blue-900/10 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             type="button"
           >
             <FileSpreadsheet className="w-3.5 h-3.5 text-blue-100" /> Export Excel
@@ -386,6 +403,27 @@ export function FinancialStatements(): React.ReactElement {
 
         {/* Report Canvas - Right */}
         <div className="lg:col-span-9 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-8 sm:p-12 rounded-3xl shadow-sm print:shadow-none print:border-none max-w-4xl mx-auto w-full select-none">
+          {isGated ? (
+            <div className="text-center py-10">
+              <ClipboardCheck className="w-10 h-10 text-amber-500 mx-auto mb-3" />
+              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Statements aren't ready yet</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 max-w-md mx-auto">
+                {pendingObligations.length} item{pendingObligations.length === 1 ? '' : 's'} in REVIEW still need{pendingObligations.length === 1 ? 's' : ''} an answer before the books are final. Resolve them in Review, then come back here.
+              </p>
+              <div className="mt-6 max-w-md mx-auto text-left space-y-2">
+                {pendingObligations.slice(0, 8).map(ob => (
+                  <div key={`${ob.entryId}-${ob.accountCode}`} className="flex justify-between items-center px-3.5 py-2 bg-amber-50 dark:bg-amber-500/10 border border-amber-100 dark:border-amber-500/20 rounded-lg text-[11px]">
+                    <span className="font-semibold text-amber-900 dark:text-amber-300 truncate pr-3">{ob.description}</span>
+                    <span className="text-amber-600 dark:text-amber-400 font-bold whitespace-nowrap">{obligationAccountLabel(ob.accountCode, accounts)}</span>
+                  </div>
+                ))}
+                {pendingObligations.length > 8 && (
+                  <p className="text-[10px] text-slate-400 text-center pt-1">+{pendingObligations.length - 8} more in Review</p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <>
           {/* Report Header */}
           <div className="text-center border-b-2 border-slate-200 dark:border-slate-700 pb-5 mb-8">
             <h1 className="text-base font-black uppercase text-slate-900 dark:text-slate-100 tracking-widest">{settings.organizationName}</h1>
@@ -686,6 +724,8 @@ export function FinancialStatements(): React.ReactElement {
               <p className="text-[9px] text-slate-500 dark:text-slate-400 font-medium">Chief Executive / Auditor</p>
             </div>
           </div>
+            </>
+          )}
         </div>
       </div>
     </div>
