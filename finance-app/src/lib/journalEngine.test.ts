@@ -4,6 +4,8 @@ import {
   resolveEntry,
   checkEntryEffects,
   buildJournalLines,
+  projectJournalLineImpacts,
+  computeStatementImpact,
   FUNDING_SOURCE_OPTIONS,
   UnknownAccountError,
 } from './journalEngine';
@@ -85,6 +87,23 @@ describe('buildJournalLines', () => {
       { accountCode: '1010', debit: 0, credit: 500 },
     ]);
     expect(lines[0].debit).toBe(lines[1].credit);
+  });
+});
+
+describe('posting previews', () => {
+  it('projects account balances using each account normal balance', () => {
+    const lines = buildJournalLines('5070', '2010', 500);
+    const impacts = projectJournalLineImpacts(lines, accounts, { '5070': 100, '2010': 300 });
+    expect(impacts.find(item => item.accountCode === '5070')?.after).toBe(600);
+    expect(impacts.find(item => item.accountCode === '2010')?.after).toBe(800);
+  });
+
+  it('treats a credit to accumulated depreciation as a decrease in total Assets', () => {
+    const contra: Account = { code: '1550', name: 'Accumulated Depreciation', type: 'Assets', normalBalance: 'Credit', description: '', isActive: true };
+    const depreciation: Account = { code: '5090', name: 'Depreciation Expense', type: 'Expenses', normalBalance: 'Debit', description: '', isActive: true };
+    const impact = computeStatementImpact(buildJournalLines('5090', '1550', 250), [...accounts, contra, depreciation]);
+    expect(impact.assetChange).toBe(-250);
+    expect(impact.netIncomeChange).toBe(-250);
   });
 });
 

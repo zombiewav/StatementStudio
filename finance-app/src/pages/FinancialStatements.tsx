@@ -9,12 +9,19 @@ import {
   ClipboardCheck
 } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
-import { CASH_ACCOUNT_CODES } from '../lib/cashAccounts';
 import { computeActivitiesExpenseBreakdown } from '../lib/activitiesBreakdown';
 import { computeAccountBalances, computeTypeTotals, isContraAccount } from '../lib/accountTotals';
-import { computePendingObligations, obligationAccountLabel } from '../lib/reviewEngine';
+import { computeTransactionReviewStates } from '../lib/reviewEngine';
+import { computeCashFlowDetails } from '../lib/cashFlow';
 
 type ActiveStatementTab = 'position' | 'activities' | 'cashflow' | 'changes';
+
+const STATEMENT_OPTIONS: { id: ActiveStatementTab; label: string }[] = [
+  { id: 'position', label: 'Financial Position' },
+  { id: 'activities', label: 'Activities' },
+  { id: 'cashflow', label: 'Cash Flows' },
+  { id: 'changes', label: 'Changes in Fund Balance' },
+];
 
 export function FinancialStatements(): React.ReactElement {
   const { 
@@ -25,10 +32,26 @@ export function FinancialStatements(): React.ReactElement {
   } = useFinance();
 
   const [activeTab, setActiveTab] = useState<ActiveStatementTab>('position');
+  const [selectedStatements, setSelectedStatements] = useState<Record<ActiveStatementTab, boolean>>({
+    position: true,
+    activities: true,
+    cashflow: true,
+    changes: true,
+  });
   const [startDate, setStartDate] = useState('2026-01-01');
   const [endDate, setEndDate] = useState('2026-12-31');
   const [isExporting, setIsExporting] = useState(false);
   const [exportSuccess, setExportSuccess] = useState('');
+  const selectedStatementCount = Object.values(selectedStatements).filter(Boolean).length;
+
+  const toggleStatement = (statement: ActiveStatementTab) => {
+    if (selectedStatements[statement] && selectedStatementCount === 1) return;
+    const next = { ...selectedStatements, [statement]: !selectedStatements[statement] };
+    setSelectedStatements(next);
+    if (activeTab === statement && !next[statement]) {
+      setActiveTab(STATEMENT_OPTIONS.find(option => next[option.id])?.id || 'position');
+    }
+  };
 
   // Apply Date Range Filter on Entries
   const filteredEntries = useMemo(() => {
@@ -43,13 +66,18 @@ export function FinancialStatements(): React.ReactElement {
   // since an open item from outside the selected period can still mean
   // the period's own numbers (a receivable, a prepaid balance) aren't
   // final yet either.
-  const pendingObligations = useMemo(
-    () => computePendingObligations(journalEntries, accounts),
+  const incompleteReviewItems = useMemo(
+    () => computeTransactionReviewStates(journalEntries, accounts).filter(item => item.status === 'incomplete'),
     [journalEntries, accounts]
   );
-  const isGated = pendingObligations.length > 0;
+  const isGated = incompleteReviewItems.length > 0;
 
-  // Compute Account Balances specifically for the filtered date range
+  // Compute Account Balances specifically for the filtered date range —
+  // right for Revenue/Expenses (a period's activity), but NOT for Assets,
+  // Liabilities, or Fund Balance: those are point-in-time balances, and
+  // filtering them to just the selected range would drop everything
+  // carried over from before the range started (see cumulativeToEndTotals
+  // below, which is what the Balance Sheet actually uses).
   const filteredBalances = useMemo(
     () => computeAccountBalances(filteredEntries, accounts),
     [filteredEntries, accounts]
@@ -61,9 +89,34 @@ export function FinancialStatements(): React.ReactElement {
     [filteredBalances, accounts]
   );
 
+  // Balance Sheet accounts (Assets/Liabilities/Fund Balance) as of the
+  // report's end date, including everything posted before the selected
+  // range — e.g. prior years' closing entries — not just activity within
+  // it. Point-in-time balances, unlike Revenue/Expenses.
+  const cumulativeToEndEntries = useMemo(
+    () => journalEntries.filter(je => je.date <= endDate),
+    [journalEntries, endDate]
+  );
+  const cumulativeToEndBalances = useMemo(
+    () => computeAccountBalances(cumulativeToEndEntries, accounts),
+    [cumulativeToEndEntries, accounts]
+  );
+  const cumulativeToEndTotals = useMemo(
+    () => computeTypeTotals(cumulativeToEndBalances, accounts),
+    [cumulativeToEndBalances, accounts]
+  );
+
+  // The Statement of Changes in Fund Balance's own "starting balance" is a
+  // different point in time — as of just before the range began, not its
+  // end — so it needs its own cumulative snapshot.
+  const beginningFundBalance = useMemo(() => {
+    const priorEntries = journalEntries.filter(je => je.date < startDate);
+    return computeTypeTotals(computeAccountBalances(priorEntries, accounts), accounts)['Fund Balance'];
+  }, [journalEntries, startDate, accounts]);
+
   const fNetIncome = filteredTotals.Revenue - filteredTotals.Expenses;
-  const fEndingFundBalance = filteredTotals['Fund Balance'] + fNetIncome;
-  const fTotalLiabilitiesAndFund = filteredTotals.Liabilities + fEndingFundBalance;
+  const fEndingFundBalance = cumulativeToEndTotals['Fund Balance'] + fNetIncome;
+  const fTotalLiabilitiesAndFund = cumulativeToEndTotals.Liabilities + fEndingFundBalance;
 
   // Splits Operating Expenses on the Statement of Activities into
   // Event-Related (grouped by the specific event name entered on the
@@ -101,21 +154,21 @@ export function FinancialStatements(): React.ReactElement {
       if (activeTab === 'position') {
         csvContent += "ASSETS\n";
         accounts.filter(a => a.type === 'Assets').forEach(acc => {
-          const bal = filteredBalances[acc.code] || 0;
+          const bal = cumulativeToEndBalances[acc.code] || 0;
           const isContra = isContraAccount(acc);
           csvContent += `"${isContra ? `Less: ${acc.name}` : acc.name}",${isContra ? -bal : bal}\n`;
         });
-        csvContent += `"Total Assets",${filteredTotals.Assets}\n\n`;
+        csvContent += `"Total Assets",${cumulativeToEndTotals.Assets}\n\n`;
 
         csvContent += "LIABILITIES\n";
         accounts.filter(a => a.type === 'Liabilities').forEach(acc => {
-          csvContent += `"${acc.name}",${filteredBalances[acc.code] || 0}\n`;
+          csvContent += `"${acc.name}",${cumulativeToEndBalances[acc.code] || 0}\n`;
         });
-        csvContent += `"Total Liabilities",${filteredTotals.Liabilities}\n\n`;
+        csvContent += `"Total Liabilities",${cumulativeToEndTotals.Liabilities}\n\n`;
 
         csvContent += "FUND BALANCE\n";
         accounts.filter(a => a.type === 'Fund Balance').forEach(acc => {
-          csvContent += `"${acc.name}",${filteredBalances[acc.code] || 0}\n`;
+          csvContent += `"${acc.name}",${cumulativeToEndBalances[acc.code] || 0}\n`;
         });
         csvContent += `"Accumulated Net Surplus",${fNetIncome}\n`;
         csvContent += `"Total Fund Balance",${fEndingFundBalance}\n\n`;
@@ -164,7 +217,7 @@ export function FinancialStatements(): React.ReactElement {
         csvContent += `"Cash at Beginning of Period",${cashFlowDetails.beginningCash}\n`;
         csvContent += `"Cash at End of Period",${cashFlowDetails.endingCash}\n`;
       } else if (activeTab === 'changes') {
-        csvContent += `"Beginning Fund Balance",${filteredTotals['Fund Balance']}\n`;
+        csvContent += `"Beginning Fund Balance",${beginningFundBalance}\n`;
         csvContent += `"Net Surplus / (Deficit)",${fNetIncome}\n`;
         csvContent += `"Ending Fund Balance",${fEndingFundBalance}\n`;
       }
@@ -186,82 +239,10 @@ export function FinancialStatements(): React.ReactElement {
     }, 1000);
   };
 
-  // Dynamic Direct Cash Flow calculations from transaction logs
-  const cashFlowDetails = useMemo(() => {
-    let cashInflows = 0;
-    let cashOutflows = 0;
-    let cashInvesting = 0;
-    let cashFinancing = 0;
-    let beginningCash = 0;
-
-    // Filtered chronologically
-    const sorted = [...filteredEntries].sort((a, b) => a.date.localeCompare(b.date));
-
-    sorted.forEach((je, idx) => {
-      // 1. Identify starting opening cash
-      if (idx === 0 && (je.description.toLowerCase().includes('capital') || je.description.toLowerCase().includes('initial'))) {
-        je.lines.forEach(l => {
-          if (CASH_ACCOUNT_CODES.includes(l.accountCode)) {
-            beginningCash += l.debit;
-          }
-        });
-        return;
-      }
-
-      je.lines.forEach(line => {
-        const acc = accounts.find(a => a.code === line.accountCode);
-        if (!acc) return;
-
-        // Check if Cash is affected
-        const isCashDebit = CASH_ACCOUNT_CODES.includes(line.accountCode) && line.debit > 0;
-        const isCashCredit = CASH_ACCOUNT_CODES.includes(line.accountCode) && line.credit > 0;
-
-        if (isCashDebit) {
-          // Cash Inflow: Determine source (Revenue or Loan or Receivables)
-          const otherLines = je.lines.filter(l => !CASH_ACCOUNT_CODES.includes(l.accountCode));
-          const isLoan = otherLines.some(l => l.accountCode === '2200');
-          const isAR = otherLines.some(l => l.accountCode === '1200');
-          
-          if (isLoan) {
-            cashFinancing += line.debit;
-          } else if (isAR) {
-            cashInflows += line.debit; // collection of operating invoice
-          } else {
-            cashInflows += line.debit; // Direct Cash Revenue
-          }
-        }
-
-        if (isCashCredit) {
-          // Cash Outflow: Determine source (Expenses, Equip, AP)
-          const otherLines = je.lines.filter(l => !CASH_ACCOUNT_CODES.includes(l.accountCode));
-          const isEquip = otherLines.some(l => l.accountCode === '1500');
-          
-          if (isEquip) {
-            cashInvesting -= line.credit;
-          } else {
-            cashOutflows -= line.credit; // Operating Expense cash payment
-          }
-        }
-      });
-    });
-
-    const netOperating = cashInflows + cashOutflows;
-    const netInvesting = cashInvesting;
-    const netFinancing = cashFinancing;
-    const netChange = netOperating + netInvesting + netFinancing;
-    const endingCash = beginningCash + netChange;
-
-    return {
-      cashInflows,
-      cashOutflows,
-      netOperating,
-      netInvesting,
-      netFinancing,
-      netChange,
-      beginningCash,
-      endingCash
-    };
-  }, [filteredEntries, accounts]);
+  const cashFlowDetails = useMemo(
+    () => computeCashFlowDetails(journalEntries, accounts, startDate, endDate),
+    [journalEntries, accounts, startDate, endDate]
+  );
 
   return (
     <div className="space-y-6 bg-slate-50 dark:bg-slate-950">
@@ -355,11 +336,39 @@ export function FinancialStatements(): React.ReactElement {
         {/* Navigation Tabs - Left */}
         <div className="lg:col-span-3 bg-white dark:bg-slate-900 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-1.5 print:hidden">
           <span className="text-[10px] font-bold text-gray-400 dark:text-slate-400 uppercase tracking-wider px-3 pb-1.5 border-b border-gray-50 dark:border-slate-800 mb-1.5">Statement Reports</span>
+          <div className="mb-2 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-950/40">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[10px] font-bold text-slate-700 dark:text-slate-200">Custom FS set</p>
+              <button
+                type="button"
+                onClick={() => setSelectedStatements({ position: true, activities: true, cashflow: true, changes: true })}
+                className="text-[9px] font-bold text-blue-700 hover:underline dark:text-blue-300"
+              >
+                Select all
+              </button>
+            </div>
+            <p className="mt-0.5 text-[9px] text-slate-500 dark:text-slate-400">Choose which reports are available to generate. At least one is required.</p>
+            <div className="mt-2 space-y-1.5">
+              {STATEMENT_OPTIONS.map(option => (
+                <label key={option.id} className="flex cursor-pointer items-center gap-2 text-[10px] font-semibold text-slate-600 dark:text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={selectedStatements[option.id]}
+                    disabled={selectedStatements[option.id] && selectedStatementCount === 1}
+                    onChange={() => toggleStatement(option.id)}
+                    className="h-3.5 w-3.5 rounded border-slate-300 text-blue-700 focus:ring-blue-600 disabled:opacity-50"
+                  />
+                  {option.label}
+                </label>
+              ))}
+            </div>
+          </div>
           
           <button
             onClick={() => setActiveTab('position')}
+            disabled={!selectedStatements.position}
             className={`w-full text-left px-3.5 py-2.5 rounded-xl font-semibold text-xs transition-colors flex items-center justify-between group ${
-              activeTab === 'position' ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+              !selectedStatements.position ? 'hidden' : activeTab === 'position' ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
             type="button"
           >
@@ -369,8 +378,9 @@ export function FinancialStatements(): React.ReactElement {
 
           <button
             onClick={() => setActiveTab('activities')}
+            disabled={!selectedStatements.activities}
             className={`w-full text-left px-3.5 py-2.5 rounded-xl font-semibold text-xs transition-colors flex items-center justify-between group ${
-              activeTab === 'activities' ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+              !selectedStatements.activities ? 'hidden' : activeTab === 'activities' ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
             type="button"
           >
@@ -380,8 +390,9 @@ export function FinancialStatements(): React.ReactElement {
 
           <button
             onClick={() => setActiveTab('cashflow')}
+            disabled={!selectedStatements.cashflow}
             className={`w-full text-left px-3.5 py-2.5 rounded-xl font-semibold text-xs transition-colors flex items-center justify-between group ${
-              activeTab === 'cashflow' ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+              !selectedStatements.cashflow ? 'hidden' : activeTab === 'cashflow' ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
             type="button"
           >
@@ -391,8 +402,9 @@ export function FinancialStatements(): React.ReactElement {
 
           <button
             onClick={() => setActiveTab('changes')}
+            disabled={!selectedStatements.changes}
             className={`w-full text-left px-3.5 py-2.5 rounded-xl font-semibold text-xs transition-colors flex items-center justify-between group ${
-              activeTab === 'changes' ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+              !selectedStatements.changes ? 'hidden' : activeTab === 'changes' ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
             type="button"
           >
@@ -408,17 +420,17 @@ export function FinancialStatements(): React.ReactElement {
               <ClipboardCheck className="w-10 h-10 text-amber-500 mx-auto mb-3" />
               <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Statements aren't ready yet</h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 max-w-md mx-auto">
-                {pendingObligations.length} item{pendingObligations.length === 1 ? '' : 's'} in REVIEW still need{pendingObligations.length === 1 ? 's' : ''} an answer before the books are final. Resolve them in Review, then come back here.
+                {incompleteReviewItems.length} item{incompleteReviewItems.length === 1 ? '' : 's'} in REVIEW still need{incompleteReviewItems.length === 1 ? 's' : ''} an answer before the books are final. Resolve them in Review, then come back here.
               </p>
               <div className="mt-6 max-w-md mx-auto text-left space-y-2">
-                {pendingObligations.slice(0, 8).map(ob => (
-                  <div key={`${ob.entryId}-${ob.accountCode}`} className="flex justify-between items-center px-3.5 py-2 bg-amber-50 dark:bg-amber-500/10 border border-amber-100 dark:border-amber-500/20 rounded-lg text-[11px]">
-                    <span className="font-semibold text-amber-900 dark:text-amber-300 truncate pr-3">{ob.description}</span>
-                    <span className="text-amber-600 dark:text-amber-400 font-bold whitespace-nowrap">{obligationAccountLabel(ob.accountCode, accounts)}</span>
+                {incompleteReviewItems.slice(0, 8).map(item => (
+                  <div key={item.entry.id} className="flex justify-between items-center px-3.5 py-2 bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 rounded-lg text-[11px]">
+                    <span className="font-semibold text-rose-900 dark:text-rose-300 truncate pr-3">{item.entry.customName || item.entry.description}</span>
+                    <span className="text-rose-600 dark:text-rose-400 font-bold whitespace-nowrap">Incomplete</span>
                   </div>
                 ))}
-                {pendingObligations.length > 8 && (
-                  <p className="text-[10px] text-slate-400 text-center pt-1">+{pendingObligations.length - 8} more in Review</p>
+                {incompleteReviewItems.length > 8 && (
+                  <p className="text-[10px] text-slate-400 text-center pt-1">+{incompleteReviewItems.length - 8} more in Review</p>
                 )}
               </div>
             </div>
@@ -452,7 +464,7 @@ export function FinancialStatements(): React.ReactElement {
                   <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wider text-[10px]">Assets</h3>
                   <div className="space-y-1">
                     {accounts.filter(a => a.type === 'Assets').map(acc => {
-                      const bal = filteredBalances[acc.code] || 0;
+                      const bal = cumulativeToEndBalances[acc.code] || 0;
                       const isContra = isContraAccount(acc);
                       return (
                         <div key={acc.code} className="flex justify-between py-1 px-4 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
@@ -464,7 +476,7 @@ export function FinancialStatements(): React.ReactElement {
                   </div>
                   <div className="flex justify-between py-2 border-t border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-slate-100 mt-2 px-2">
                     <span className="uppercase text-[10px] tracking-wider">Total Assets</span>
-                    <span className="border-b-4 border-double border-slate-200 dark:border-slate-700">{formatCurrency(filteredTotals.Assets)}</span>
+                    <span className="border-b-4 border-double border-slate-200 dark:border-slate-700">{formatCurrency(cumulativeToEndTotals.Assets)}</span>
                   </div>
                 </div>
 
@@ -473,7 +485,7 @@ export function FinancialStatements(): React.ReactElement {
                   <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wider text-[10px]">Liabilities</h3>
                   <div className="space-y-1">
                     {accounts.filter(a => a.type === 'Liabilities').map(acc => {
-                      const bal = filteredBalances[acc.code] || 0;
+                      const bal = cumulativeToEndBalances[acc.code] || 0;
                       return (
                         <div key={acc.code} className="flex justify-between py-1 px-4 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
                           <span>{acc.name}</span>
@@ -484,7 +496,7 @@ export function FinancialStatements(): React.ReactElement {
                   </div>
                   <div className="flex justify-between py-2 border-t border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-slate-100 mt-2 px-2">
                     <span className="uppercase text-[10px] tracking-wider">Total Liabilities</span>
-                    <span className="border-b border-slate-200 dark:border-slate-700">{formatCurrency(filteredTotals.Liabilities)}</span>
+                    <span className="border-b border-slate-200 dark:border-slate-700">{formatCurrency(cumulativeToEndTotals.Liabilities)}</span>
                   </div>
                 </div>
 
@@ -493,7 +505,7 @@ export function FinancialStatements(): React.ReactElement {
                   <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wider text-[10px]">Fund Balance / Equity</h3>
                   <div className="space-y-1">
                     {accounts.filter(a => a.type === 'Fund Balance').map(acc => {
-                      const bal = filteredBalances[acc.code] || 0;
+                      const bal = cumulativeToEndBalances[acc.code] || 0;
                       return (
                         <div key={acc.code} className="flex justify-between py-1 px-4 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
                           <span>{acc.name}</span>
@@ -693,7 +705,7 @@ export function FinancialStatements(): React.ReactElement {
                 <div className="space-y-3 px-4">
                   <div className="flex justify-between py-1.5 border-b border-slate-200 dark:border-slate-700 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
                     <span>General Unrestricted Fund, Starting Balance</span>
-                    <span className="font-bold">{formatCurrency(filteredTotals['Fund Balance'])}</span>
+                    <span className="font-bold">{formatCurrency(beginningFundBalance)}</span>
                   </div>
                   <div className="flex justify-between py-1.5 border-b border-slate-200 dark:border-slate-700 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
                     <span>Add: Net Surplus (Deficit) for the period</span>

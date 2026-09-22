@@ -1,10 +1,27 @@
 import React, { useState, useMemo } from 'react';
-import { FolderKanban, Plus } from 'lucide-react';
+import { FolderKanban, Plus, Pencil, Check, X } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 
 export function ProjectsPage(): React.ReactElement {
   const { projects, addProject, updateProject, journalEntries, accounts, formatCurrency } = useFinance();
   const [showAddForm, setShowAddForm] = useState(false);
+
+  // Inline Budget Editing State
+  const [editingBudgetId, setEditingBudgetId] = useState<string | null>(null);
+  const [editingBudgetValue, setEditingBudgetValue] = useState('');
+
+  const startEditingBudget = (proj: { id: string; budget: number }) => {
+    setEditingBudgetId(proj.id);
+    setEditingBudgetValue(String(proj.budget));
+  };
+
+  const saveEditingBudget = (id: string) => {
+    const value = Number(editingBudgetValue);
+    if (!isNaN(value) && value >= 0) {
+      updateProject(id, { budget: value });
+    }
+    setEditingBudgetId(null);
+  };
   
   // New Project Form State
   const [projName, setProjName] = useState('');
@@ -206,7 +223,37 @@ export function ProjectsPage(): React.ReactElement {
 
                 <div>
                   <span id="p7" className="text-[9px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider block mb-0.5">Budget Cap</span>
-                  <span id="p8" className="text-[11px] font-bold text-slate-900 dark:text-slate-100">{formatCurrency(proj.budget)}</span>
+                  {editingBudgetId === proj.id ? (
+                    <div className="flex items-center justify-center gap-1">
+                      <input
+                        type="number"
+                        autoFocus
+                        value={editingBudgetValue}
+                        onChange={(e) => setEditingBudgetValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') saveEditingBudget(proj.id);
+                          if (e.key === 'Escape') setEditingBudgetId(null);
+                        }}
+                        className="w-16 bg-white dark:bg-slate-950 border border-blue-900 dark:border-blue-500 rounded text-[11px] font-bold text-slate-900 dark:text-slate-100 p-0.5 outline-none text-center"
+                      />
+                      <button type="button" onClick={() => saveEditingBudget(proj.id)} className="text-emerald-600 hover:text-emerald-700" title="Save">
+                        <Check className="w-3 h-3" />
+                      </button>
+                      <button type="button" onClick={() => setEditingBudgetId(null)} className="text-slate-400 hover:text-rose-500" title="Cancel">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => startEditingBudget(proj)}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-900 dark:text-slate-100 hover:text-blue-900 dark:hover:text-blue-300 group"
+                      title="Edit budget"
+                    >
+                      {formatCurrency(proj.budget)}
+                      <Pencil className="w-2.5 h-2.5 opacity-0 group-hover:opacity-60 transition-opacity" />
+                    </button>
+                  )}
                 </div>
                 <div>
                   <span className="text-[9px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider block mb-0.5">Actual Cost</span>

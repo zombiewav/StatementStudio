@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useMemo, useState, useRef } from 'react';
 import {
   Building,
   FolderTree,
@@ -12,23 +12,31 @@ import {
   Database,
   Download,
   Upload,
-  AlertTriangle
+  AlertTriangle,
+  Lock,
+  Undo2
 } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import { Account, AccountType, NormalBalanceType, BackupPayload } from '../types';
 import { validateBackupPayload } from '../lib/backupValidation';
+import { findFiscalCloseBlockers } from '../lib/closingEntries';
+import { CustomTransactionTypesManager } from '../components/CustomTransactionTypesManager';
 
 export function Settings(): React.ReactElement {
   const {
     accounts,
+    journalEntries,
     addAccount,
     updateAccount,
     settings,
     updateSettings,
     addJournalEntry,
+    reverseJournalEntry,
     formatCurrency,
     exportBackupData,
-    restoreBackupData
+    restoreBackupData,
+    closedFiscalYears,
+    closeFiscalYear
   } = useFinance();
 
   // COA Form State
@@ -57,6 +65,17 @@ export function Settings(): React.ReactElement {
   const [passwordError, setPasswordError] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState('');
 
+  // Close Fiscal Year State
+  const [closingFiscalYear, setClosingFiscalYear] = useState('');
+  const [closingDate, setClosingDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [closingError, setClosingError] = useState('');
+  const [closingSuccess, setClosingSuccess] = useState('');
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const fiscalCloseBlockers = useMemo(
+    () => findFiscalCloseBlockers(journalEntries, accounts),
+    [journalEntries, accounts]
+  );
+
   // Beginning Balances (Sheet3 of the working paper: opening figures a
   // first-time user fills in before recording regular transactions). Posts
   // as one ordinary balanced journal entry — a debit line per asset account
@@ -67,11 +86,13 @@ export function Settings(): React.ReactElement {
   const [beginningBalances, setBeginningBalances] = useState<Record<string, string>>({});
   const [beginningBalanceError, setBeginningBalanceError] = useState('');
   const [beginningBalanceSuccess, setBeginningBalanceSuccess] = useState('');
+  const [lastBeginningBalanceEntry, setLastBeginningBalanceEntry] = useState<{ id: string; reference: string } | null>(null);
 
   const handlePostBeginningBalances = (e: React.FormEvent) => {
     e.preventDefault();
     setBeginningBalanceError('');
     setBeginningBalanceSuccess('');
+    setLastBeginningBalanceEntry(null);
 
     const lines: { accountCode: string; debit: number; credit: number }[] = [];
     let total = 0;
@@ -92,10 +113,22 @@ export function Settings(): React.ReactElement {
     lines.push({ accountCode: '3010', debit: 0, credit: total });
 
     const date = new Date().toISOString().split('T')[0];
-    addJournalEntry(date, 'Beginning Balances', 'General Fund Operations', lines);
+    const entry = addJournalEntry(date, 'Beginning Balances', 'General Fund Operations', lines);
 
     setBeginningBalances({});
     setBeginningBalanceSuccess(`Posted beginning balances totaling ${formatCurrency(total)}.`);
+    setLastBeginningBalanceEntry({ id: entry.id, reference: entry.reference });
+    setTimeout(() => {
+      setBeginningBalanceSuccess('');
+      setLastBeginningBalanceEntry(null);
+    }, 5000);
+  };
+
+  const handleUndoBeginningBalances = () => {
+    if (!lastBeginningBalanceEntry) return;
+    reverseJournalEntry(lastBeginningBalanceEntry.id);
+    setBeginningBalanceSuccess(`${lastBeginningBalanceEntry.reference} was undone with a reversing entry.`);
+    setLastBeginningBalanceEntry(null);
     setTimeout(() => setBeginningBalanceSuccess(''), 5000);
   };
 
@@ -285,13 +318,39 @@ export function Settings(): React.ReactElement {
     setPasswordSuccess('Organization password updated.');
   };
 
+  const handleCloseFiscalYear = () => {
+    setClosingError('');
+    setClosingSuccess('');
+
+    if (!closingFiscalYear.trim()) {
+      setClosingError('Please label this fiscal year (e.g. "FY 2026").');
+      return;
+    }
+    if (!closingDate) {
+      setClosingError('Please choose a closing date.');
+      return;
+    }
+
+    try {
+      closeFiscalYear(closingFiscalYear.trim(), closingDate);
+      setClosingSuccess(`${closingFiscalYear.trim()} closed as of ${closingDate}. Revenue and Expenses are zeroed; next period starts fresh.`);
+      setClosingFiscalYear('');
+      setShowCloseConfirm(false);
+    } catch (err) {
+      setClosingError(err instanceof Error ? err.message : 'Could not close this fiscal year.');
+      setShowCloseConfirm(false);
+    }
+  };
+
   return (
     <div className="space-y-6 bg-slate-50 dark:bg-slate-950">
       {/* Title */}
       <div>
         <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">Workspace Settings</h2>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">Configure chart of accounts, fiscal year calendars, active currency models, and staff accounts.</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">Configure chart of accounts, fiscal-year controls, transaction types, currency, and organization access.</p>
       </div>
+
+      <CustomTransactionTypesManager />
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
         {/* Left Side: General settings forms */}
@@ -360,7 +419,19 @@ export function Settings(): React.ReactElement {
               <p className="text-[10px] text-rose-600 font-bold bg-rose-50 dark:bg-rose-500/10 dark:text-rose-300 p-2 rounded-lg">{beginningBalanceError}</p>
             )}
             {beginningBalanceSuccess && (
-              <p className="text-[10px] text-emerald-700 font-bold bg-emerald-50 dark:bg-emerald-500/10 dark:text-emerald-300 p-2 rounded-lg">{beginningBalanceSuccess}</p>
+              <div className="flex items-center justify-between gap-2 rounded-lg bg-emerald-50 p-2 text-[10px] font-bold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
+                <span>{beginningBalanceSuccess}</span>
+                {lastBeginningBalanceEntry && (
+                  <button
+                    type="button"
+                    onClick={handleUndoBeginningBalances}
+                    className="inline-flex shrink-0 items-center gap-1 rounded-md border border-emerald-200 bg-white/70 px-2 py-1 text-[10px] font-bold transition-colors hover:bg-white dark:border-emerald-500/30 dark:bg-slate-900/40 dark:hover:bg-slate-900"
+                    title="Post a reversing entry for these beginning balances"
+                  >
+                    <Undo2 className="h-3 w-3" /> Undo
+                  </button>
+                )}
+              </div>
             )}
 
             <div className="space-y-3 text-xs">
@@ -516,6 +587,98 @@ export function Settings(): React.ReactElement {
               </button>
             </div>
           </form>
+
+          {/* Close Fiscal Year */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 pb-2.5 flex items-center gap-2">
+              <Lock className="w-4.5 h-4.5 text-blue-900" /> Close Fiscal Year
+            </h3>
+            <p className="text-[10px] text-slate-500 dark:text-slate-400 -mt-2">
+              Zeroes Revenue and Expenses into Fund Balance as of the closing date, exactly like a traditional
+              closing entry. Assets, Liabilities, and Fund Balance carry forward automatically — this can't be undone.
+            </p>
+
+            {closingError && (
+              <p className="text-[10px] font-semibold text-rose-600 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">{closingError}</p>
+            )}
+            {closingSuccess && (
+              <p className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 rounded-lg px-3 py-2">{closingSuccess}</p>
+            )}
+            {fiscalCloseBlockers.length > 0 && (
+              <p className="text-[10px] font-semibold text-rose-700 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">
+                Closing is blocked: {fiscalCloseBlockers.length} transaction{fiscalCloseBlockers.length === 1 ? '' : 's'} remain incomplete in Review. Resolve all red items first.
+              </p>
+            )}
+
+            {closedFiscalYears.length > 0 && (
+              <div className="space-y-1.5">
+                {closedFiscalYears.map(record => (
+                  <div key={record.id} className="flex items-center justify-between text-[10px] font-semibold bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2">
+                    <span className="text-slate-700 dark:text-slate-300">{record.fiscalYear} — closed {record.closingDate}</span>
+                    <span className={record.netIncome >= 0 ? 'text-emerald-600' : 'text-rose-600'}>
+                      {record.netIncome >= 0 ? 'Surplus' : 'Deficit'} {formatCurrency(Math.abs(record.netIncome))}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="space-y-3.5 text-xs">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Fiscal Year Label</label>
+                <input
+                  type="text"
+                  value={closingFiscalYear}
+                  onChange={(e) => setClosingFiscalYear(e.target.value)}
+                  placeholder="FY 2026"
+                  className="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl font-semibold text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 p-2.5 outline-none focus:border-blue-900 dark:focus:border-blue-500 transition-colors"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Closing Date</label>
+                <input
+                  type="date"
+                  value={closingDate}
+                  onChange={(e) => setClosingDate(e.target.value)}
+                  className="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl font-semibold text-slate-900 dark:text-slate-100 p-2.5 outline-none focus:border-blue-900 dark:focus:border-blue-500 transition-colors"
+                />
+              </div>
+
+              {!showCloseConfirm ? (
+                <button
+                  type="button"
+                  onClick={() => { setClosingError(''); setClosingSuccess(''); setShowCloseConfirm(true); }}
+                  disabled={fiscalCloseBlockers.length > 0}
+                  className="w-full bg-amber-600 hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-40 text-white font-bold text-xs py-2.5 rounded-xl transition-colors"
+                >
+                  Close Fiscal Year
+                </button>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-[10px] font-semibold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-lg px-3 py-2">
+                    This posts a permanent closing entry and cannot be undone. Confirm?
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowCloseConfirm(false)}
+                      className="flex-1 px-3 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCloseFiscalYear}
+                      disabled={fiscalCloseBlockers.length > 0}
+                      className="flex-1 px-3 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-40 rounded-lg shadow-sm"
+                    >
+                      Confirm Close
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Right Side: Chart of Accounts Editor */}
@@ -632,7 +795,7 @@ export function Settings(): React.ReactElement {
                 <tr className="border-b border-slate-200 dark:border-slate-800 text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 bg-slate-50/50 dark:bg-slate-950/50">
                   <th className="py-2.5 px-4 w-20">Code</th>
                   <th className="py-2.5 px-4 w-40">Account Name</th>
-                  <th className="py-2.5 px-4">Description</th>
+                  <th className="py-2.5 px-4 max-w-[220px]">Description</th>
                   <th className="py-2.5 px-4 w-28">Type</th>
                   <th className="py-2.5 px-4 w-20">Normal</th>
                   <th className="py-2.5 px-4 w-20">Status</th>
@@ -661,7 +824,7 @@ export function Settings(): React.ReactElement {
                       </td>
 
                       {/* Description field */}
-                      <td className="py-2.5 px-4 text-slate-900 dark:text-slate-100">
+                      <td className="py-2.5 px-4 text-slate-900 dark:text-slate-100 max-w-[220px]">
                         {isEditing ? (
                           <input
                             type="text"
@@ -670,7 +833,7 @@ export function Settings(): React.ReactElement {
                             className="bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded p-1 text-xs w-full outline-none font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-blue-900 dark:focus:border-blue-500"
                           />
                         ) : (
-                          acc.description
+                          <span className="block truncate" title={acc.description}>{acc.description}</span>
                         )}
                       </td>
 

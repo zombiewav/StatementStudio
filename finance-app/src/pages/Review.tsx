@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { ClipboardCheck, CheckCircle2, AlertCircle } from 'lucide-react';
+import { ClipboardCheck, CheckCircle2, AlertCircle, Undo2 } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
+import { JournalEntry } from '../types';
+import { ReceiptAttachments } from '../components/ReceiptAttachments';
 import {
   computePendingObligations,
   computeAdvanceSettlement,
@@ -11,6 +13,12 @@ import {
   PendingObligation,
   AdvanceSettlementStatus,
   PREPAID_EXPENSE_CODE,
+  computeTransactionReviewStates,
+  buildRestrictionReleaseLines,
+  buildDonatedInventorySettlementLines,
+  DONATED_FOOD_SUPPLIES_CODE,
+  DONATED_EVENT_SUPPLIES_CODE,
+  ReviewStatus,
 } from '../lib/reviewEngine';
 
 const ADVANCE_STATUS_OPTIONS: { value: AdvanceSettlementStatus; label: string; needsAmount: boolean }[] = [
@@ -21,20 +29,19 @@ const ADVANCE_STATUS_OPTIONS: { value: AdvanceSettlementStatus; label: string; n
   { value: 'not-used-partly-paid', label: 'Only part of it was used — returning the rest', needsAmount: true },
 ];
 
-function ObligationRow({ obligation }: { obligation: PendingObligation }): React.ReactElement {
+function ObligationRow({
+  obligation,
+  onSettlementPosted,
+}: {
+  obligation: PendingObligation;
+  onSettlementPosted: (entry: JournalEntry) => void;
+}): React.ReactElement {
   const { accounts, journalEntries, formatCurrency, addJournalEntry } = useFinance();
   const [isOpen, setIsOpen] = useState(false);
-  // A brief confirmation banner, not a permanent one: a PARTIAL settlement
-  // leaves this same obligation open with a smaller remainingAmount (this
-  // component stays mounted — same React key — and just gets updated
-  // props), so hiding the row for good after any settlement would wrongly
-  // bury a still-open balance. Only its absence from the next
-  // pendingObligations list (a full settlement) actually removes the row.
-  const [justSettled, setJustSettled] = useState(false);
-  const flashSettled = () => {
+  const [rowMessage, setRowMessage] = useState('');
+  const finishSettlement = (entry?: JournalEntry) => {
     setIsOpen(false);
-    setJustSettled(true);
-    setTimeout(() => setJustSettled(false), 4000);
+    if (entry) onSettlementPosted(entry);
   };
 
   // Due to Officers / Due to Supplier: single Full/None/Partial question.
@@ -56,16 +63,64 @@ function ObligationRow({ obligation }: { obligation: PendingObligation }): React
   const [prepaidAmount, setPrepaidAmount] = useState('');
   const [prepaidExpenseAccountCode, setPrepaidExpenseAccountCode] = useState(defaultExpenseAccountCode);
 
+  // Donated food/supplies: the asset remains open until it is used or
+  // spoiled. Those are distinct outcomes because they hit different
+  // expense accounts, but one Review update can record both portions.
+  const [donatedUsedAmount, setDonatedUsedAmount] = useState('');
+  const [donatedSpoiledAmount, setDonatedSpoiledAmount] = useState('');
+
   const expenseAccounts = accounts.filter(a => a.type === 'Expenses' && a.isActive);
   const isAdvance = obligation.accountCode === '1250';
   const isPrepaid = obligation.accountCode === PREPAID_EXPENSE_CODE;
+  const isDonatedFood = obligation.accountCode === DONATED_FOOD_SUPPLIES_CODE;
+  const isDonatedInventory = isDonatedFood || obligation.accountCode === DONATED_EVENT_SUPPLIES_CODE;
+  const donatedUsageExpenseAccountCode = isDonatedFood ? '5080' : '5160';
   const cashAccountCode = '1010';
+
+  const handleDonatedInventorySubmit = () => {
+    const usedAmount = Number(donatedUsedAmount) || 0;
+    const spoiledAmount = Number(donatedSpoiledAmount) || 0;
+    const total = usedAmount + spoiledAmount;
+    if (usedAmount < 0 || spoiledAmount < 0 || total <= 0 || total > obligation.remainingAmount) {
+      setRowMessage(`Enter used and/or spoiled amounts totaling more than zero and no more than ${formatCurrency(obligation.remainingAmount)}.`);
+      return;
+    }
+
+    const lines = buildDonatedInventorySettlementLines(
+      obligation.accountCode,
+      donatedUsageExpenseAccountCode,
+      usedAmount,
+      spoiledAmount
+    );
+    const postedEntry = addJournalEntry(
+      new Date().toISOString().slice(0, 10),
+      `Usage/spoilage update for ${obligation.reference}: ${obligation.description}`,
+      obligation.project,
+      lines,
+      obligation.eventName,
+      obligation.entryId
+    );
+    setRowMessage('');
+    setDonatedUsedAmount('');
+    setDonatedSpoiledAmount('');
+    finishSettlement(postedEntry);
+  };
 
   const handlePrepaidSubmit = () => {
     const amount = Number(prepaidAmount) || 0;
+    if (amount <= 0 || amount > obligation.remainingAmount) {
+      setRowMessage(`Enter an amount greater than zero and no more than ${formatCurrency(obligation.remainingAmount)}.`);
+      return;
+    }
+    if (!prepaidExpenseAccountCode) {
+      setRowMessage('Select the expense account before posting.');
+      return;
+    }
+    setRowMessage('');
     const lines = buildPrepaidExpenseSettlementLines(prepaidExpenseAccountCode, amount);
+    let postedEntry: JournalEntry | undefined;
     if (lines.length > 0) {
-      addJournalEntry(
+      postedEntry = addJournalEntry(
         new Date().toISOString().slice(0, 10),
         `Settlement of ${obligation.reference}: ${obligation.description}`,
         obligation.project,
@@ -76,18 +131,27 @@ function ObligationRow({ obligation }: { obligation: PendingObligation }): React
     }
     setPrepaidAmount('');
     setPrepaidExpenseAccountCode(defaultExpenseAccountCode);
-    flashSettled();
+    finishSettlement(postedEntry);
   };
 
   const handleSimpleSubmit = () => {
     let amount = 0;
     if (simpleChoice === 'full') amount = obligation.remainingAmount;
     else if (simpleChoice === 'partial') amount = Number(simpleAmount) || 0;
-    // 'none' stays 0 — nothing to post, obligation stays open.
+    if (simpleChoice === 'none') {
+      setRowMessage('No payment was posted. This transaction remains incomplete.');
+      return;
+    }
+    if (amount <= 0 || amount > obligation.remainingAmount) {
+      setRowMessage(`Enter an amount greater than zero and no more than ${formatCurrency(obligation.remainingAmount)}.`);
+      return;
+    }
+    setRowMessage('');
 
     const lines = buildSimpleSettlementLines(obligation.accountCode, cashAccountCode, amount);
+    let postedEntry: JournalEntry | undefined;
     if (lines.length > 0) {
-      addJournalEntry(
+      postedEntry = addJournalEntry(
         new Date().toISOString().slice(0, 10),
         `Settlement of ${obligation.reference}: ${obligation.description}`,
         obligation.project,
@@ -98,13 +162,18 @@ function ObligationRow({ obligation }: { obligation: PendingObligation }): React
     }
     setSimpleChoice('');
     setSimpleAmount('');
-    flashSettled();
+    finishSettlement(postedEntry);
   };
 
   const handleAdvanceSubmit = () => {
     if (!advanceStatus) return;
     const needsAmount = ADVANCE_STATUS_OPTIONS.find(o => o.value === advanceStatus)?.needsAmount;
     const partial = needsAmount ? Number(advancePartial) || 0 : 0;
+    if (needsAmount && (partial <= 0 || partial > obligation.remainingAmount)) {
+      setRowMessage(`Enter an amount greater than zero and no more than ${formatCurrency(obligation.remainingAmount)}.`);
+      return;
+    }
+    setRowMessage('');
     const result = computeAdvanceSettlement(advanceStatus, obligation.remainingAmount, partial);
 
     const lines = buildAdvanceSettlementLines(
@@ -115,7 +184,7 @@ function ObligationRow({ obligation }: { obligation: PendingObligation }): React
       obligation.remainingAmount,
       result
     );
-    addJournalEntry(
+    const postedEntry = addJournalEntry(
       new Date().toISOString().slice(0, 10),
       `Settlement of ${obligation.reference}: ${obligation.description}`,
       obligation.project,
@@ -126,7 +195,7 @@ function ObligationRow({ obligation }: { obligation: PendingObligation }): React
     setAdvanceStatus('');
     setAdvancePartial('');
     setExpenseAccountCode('');
-    flashSettled();
+    finishSettlement(postedEntry);
   };
 
   const advanceNeedsExpenseAccount = advanceStatus && advanceStatus !== 'not-used' &&
@@ -135,11 +204,6 @@ function ObligationRow({ obligation }: { obligation: PendingObligation }): React
 
   return (
     <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
-      {justSettled && (
-        <div className="p-3 flex items-center gap-2 bg-emerald-50 dark:bg-emerald-500/10 border-b border-emerald-100 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-[11px] font-semibold">
-          <CheckCircle2 className="w-4 h-4 shrink-0" /> Settlement posted for {obligation.reference}.
-        </div>
-      )}
       <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900">
         <div>
           <p className="text-xs font-bold text-slate-900 dark:text-slate-100">{obligation.description}</p>
@@ -151,7 +215,7 @@ function ObligationRow({ obligation }: { obligation: PendingObligation }): React
         <div className="flex items-center gap-4">
           <div className="text-right">
             <p className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Remaining</p>
-            <p className="text-sm font-black text-amber-600 dark:text-amber-400">{formatCurrency(obligation.remainingAmount)}</p>
+            <p className="text-sm font-black text-rose-600 dark:text-rose-400">{formatCurrency(obligation.remainingAmount)}</p>
           </div>
           <button
             type="button"
@@ -165,7 +229,55 @@ function ObligationRow({ obligation }: { obligation: PendingObligation }): React
 
       {isOpen && (
         <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 space-y-3">
-          {isPrepaid ? (
+          {rowMessage && (
+            <div className="rounded-lg border border-rose-200 bg-rose-50 p-2.5 text-[10px] font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">{rowMessage}</div>
+          )}
+          {isDonatedInventory ? (
+            <>
+              <p className="text-[10px] text-slate-600 dark:text-slate-400">
+                Record only what has happened so far. Any unused balance stays in Review for a later update.
+              </p>
+              <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                How much was used or consumed?
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                max={obligation.remainingAmount}
+                value={donatedUsedAmount}
+                onChange={(e) => setDonatedUsedAmount(e.target.value)}
+                placeholder={`0.00 — posts to ${isDonatedFood ? 'Meals & Refreshments' : 'Supplies Expense'}`}
+                className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold p-2.5 outline-none text-slate-900 dark:text-slate-100"
+              />
+              <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                How much was spoiled, expired, or unusable?
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                max={obligation.remainingAmount}
+                value={donatedSpoiledAmount}
+                onChange={(e) => setDonatedSpoiledAmount(e.target.value)}
+                placeholder="0.00 — posts to Loss from Spoilage"
+                className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold p-2.5 outline-none text-slate-900 dark:text-slate-100"
+              />
+              {(Number(donatedUsedAmount) > 0 || Number(donatedSpoiledAmount) > 0) && (
+                <p className="text-[10px] font-semibold text-slate-600 dark:text-slate-300">
+                  Remaining after update: {formatCurrency(Math.max(0, obligation.remainingAmount - (Number(donatedUsedAmount) || 0) - (Number(donatedSpoiledAmount) || 0)))}
+                </p>
+              )}
+              <button
+                type="button"
+                disabled={(Number(donatedUsedAmount) || 0) + (Number(donatedSpoiledAmount) || 0) <= 0}
+                onClick={handleDonatedInventorySubmit}
+                className="w-full bg-blue-700 hover:bg-blue-800 disabled:opacity-40 text-white font-bold text-xs p-2.5 rounded-lg transition-colors"
+              >
+                Post Usage Update
+              </button>
+            </>
+          ) : isPrepaid ? (
             <>
               <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300">
                 How much of this is now used, consumed, or benefited from?
@@ -308,8 +420,42 @@ function ObligationRow({ obligation }: { obligation: PendingObligation }): React
 }
 
 export function Review(): React.ReactElement {
-  const { journalEntries, accounts } = useFinance();
+  const { journalEntries, accounts, reverseJournalEntry, addJournalEntry, formatCurrency } = useFinance();
   const pendingObligations = useMemo(() => computePendingObligations(journalEntries, accounts), [journalEntries, accounts]);
+  const reviewStates = useMemo(() => computeTransactionReviewStates(journalEntries, accounts), [journalEntries, accounts]);
+  const [statusFilter, setStatusFilter] = useState<'all' | ReviewStatus>('all');
+  const [settlementMessage, setSettlementMessage] = useState('');
+  const [lastPostedSettlement, setLastPostedSettlement] = useState<{ id: string; reference: string } | null>(null);
+
+  const handleSettlementPosted = (entry: JournalEntry) => {
+    setSettlementMessage(`Settlement posted as ${entry.reference}.`);
+    setLastPostedSettlement({ id: entry.id, reference: entry.reference });
+  };
+
+  const handleUndoSettlement = () => {
+    if (!lastPostedSettlement) return;
+    reverseJournalEntry(lastPostedSettlement.id);
+    setSettlementMessage(`${lastPostedSettlement.reference} was undone with a reversing entry.`);
+    setLastPostedSettlement(null);
+    setTimeout(() => setSettlementMessage(''), 5000);
+  };
+
+  const handleRestrictionRelease = (entry: JournalEntry, amount: number) => {
+    const posted = addJournalEntry(
+      new Date().toISOString().slice(0, 10),
+      `Release from restriction for ${entry.reference}: ${entry.description}`,
+      entry.project,
+      buildRestrictionReleaseLines(amount),
+      entry.eventName,
+      entry.id
+    );
+    handleSettlementPosted(posted);
+  };
+
+  const visibleStates = statusFilter === 'all'
+    ? reviewStates
+    : reviewStates.filter(state => state.status === statusFilter);
+  const incompleteCount = reviewStates.filter(state => state.status === 'incomplete').length;
 
   return (
     <div className="space-y-6 bg-slate-50 dark:bg-slate-950">
@@ -318,26 +464,109 @@ export function Review(): React.ReactElement {
           <ClipboardCheck className="w-5 h-5 text-blue-700 dark:text-blue-400" /> REVIEW
         </h2>
         <p className="text-xs text-slate-700 dark:text-slate-400 mt-1 font-medium">
-          Follow up on open balances — Due to Officers, Due to Supplier, Advances to Officers, and Prepaid Expenses — until each one is settled.
+          Review every recorded transaction. Incomplete items stay red until their follow-up accounting is resolved.
         </p>
       </div>
 
-      {pendingObligations.length === 0 ? (
-        <div className="p-8 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-center">
-          <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
-          <p className="text-sm font-bold text-slate-700 dark:text-slate-200">Nothing pending review.</p>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Every reimbursement, supplier bill, cash advance, and prepaid item is settled.</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          <div className="p-3.5 bg-blue-50 dark:bg-blue-500/10 border border-blue-100 dark:border-blue-500/20 rounded-xl flex items-center gap-2 text-[11px] font-semibold text-blue-800 dark:text-blue-300">
-            <AlertCircle className="w-4 h-4 shrink-0" /> {pendingObligations.length} item{pendingObligations.length === 1 ? '' : 's'} waiting on a follow-up answer.
-          </div>
-          {pendingObligations.map(ob => (
-            <ObligationRow key={`${ob.entryId}-${ob.accountCode}`} obligation={ob} />
-          ))}
+      {settlementMessage && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-100 bg-emerald-50 p-3 text-[11px] font-semibold text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300">
+          <span className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 shrink-0" /> {settlementMessage}
+          </span>
+          {lastPostedSettlement && (
+            <button
+              type="button"
+              onClick={handleUndoSettlement}
+              className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-emerald-200 bg-white/70 px-2.5 py-1 text-[10px] font-bold transition-colors hover:bg-white dark:border-emerald-500/30 dark:bg-slate-900/40 dark:hover:bg-slate-900"
+              title="Post a reversing entry for this settlement"
+            >
+              <Undo2 className="h-3.5 w-3.5" /> Undo
+            </button>
+          )}
         </div>
       )}
+
+      <div className={`rounded-xl border p-3.5 text-[11px] font-semibold flex items-center gap-2 ${incompleteCount > 0 ? 'border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300' : 'border-emerald-100 bg-emerald-50 text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300'}`}>
+        {incompleteCount > 0 ? <AlertCircle className="h-4 w-4 shrink-0" /> : <CheckCircle2 className="h-4 w-4 shrink-0" />}
+        {incompleteCount > 0
+          ? `${incompleteCount} transaction${incompleteCount === 1 ? '' : 's'} must be completed before Financial Statements can be finalized.`
+          : 'All recorded transactions are complete and ready for Financial Statements.'}
+      </div>
+
+      <section className="space-y-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Transaction Review</h3>
+            <p className="mt-0.5 text-[10px] font-medium text-slate-500 dark:text-slate-400">Complete follow-up work inside each red transaction. Completed transactions remain visible.</p>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {(['all', 'incomplete', 'complete', 'reversed'] as const).map(filter => (
+              <button
+                key={filter}
+                type="button"
+                onClick={() => setStatusFilter(filter)}
+                className={`rounded-lg px-3 py-1.5 text-[10px] font-bold capitalize transition-colors ${statusFilter === filter ? 'bg-blue-700 text-white dark:bg-blue-600' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-300 dark:border-slate-800 dark:hover:bg-slate-800'}`}
+              >
+                {filter} {filter === 'all' ? `(${reviewStates.length})` : `(${reviewStates.filter(state => state.status === filter).length})`}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {visibleStates.length === 0 ? (
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center text-xs font-medium text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">No transactions in this status.</div>
+        ) : visibleStates.map(state => {
+          const amount = state.entry.lines.reduce((sum, line) => sum + line.debit, 0);
+          const isIncomplete = state.status === 'incomplete';
+          const entryObligations = pendingObligations.filter(obligation => obligation.reviewEntryId === state.entry.id);
+          return (
+            <article key={state.entry.id} className={`rounded-xl border p-4 ${isIncomplete ? 'border-rose-200 bg-rose-50 dark:border-rose-500/30 dark:bg-rose-500/10' : state.status === 'complete' ? 'border-emerald-100 bg-white dark:border-emerald-500/20 dark:bg-slate-900' : 'border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900/70'}`}>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="truncate text-xs font-bold text-slate-900 dark:text-slate-100">{state.entry.customName || state.entry.description}</p>
+                    <span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wide ${isIncomplete ? 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300' : state.status === 'complete' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300' : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300'}`}>{state.status}</span>
+                  </div>
+                  <p className="mt-1 text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                    {state.entry.reference} • {state.entry.date} • {state.entry.transactionType || 'Legacy transaction'} • {state.entry.eventName || state.entry.project}
+                  </p>
+                  {state.entry.transactionDetails?.counterpartyName && <p className="mt-1 text-[10px] font-semibold text-slate-600 dark:text-slate-300">Officer / payee: {state.entry.transactionDetails.counterpartyName}</p>}
+                  {state.completedOn && <p className="mt-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">Completed {state.completedOn}</p>}
+                  {isIncomplete && (
+                    <ul className="mt-2 space-y-1 text-[10px] font-semibold text-rose-700 dark:text-rose-300">
+                      {state.missing.map(reason => <li key={reason}>• {reason}</li>)}
+                    </ul>
+                  )}
+                </div>
+                <div className="flex shrink-0 items-center gap-3">
+                  <p className="text-sm font-black text-slate-900 dark:text-slate-100">{formatCurrency(amount)}</p>
+                  {state.restrictedRemaining > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => handleRestrictionRelease(state.entry, state.restrictedRemaining)}
+                      className="rounded-lg bg-rose-700 px-3 py-1.5 text-[10px] font-bold text-white transition-colors hover:bg-rose-800 dark:bg-rose-600 dark:hover:bg-rose-500"
+                    >
+                      Event occurred — release {formatCurrency(state.restrictedRemaining)}
+                    </button>
+                  )}
+                </div>
+              </div>
+              {entryObligations.length > 0 && (
+                <div className="mt-4 space-y-2 border-t border-rose-200 pt-4 dark:border-rose-500/20">
+                  {entryObligations.map(obligation => (
+                    <ObligationRow
+                      key={`${obligation.entryId}-${obligation.accountCode}`}
+                      obligation={obligation}
+                      onSettlementPosted={handleSettlementPosted}
+                    />
+                  ))}
+                </div>
+              )}
+              <ReceiptAttachments entryId={state.entry.id} allowAdd={state.status !== 'reversed'} />
+            </article>
+          );
+        })}
+      </section>
     </div>
   );
 }

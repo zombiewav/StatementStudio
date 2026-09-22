@@ -16,6 +16,40 @@ export interface JournalLine {
   credit: number;
 }
 
+export interface ReceiptAttachmentDraft {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  dataUrl: string;
+  uploadedAt: string;
+}
+
+export interface ReceiptAttachment extends ReceiptAttachmentDraft {
+  entryId: string;
+}
+
+export interface TransactionDetails {
+  memo?: string;
+  purpose?: string;
+  fundingSourceId?: string;
+  sponsorshipKind?: 'cash' | 'food' | 'supplies';
+  counterpartyName?: string;
+  eventRelated: boolean;
+  donorRestriction?: 'none' | 'satisfied-in-period' | 'temporary';
+  restrictionEventPeriod?: 'same-period' | 'future';
+  membershipUnpaidAmount?: number;
+  deferredAmount?: number;
+  expectedUsePeriod?: 'within' | 'next';
+  receiptAttachmentIds: string[];
+}
+
+export interface TransactionMetadata {
+  transactionType: string;
+  customName?: string;
+  details: TransactionDetails;
+}
+
 export interface JournalEntry {
   id: string;
   reference: string; // e.g. JE-001
@@ -42,6 +76,12 @@ export interface JournalEntry {
   // settlement posted against it, rather than only tracking each
   // obligation account's balance in aggregate.
   settlesEntryId?: string;
+  // Present when the entry came from Smart Transaction Entry. The selected
+  // type owns the accounting rule; customName is only the user's label and
+  // never changes the debit/credit mapping.
+  transactionType?: string;
+  customName?: string;
+  transactionDetails?: TransactionDetails;
 }
 
 export interface Project {
@@ -74,6 +114,24 @@ export interface ClassificationRule {
   description: string;
 }
 
+export interface CustomClassificationRule extends ClassificationRule {
+  id: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+// One completed year-end close: Revenue/Expenses zeroed via journalEntryId,
+// their net posted into Fund Balance. Recorded so the same fiscal year
+// can't silently be closed twice and so Settings can show close history.
+export interface ClosingRecord {
+  id: string;
+  fiscalYear: string;
+  closingDate: string;
+  netIncome: number;
+  journalEntryId: string;
+  closedAt: string;
+}
+
 // Full export of everything StatementStudio persists to localStorage
 // (accounts, journalEntries, projects, auditLogs, settings), so a user can
 // back up and later restore their entire workspace. `schemaVersion` exists
@@ -88,4 +146,11 @@ export interface BackupPayload {
   projects: Project[];
   auditLogs: AuditLog[];
   settings: AppSettings;
+  // Optional: absent in backups exported before Closing Entries existed —
+  // restoring one of those just starts with no close history, not an error.
+  closedFiscalYears?: ClosingRecord[];
+  // Optional for compatibility with backups created before receipt photos
+  // were supported.
+  receiptAttachments?: ReceiptAttachment[];
+  customClassificationRules?: CustomClassificationRule[];
 }

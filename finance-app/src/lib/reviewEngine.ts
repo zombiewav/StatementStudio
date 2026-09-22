@@ -13,7 +13,11 @@ import { Account, JournalEntry, JournalLine } from '../types';
 // REVIEW question ("did you reimburse them yet?", "have you paid the
 // supplier?", "did the officer actually use/settle the advance?", "has
 // this now been used/consumed/benefited from?").
-export const OBLIGATION_ACCOUNT_CODES = ['2050', '2010', '1250', '1260'] as const;
+export const DONATED_FOOD_SUPPLIES_CODE = '1710';
+export const DONATED_EVENT_SUPPLIES_CODE = '1720';
+export const LOSS_FROM_SPOILAGE_CODE = '5170';
+export const DONATED_INVENTORY_ACCOUNT_CODES = [DONATED_FOOD_SUPPLIES_CODE, DONATED_EVENT_SUPPLIES_CODE] as const;
+export const OBLIGATION_ACCOUNT_CODES = ['2050', '2010', '1250', '1260', ...DONATED_INVENTORY_ACCOUNT_CODES] as const;
 export type ObligationAccountCode = typeof OBLIGATION_ACCOUNT_CODES[number];
 
 // Prepaid Expenses: the general "not yet used" holding account any
@@ -23,9 +27,22 @@ export type ObligationAccountCode = typeof OBLIGATION_ACCOUNT_CODES[number];
 // Transactions.tsx (the entry side) and Review.tsx (the settlement side)
 // need the exact same code.
 export const PREPAID_EXPENSE_CODE = '1260';
+export const TEMPORARILY_RESTRICTED_REVENUE_CODE = '4035';
+export const UNRESTRICTED_REVENUE_CODE = '4030';
+
+export type ReviewStatus = 'complete' | 'incomplete' | 'reversed';
+
+export interface TransactionReviewState {
+  entry: JournalEntry;
+  status: ReviewStatus;
+  missing: string[];
+  restrictedRemaining: number;
+  completedOn?: string;
+}
 
 export interface PendingObligation {
   entryId: string;
+  reviewEntryId: string;
   reference: string;
   date: string;
   description: string;
@@ -38,6 +55,18 @@ export interface PendingObligation {
 }
 
 const EPSILON = 0.005;
+
+function rootReviewEntryId(entry: JournalEntry, entries: JournalEntry[]): string {
+  let current = entry;
+  const seen = new Set<string>();
+  while (current.settlesEntryId && !seen.has(current.id)) {
+    seen.add(current.id);
+    const parent = entries.find(candidate => candidate.id === current.settlesEntryId);
+    if (!parent) break;
+    current = parent;
+  }
+  return current.id;
+}
 
 /**
  * Every obligation-creating entry that still has an unsettled balance,
@@ -56,7 +85,10 @@ export function computePendingObligations(entries: JournalEntry[], accounts: Acc
   const obligations: PendingObligation[] = [];
 
   for (const entry of entries) {
-    if (entry.settlesEntryId) continue;
+    // Reversals never create a new obligation. Settlement entries may create
+    // a new follow-up obligation (for example, liquidating an advance can
+    // create Due to Supplier), so they must still be examined.
+    if (entry.reversalOfEntryId || entry.reversedByEntryId) continue;
 
     for (const line of entry.lines) {
       if (!OBLIGATION_ACCOUNT_CODES.includes(line.accountCode as ObligationAccountCode)) continue;
@@ -73,13 +105,18 @@ export function computePendingObligations(entries: JournalEntry[], accounts: Acc
         .reduce((sum, settlement) => {
           const settleLine = settlement.lines.find(l => l.accountCode === accountCode);
           if (!settleLine) return sum;
-          return sum + (increaseSide === 'debit' ? settleLine.credit : settleLine.debit);
+          // Signed so reversing a REVIEW settlement restores the exact
+          // amount to the pending list instead of leaving it marked paid.
+          return sum + (increaseSide === 'debit'
+            ? settleLine.credit - settleLine.debit
+            : settleLine.debit - settleLine.credit);
         }, 0);
 
       const remainingAmount = createdAmount - settledAmount;
       if (remainingAmount > EPSILON) {
         obligations.push({
           entryId: entry.id,
+          reviewEntryId: rootReviewEntryId(entry, entries),
           reference: entry.reference,
           date: entry.date,
           description: entry.description,
@@ -95,6 +132,98 @@ export function computePendingObligations(entries: JournalEntry[], accounts: Acc
   }
 
   return obligations.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/**
+ * One shared status source for REVIEW and the Financial Statements gate.
+ * Original transaction entries stay visible after completion. Settlement,
+ * reversal, beginning-balance and closing entries are supporting accounting
+ * records and remain available in Journal Entries instead of appearing as
+ * duplicate transactions here.
+ */
+export function computeTransactionReviewStates(entries: JournalEntry[], accounts: Account[]): TransactionReviewState[] {
+  const pending = computePendingObligations(entries, accounts);
+  const pendingByEntry = new Map<string, PendingObligation[]>();
+  pending.forEach(item => pendingByEntry.set(item.reviewEntryId, [...(pendingByEntry.get(item.reviewEntryId) || []), item]));
+
+  return entries
+    .filter(entry =>
+      !entry.settlesEntryId &&
+      !entry.reversalOfEntryId &&
+      !entry.description.startsWith('Beginning Balances') &&
+      !entry.description.startsWith('Closing Entries')
+    )
+    .map(entry => {
+      if (entry.reversedByEntryId) {
+        return { entry, status: 'reversed' as const, missing: [], restrictedRemaining: 0 };
+      }
+
+      const missing = (pendingByEntry.get(entry.id) || []).map(item => {
+        if (item.accountCode === PREPAID_EXPENSE_CODE) return `${obligationAccountLabel(item.accountCode, accounts)} still unused: ${item.remainingAmount}`;
+        if (DONATED_INVENTORY_ACCOUNT_CODES.includes(item.accountCode as typeof DONATED_INVENTORY_ACCOUNT_CODES[number])) {
+          return `${obligationAccountLabel(item.accountCode, accounts)} still unused or unresolved: ${item.remainingAmount}`;
+        }
+        return `${obligationAccountLabel(item.accountCode, accounts)} still open: ${item.remainingAmount}`;
+      });
+
+      const restrictedCreated = entry.lines
+        .filter(line => line.accountCode === TEMPORARILY_RESTRICTED_REVENUE_CODE)
+        .reduce((sum, line) => sum + line.credit - line.debit, 0);
+      const restrictedReleased = entries
+        .filter(candidate => candidate.settlesEntryId === entry.id)
+        .flatMap(candidate => candidate.lines)
+        .filter(line => line.accountCode === TEMPORARILY_RESTRICTED_REVENUE_CODE)
+        .reduce((sum, line) => sum + line.debit - line.credit, 0);
+      const restrictedRemaining = Math.max(0, restrictedCreated - restrictedReleased);
+      if (restrictedRemaining > 0) missing.push(`Temporary donor restriction still open: ${restrictedRemaining}`);
+
+      const status = missing.length > 0 ? 'incomplete' as const : 'complete' as const;
+      const linkedDates = entries
+        .filter(candidate => candidate.id !== entry.id && rootReviewEntryId(candidate, entries) === entry.id)
+        .map(candidate => candidate.date);
+      const completionDates = [entry.date, ...linkedDates].sort();
+      return {
+        entry,
+        status,
+        missing,
+        restrictedRemaining,
+        ...(status === 'complete' ? { completedOn: completionDates[completionDates.length - 1] || entry.date } : {}),
+      };
+    })
+    .sort((a, b) => b.entry.date.localeCompare(a.entry.date) || b.entry.reference.localeCompare(a.entry.reference));
+}
+
+export function buildRestrictionReleaseLines(amount: number): JournalLine[] {
+  if (amount <= 0) return [];
+  return [
+    { accountCode: TEMPORARILY_RESTRICTED_REVENUE_CODE, debit: amount, credit: 0 },
+    { accountCode: UNRESTRICTED_REVENUE_CODE, debit: 0, credit: amount },
+  ];
+}
+
+/**
+ * Moves donated food or event supplies out of their temporary holding asset
+ * as the organization uses them or determines that part was spoiled. The
+ * caller chooses the normal usage expense (Meals & Refreshments for food or
+ * Supplies Expense for other donated supplies); spoilage always goes to its
+ * dedicated loss account.
+ */
+export function buildDonatedInventorySettlementLines(
+  inventoryAccountCode: string,
+  usageExpenseAccountCode: string,
+  usedAmount: number,
+  spoiledAmount: number
+): JournalLine[] {
+  const used = Math.max(0, usedAmount);
+  const spoiled = Math.max(0, spoiledAmount);
+  const total = used + spoiled;
+  if (total <= 0) return [];
+
+  const lines: JournalLine[] = [];
+  if (used > 0) lines.push({ accountCode: usageExpenseAccountCode, debit: used, credit: 0 });
+  if (spoiled > 0) lines.push({ accountCode: LOSS_FROM_SPOILAGE_CODE, debit: spoiled, credit: 0 });
+  lines.push({ accountCode: inventoryAccountCode, debit: 0, credit: total });
+  return lines;
 }
 
 /**

@@ -10,6 +10,7 @@ import {
   ArrowUpDown
 } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
+import { ReceiptAttachments } from '../components/ReceiptAttachments';
 
 export function JournalEntries(): React.ReactElement {
   const { journalEntries, reverseJournalEntry, accounts, formatCurrency, projects } = useFinance();
@@ -31,6 +32,9 @@ export function JournalEntries(): React.ReactElement {
       result = result.filter(e => 
         e.reference.toLowerCase().includes(q) ||
         e.description.toLowerCase().includes(q) ||
+        e.transactionType?.toLowerCase().includes(q) ||
+        e.customName?.toLowerCase().includes(q) ||
+        e.transactionDetails?.counterpartyName?.toLowerCase().includes(q) ||
         e.lines.some(l => {
           const accName = accounts.find(a => a.code === l.accountCode)?.name || '';
           return accName.toLowerCase().includes(q) || l.accountCode.includes(q);
@@ -129,6 +133,7 @@ export function JournalEntries(): React.ReactElement {
                 const totalCredits = je.lines.reduce((s, l) => s + l.credit, 0);
                 const reversedByRef = je.reversedByEntryId ? entriesById.get(je.reversedByEntryId)?.reference : undefined;
                 const reversalOfRef = je.reversalOfEntryId ? entriesById.get(je.reversalOfEntryId)?.reference : undefined;
+                const isClosingEntry = je.description.startsWith('Closing Entries');
 
                 return (
                   <React.Fragment key={je.id}>
@@ -163,10 +168,10 @@ export function JournalEntries(): React.ReactElement {
                       <td className="py-3.5 px-4 text-right font-bold text-slate-900 dark:text-slate-100">{formatCurrency(totalDebits)}</td>
                       <td className="py-3.5 px-4 text-right font-bold text-slate-900 dark:text-slate-100">{formatCurrency(totalCredits)}</td>
                       <td className="py-3.5 px-6 text-right" onClick={(e) => e.stopPropagation()}>
-                        {reversedByRef ? (
+                        {reversedByRef || isClosingEntry ? (
                           <span
                             className="inline-flex p-1.5 text-slate-300 dark:text-slate-600 rounded-lg cursor-default"
-                            title={`Already reversed via ${reversedByRef}`}
+                            title={isClosingEntry ? 'Fiscal-year closing entries are permanent' : `Already reversed via ${reversedByRef}`}
                           >
                             <Undo2 className="w-3.5 h-3.5" />
                           </span>
@@ -194,6 +199,19 @@ export function JournalEntries(): React.ReactElement {
                                 <Calendar className="w-3 h-3 text-orange-500" /> Booked: {je.date}
                               </span>
                             </div>
+                            {je.transactionType && (
+                              <div className="mb-4 grid grid-cols-1 gap-2 rounded-xl border border-blue-100 bg-blue-50/60 p-3 text-[10px] text-slate-600 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-slate-300 sm:grid-cols-2">
+                                <p><span className="font-bold text-slate-800 dark:text-slate-100">Transaction type:</span> {je.transactionType}</p>
+                                <p><span className="font-bold text-slate-800 dark:text-slate-100">Entry use:</span> {je.transactionDetails?.eventRelated ? `Event — ${je.eventName || je.project}` : 'General organization operations'}</p>
+                                {je.customName && <p><span className="font-bold text-slate-800 dark:text-slate-100">Custom name:</span> {je.customName}</p>}
+                                {je.transactionDetails?.counterpartyName && <p><span className="font-bold text-slate-800 dark:text-slate-100">Officer / payee:</span> {je.transactionDetails.counterpartyName}</p>}
+                                {je.transactionDetails?.fundingSourceId && <p><span className="font-bold text-slate-800 dark:text-slate-100">Funding source:</span> {je.transactionDetails.fundingSourceId.replace(/-/g, ' ')}</p>}
+                                {je.transactionDetails?.donorRestriction && <p><span className="font-bold text-slate-800 dark:text-slate-100">Donor restriction:</span> {je.transactionDetails.donorRestriction.replace(/-/g, ' ')}</p>}
+                                {je.transactionDetails?.deferredAmount !== undefined && <p><span className="font-bold text-slate-800 dark:text-slate-100">Not yet used:</span> {formatCurrency(je.transactionDetails.deferredAmount)}</p>}
+                                {je.transactionDetails?.membershipUnpaidAmount !== undefined && <p><span className="font-bold text-slate-800 dark:text-slate-100">Membership fees unpaid:</span> {formatCurrency(je.transactionDetails.membershipUnpaidAmount)}</p>}
+                              </div>
+                            )}
+                            <ReceiptAttachments entryId={je.id} />
                             
                             <div className="space-y-2 text-xs">
                               {/* Headers */}

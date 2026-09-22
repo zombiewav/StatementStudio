@@ -117,6 +117,55 @@ export function buildCompoundJournalLines(pairs: JournalLinePair[]): JournalLine
   return lines;
 }
 
+export interface ProjectedAccountImpact {
+  account: Account;
+  accountCode: string;
+  debit: number;
+  credit: number;
+  before: number;
+  after: number;
+  normalBalanceDelta: number;
+}
+
+export function projectJournalLineImpacts(
+  lines: JournalLine[],
+  accounts: Account[],
+  balances: Record<string, number>
+): ProjectedAccountImpact[] {
+  const grouped = new Map<string, { debit: number; credit: number }>();
+  lines.forEach(line => {
+    const movement = grouped.get(line.accountCode) || { debit: 0, credit: 0 };
+    grouped.set(line.accountCode, {
+      debit: movement.debit + line.debit,
+      credit: movement.credit + line.credit,
+    });
+  });
+
+  return Array.from(grouped.entries()).flatMap(([accountCode, movement]) => {
+    const account = accounts.find(candidate => candidate.code === accountCode);
+    if (!account) return [];
+    const before = balances[accountCode] || 0;
+    const normalBalanceDelta = account.normalBalance === 'Credit'
+      ? movement.credit - movement.debit
+      : movement.debit - movement.credit;
+    return [{ account, accountCode, ...movement, before, after: before + normalBalanceDelta, normalBalanceDelta }];
+  });
+}
+
+export function computeStatementImpact(lines: JournalLine[], accounts: Account[]): { assetChange: number; netIncomeChange: number } {
+  let assetChange = 0;
+  let revenueChange = 0;
+  let expenseChange = 0;
+  lines.forEach(line => {
+    const account = accounts.find(candidate => candidate.code === line.accountCode);
+    if (!account) return;
+    if (account.type === 'Assets') assetChange += line.debit - line.credit;
+    if (account.type === 'Revenue') revenueChange += line.credit - line.debit;
+    if (account.type === 'Expenses') expenseChange += line.debit - line.credit;
+  });
+  return { assetChange, netIncomeChange: revenueChange - expenseChange };
+}
+
 export interface EffectCheckResult {
   debitMatches: boolean;
   creditMatches: boolean;

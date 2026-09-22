@@ -35,6 +35,14 @@
   --scrollbar-thumb-hover: #2563eb;
 }
 
+/* color-scheme on an ancestor doesn't reliably reach a native <select>'s
+   own dropdown popup in every browser — declaring it on the control itself
+   is what actually makes the popup render dark instead of the OS default
+   white/light one. */
+.dark select {
+  color-scheme: dark;
+}
+
 html,
 body,
 #root {

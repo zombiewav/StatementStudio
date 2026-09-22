@@ -158,6 +158,7 @@ return (
                 <XAxis dataKey="name" tickLine={false} axisLine={false} style={{ fontSize: '9px', fill: 'currentColor', fontWeight: 600 }} tick={{ fill: 'currentColor' }} />
                 <YAxis tickLine={false} axisLine={false} tickFormatter={chartFormatter} style={{ fontSize: '9px', fill: 'currentColor', fontWeight: 600 }} tick={{ fill: 'currentColor' }} />
                 <ReTooltip
+                  cursor={false}
                   formatter={(value) => [formatCurrency(Number(value)), '']}
                   content={({ active, payload, label }) => {
                     if (!active || !payload?.length) return null;
