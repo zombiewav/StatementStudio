@@ -87,6 +87,11 @@ the Navbar, Dashboard greeting, and every audit-log `user` field show the **orga
 name, not a person's. Do not reintroduce individual accounts/roles without being asked; that was
 deliberately removed.
 
+Database-free auth is centralized in `src/lib/localAuth.ts`. New registrations save an organization
+email as well as the shared password; legacy browser accounts without an email remain password-only
+and continue to work. `ProtectedRoute` requires both a valid stored organization account and the
+login flag. This is still local-browser authentication, not secure multi-device authentication.
+
 ## Accounting features built this session (verify before assuming these are complete)
 
 - **Prepaid Expenses / universal REVIEW / FS gate**: `mayDeferPortion` flag on a classification
@@ -135,6 +140,8 @@ deliberately removed.
   receipts, programs (restoring only General Fund Operations), closings, custom transaction
   types, and prior audit history while preserving the shared organization login, settings,
   currency, and Chart of Accounts.
+- **Chart of Accounts pagination**: Settings shows 10 accounts per page with numbered previous/next
+  controls, avoiding a very tall account table while preserving add, edit, and status actions.
 
 ## Known bugs / gaps, not yet fixed (flagged, intentionally left alone)
 
@@ -199,7 +206,6 @@ wanted:
   double-counting the closed surplus on the Balance Sheet.
 - `src/lib/reviewEngine.ts` + test, `src/pages/Review.tsx` — unified Review history plus donated
   sponsorship usage/spoilage and temporary-restriction release workflow.
-- `src/index.css` — `.dark select { color-scheme: dark; }` (native `<select>` dark-mode fix;
-  known to be imperfect — some Chrome versions still render the popup listbox light regardless
-  of `color-scheme`, since that's an OS/browser-version limitation CSS can't fully override; a
-  fully custom-built dropdown component is the only guaranteed fix if this keeps coming up).
+- `src/components/Navbar.tsx` — the fiscal-year selector is a custom dropdown rather than a native
+  `<select>`, so its popup reliably follows the light/dark theme instead of inheriting a white or
+  blank-looking operating-system menu.

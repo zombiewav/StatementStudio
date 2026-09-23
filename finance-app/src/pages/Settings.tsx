@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import {
   Building,
   FolderTree,
@@ -14,7 +14,9 @@ import {
   Upload,
   AlertTriangle,
   Lock,
-  Undo2
+  Undo2,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import { Account, AccountType, NormalBalanceType, BackupPayload } from '../types';
@@ -48,6 +50,17 @@ export function Settings(): React.ReactElement {
   const [normalBalance, setNormalBalance] = useState<NormalBalanceType>('Debit');
   const [description, setDescription] = useState('');
   const [coaError, setCoaError] = useState('');
+  const [accountsPage, setAccountsPage] = useState(1);
+  const accountsPerPage = 10;
+  const totalAccountPages = Math.max(1, Math.ceil(accounts.length / accountsPerPage));
+  const paginatedAccounts = accounts.slice(
+    (accountsPage - 1) * accountsPerPage,
+    accountsPage * accountsPerPage
+  );
+
+  useEffect(() => {
+    setAccountsPage(current => Math.min(current, totalAccountPages));
+  }, [totalAccountPages]);
 
   // Editing COA Row
   const [editingCode, setEditingCode] = useState<string | null>(null);
@@ -246,6 +259,7 @@ export function Settings(): React.ReactElement {
       setName('');
       setDescription('');
       setShowAccountForm(false);
+      setAccountsPage(Math.ceil((accounts.length + 1) / accountsPerPage));
     } catch (err: any) {
       setCoaError(err.message || 'An error occurred.');
     }
@@ -867,7 +881,7 @@ export function Settings(): React.ReactElement {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                {accounts.map((acc) => {
+                {paginatedAccounts.map((acc) => {
                   const isEditing = editingCode === acc.code;
                   return (
                     <tr key={acc.code} className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors font-medium text-slate-900 dark:text-slate-100 ${acc.isActive ? '' : 'opacity-50'}`}>
@@ -946,6 +960,49 @@ export function Settings(): React.ReactElement {
                 })}
               </tbody>
             </table>
+          </div>
+
+          <div className="flex flex-col gap-3 border-t border-slate-200 pt-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+              Showing {(accountsPage - 1) * accountsPerPage + 1}–{Math.min(accountsPage * accountsPerPage, accounts.length)} of {accounts.length} accounts
+            </p>
+            <nav className="flex flex-wrap items-center gap-1.5" aria-label="Chart of Accounts pages">
+              <button
+                type="button"
+                onClick={() => setAccountsPage(page => Math.max(1, page - 1))}
+                disabled={accountsPage === 1}
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300 dark:hover:bg-slate-800"
+                aria-label="Previous accounts page"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+
+              {Array.from({ length: totalAccountPages }, (_, index) => index + 1).map(page => (
+                <button
+                  key={page}
+                  type="button"
+                  onClick={() => setAccountsPage(page)}
+                  aria-current={accountsPage === page ? 'page' : undefined}
+                  className={`h-8 min-w-8 rounded-lg px-2 text-xs font-bold transition-colors ${
+                    accountsPage === page
+                      ? 'bg-blue-900 text-white dark:bg-blue-600'
+                      : 'border border-slate-300 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  {page}
+                </button>
+              ))}
+
+              <button
+                type="button"
+                onClick={() => setAccountsPage(page => Math.min(totalAccountPages, page + 1))}
+                disabled={accountsPage === totalAccountPages}
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300 dark:hover:bg-slate-800"
+                aria-label="Next accounts page"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </nav>
           </div>
         </div>
       </div>

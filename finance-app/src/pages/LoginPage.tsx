@@ -1,35 +1,40 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowRight, BarChart3, AlertCircle, CheckCircle, Building2 } from 'lucide-react';
+import { ArrowRight, BarChart3, AlertCircle, CheckCircle, Building2, Eye, EyeOff } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import AuroraBackground from '../components/landing/AuroraBackground';
-
-interface OrgAccount {
-  organizationName: string;
-  password: string;
-  createdAt: string;
-}
+import { credentialsMatch, OrgAccount, readOrgAccount } from '../lib/localAuth';
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const [orgAccount, setOrgAccount] = useState<OrgAccount | null>(null);
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
 
   // Nothing to sign into yet on this browser — send them to set one up.
   useEffect(() => {
-    const raw = localStorage.getItem('orgAccount');
-    if (!raw) {
+    const account = readOrgAccount(localStorage.getItem('orgAccount'));
+    if (!account) {
+      localStorage.removeItem('isLoggedIn');
       navigate('/register', { replace: true });
       return;
     }
-    setOrgAccount(JSON.parse(raw));
+    setOrgAccount(account);
+    setEmail(account.email || '');
   }, [navigate]);
 
-  const handleLogin = async () => {
+  const handleLogin = async (event: React.FormEvent) => {
+    event.preventDefault();
     setError('');
     setSuccess('');
+
+    if (orgAccount?.email && !email.trim()) {
+      setError('Organization email is required');
+      return;
+    }
 
     if (!password) {
       setError('Password is required');
@@ -45,8 +50,8 @@ export const LoginPage: React.FC = () => {
     try {
       await new Promise((resolve) => setTimeout(resolve, 500));
 
-      if (password !== orgAccount.password) {
-        setError('Incorrect password.');
+      if (!credentialsMatch(orgAccount, email, password)) {
+        setError('Incorrect organization email or password.');
         setIsLoading(false);
         return;
       }
@@ -112,25 +117,48 @@ export const LoginPage: React.FC = () => {
               </div>
             )}
 
-            <form className="space-y-5" onSubmit={(e) => { e.preventDefault(); handleLogin(); }}>
+            <form className="space-y-5" onSubmit={handleLogin}>
+              {orgAccount?.email && (
+                <div>
+                  <label htmlFor="email" className="block text-sm font-medium text-slate-300 mb-2">
+                    Organization Email
+                  </label>
+                  <input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => { setEmail(e.target.value); if (error) setError(''); }}
+                    placeholder="organization@example.com"
+                    disabled={isLoading}
+                    autoComplete="username"
+                    autoFocus
+                    className="w-full bg-slate-950 border border-slate-700 text-white rounded-lg px-4 py-3 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all text-sm disabled:opacity-50"
+                  />
+                </div>
+              )}
               <div>
                 <label htmlFor="password" className="block text-sm font-medium text-slate-300 mb-2">
                   Organization Password
                 </label>
-                <input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => { setPassword(e.target.value); if (error) setError(''); }}
-                  placeholder="••••••••"
-                  disabled={isLoading}
-                  autoFocus
-                  className="w-full bg-slate-950 border border-slate-700 text-white rounded-lg px-4 py-3 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all text-sm disabled:opacity-50"
-                />
+                <div className="relative">
+                  <input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => { setPassword(e.target.value); if (error) setError(''); }}
+                    placeholder="••••••••"
+                    disabled={isLoading}
+                    autoFocus={!orgAccount?.email}
+                    autoComplete="current-password"
+                    className="w-full bg-slate-950 border border-slate-700 text-white rounded-lg px-4 py-3 pr-12 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all text-sm disabled:opacity-50"
+                  />
+                  <button type="button" onClick={() => setShowPassword(value => !value)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white" aria-label={showPassword ? 'Hide password' : 'Show password'}>
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
 
               <button
-                onClick={handleLogin}
                 type="submit"
                 disabled={isLoading}
                 className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white font-semibold rounded-lg transition-all hover:shadow-lg hover:shadow-blue-500/20 flex items-center justify-center gap-2 mt-6 disabled:opacity-70"

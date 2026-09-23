@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Search, Bell, Calendar, Building2, CheckCircle, LogOut } from "lucide-react";
+import React, { useEffect, useRef, useState } from 'react';
+import { Search, Bell, Calendar, Building2, Check, CheckCircle, ChevronDown, LogOut } from "lucide-react";
 import { useNavigate } from 'react-router';
 import { useFinance } from '../context/FinanceContext';
 import { ThemeToggle } from './ThemeToggle';
@@ -44,6 +44,20 @@ export function Navbar({ onMenuToggle, searchTerm, setSearchTerm }: NavbarProps)
   const navigate = useNavigate();
   const { settings, updateSettings, auditLogs } = useFinance();
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false);
+  const [showFiscalYearDropdown, setShowFiscalYearDropdown] = useState(false);
+  const fiscalYearDropdownRef = useRef<HTMLDivElement>(null);
+  const fiscalYears = ['FY 2025', 'FY 2026', 'FY 2027'];
+
+  useEffect(() => {
+    const closeFiscalYearDropdown = (event: MouseEvent) => {
+      if (!fiscalYearDropdownRef.current?.contains(event.target as Node)) {
+        setShowFiscalYearDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', closeFiscalYearDropdown);
+    return () => document.removeEventListener('mousedown', closeFiscalYearDropdown);
+  }, []);
 
   const notifications = auditLogs.slice(0, 5); // Show latest 5 logs as notifications
 
@@ -90,17 +104,50 @@ export function Navbar({ onMenuToggle, searchTerm, setSearchTerm }: NavbarProps)
         </div>
 
         {/* Fiscal Year Selector */}
-        <div className="app-filter hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl">
+        <div ref={fiscalYearDropdownRef} className="app-filter relative hidden md:flex items-center gap-2 rounded-xl px-3 py-1.5">
           <Calendar className="w-3.5 h-3.5 text-orange-500" />
-          <select
-            value={settings.fiscalYear}
-            onChange={(e) => updateSettings({ fiscalYear: e.target.value })}
-            className="app-input-plain font-semibold text-xs cursor-pointer focus:ring-0 pr-1 py-0"
+          <button
+            type="button"
+            onClick={() => setShowFiscalYearDropdown(value => !value)}
+            aria-haspopup="listbox"
+            aria-expanded={showFiscalYearDropdown}
+            className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 outline-none dark:text-slate-200"
           >
-            <option value="FY 2026">FY 2026</option>
-            <option value="FY 2027">FY 2027</option>
-            <option value="FY 2025">FY 2025</option>
-          </select>
+            <span>{settings.fiscalYear}</span>
+            <ChevronDown className={`h-3.5 w-3.5 text-slate-400 transition-transform ${showFiscalYearDropdown ? 'rotate-180' : ''}`} />
+          </button>
+
+          {showFiscalYearDropdown && (
+            <div
+              role="listbox"
+              aria-label="Fiscal year"
+              className="absolute right-0 top-full z-50 mt-2 min-w-32 overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-900"
+            >
+              {fiscalYears.map(year => {
+                const isSelected = year === settings.fiscalYear;
+                return (
+                  <button
+                    key={year}
+                    type="button"
+                    role="option"
+                    aria-selected={isSelected}
+                    onClick={() => {
+                      updateSettings({ fiscalYear: year });
+                      setShowFiscalYearDropdown(false);
+                    }}
+                    className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-xs font-semibold transition-colors ${
+                      isSelected
+                        ? 'bg-blue-100 text-blue-900 dark:bg-blue-500/20 dark:text-blue-200'
+                        : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <span>{year}</span>
+                    {isSelected && <Check className="h-3.5 w-3.5" />}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <NavActionButton

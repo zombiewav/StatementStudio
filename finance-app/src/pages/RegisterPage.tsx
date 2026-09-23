@@ -1,14 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowRight, BarChart3, AlertCircle, CheckCircle } from 'lucide-react';
+import { ArrowRight, BarChart3, AlertCircle, CheckCircle, Eye, EyeOff } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import AuroraBackground from '../components/landing/AuroraBackground';
 import { useFinance } from '../context/FinanceContext';
-
-interface OrgAccount {
-  organizationName: string;
-  password: string;
-  createdAt: string;
-}
+import { isValidEmail, normalizeEmail, OrgAccount, readOrgAccount } from '../lib/localAuth';
 
 export const RegisterPage: React.FC = () => {
   const navigate = useNavigate();
@@ -17,19 +12,21 @@ export const RegisterPage: React.FC = () => {
   // Only one organization lives in this browser's storage. If it's already
   // set up, there's nothing to register — send them to sign in instead.
   useEffect(() => {
-    if (localStorage.getItem('orgAccount')) {
+    if (readOrgAccount(localStorage.getItem('orgAccount'))) {
       navigate('/login', { replace: true });
     }
   }, [navigate]);
 
   const [formData, setFormData] = useState({
     organizationName: '',
+    email: '',
     password: '',
     confirmPassword: '',
   });
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value } = e.target;
@@ -43,6 +40,11 @@ export const RegisterPage: React.FC = () => {
   const validateForm = (): boolean => {
     if (!formData.organizationName.trim()) {
       setError('Organization name is required');
+      return false;
+    }
+
+    if (!isValidEmail(formData.email)) {
+      setError('Enter a valid organization email');
       return false;
     }
 
@@ -64,7 +66,8 @@ export const RegisterPage: React.FC = () => {
     return true;
   };
 
-  const handleRegister = async () => {
+  const handleRegister = async (event: React.FormEvent) => {
+    event.preventDefault();
     setError('');
     setSuccess('');
 
@@ -79,6 +82,7 @@ export const RegisterPage: React.FC = () => {
 
       const orgAccount: OrgAccount = {
         organizationName: formData.organizationName.trim(),
+        email: normalizeEmail(formData.email),
         password: formData.password,
         createdAt: new Date().toISOString(),
       };
@@ -140,7 +144,7 @@ export const RegisterPage: React.FC = () => {
               </div>
             )}
 
-            <form className="space-y-5" onSubmit={(e) => { e.preventDefault(); handleRegister(); }}>
+            <form className="space-y-5" onSubmit={handleRegister}>
               <div>
                 <label htmlFor="organizationName" className="block text-sm font-medium text-slate-300 mb-2">
                   Organization Name
@@ -157,18 +161,40 @@ export const RegisterPage: React.FC = () => {
               </div>
 
               <div>
+                <label htmlFor="email" className="block text-sm font-medium text-slate-300 mb-2">
+                  Organization Email
+                </label>
+                <input
+                  id="email"
+                  type="email"
+                  value={formData.email}
+                  onChange={handleInputChange}
+                  placeholder="organization@example.com"
+                  disabled={isLoading}
+                  autoComplete="username"
+                  className="w-full bg-slate-950 border border-slate-700 text-white rounded-lg px-4 py-3 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all text-sm disabled:opacity-50"
+                />
+              </div>
+
+              <div>
                 <label htmlFor="password" className="block text-sm font-medium text-slate-300 mb-2">
                   Organization Password
                 </label>
-                <input
-                  id="password"
-                  type="password"
-                  value={formData.password}
-                  onChange={handleInputChange}
-                  placeholder="••••••••"
-                  disabled={isLoading}
-                  className="w-full bg-slate-950 border border-slate-700 text-white rounded-lg px-4 py-3 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all text-sm disabled:opacity-50"
-                />
+                <div className="relative">
+                  <input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={formData.password}
+                    onChange={handleInputChange}
+                    placeholder="••••••••"
+                    disabled={isLoading}
+                    autoComplete="new-password"
+                    className="w-full bg-slate-950 border border-slate-700 text-white rounded-lg px-4 py-3 pr-12 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all text-sm disabled:opacity-50"
+                  />
+                  <button type="button" onClick={() => setShowPassword(value => !value)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white" aria-label={showPassword ? 'Hide password' : 'Show password'}>
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
                 <p className="text-xs text-slate-500 mt-1.5">Anyone in your organization who knows this password can sign in.</p>
               </div>
 
@@ -183,12 +209,12 @@ export const RegisterPage: React.FC = () => {
                   onChange={handleInputChange}
                   placeholder="••••••••"
                   disabled={isLoading}
+                  autoComplete="new-password"
                   className="w-full bg-slate-950 border border-slate-700 text-white rounded-lg px-4 py-3 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all text-sm disabled:opacity-50"
                 />
               </div>
 
               <button
-                onClick={handleRegister}
                 type="submit"
                 disabled={isLoading}
                 className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white font-semibold rounded-lg transition-all hover:shadow-lg hover:shadow-blue-500/20 flex items-center justify-center gap-2 mt-6 disabled:opacity-70"
