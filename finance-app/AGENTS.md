@@ -130,6 +130,11 @@ deliberately removed.
   which reports are available, keeps at least one selected, and calculates beginning cash from the
   cumulative cash balance immediately before the chosen period. Closing is blocked in both the UI
   and FinanceContext while Review has incomplete items; closing entries are permanent.
+- **Backup feedback and workspace reset**: Settings shows the exported backup filename after a
+  download starts. A separate two-step "Reset Financial Workspace" action removes journals,
+  receipts, programs (restoring only General Fund Operations), closings, custom transaction
+  types, and prior audit history while preserving the shared organization login, settings,
+  currency, and Chart of Accounts.
 
 ## Known bugs / gaps, not yet fixed (flagged, intentionally left alone)
 
@@ -188,6 +193,10 @@ wanted:
   transaction types with protected built-ins and automatic fixed accounts.
 - `src/lib/cashFlow.ts` + test, `src/pages/FinancialStatements.tsx` — cumulative beginning cash,
   financing/investing classification, and selectable custom FS set.
+- `src/lib/closingEntries.ts` + test, `src/pages/FinancialStatements.tsx` — closing entries remain
+  in ledger/point-in-time balances but are excluded from period-performance presentation, so a
+  post-close Statement of Activities retains the original revenue/expense categories without
+  double-counting the closed surplus on the Balance Sheet.
 - `src/lib/reviewEngine.ts` + test, `src/pages/Review.tsx` — unified Review history plus donated
   sponsorship usage/spoilage and temporary-restriction release workflow.
 - `src/index.css` — `.dark select { color-scheme: dark; }` (native `<select>` dark-mode fix;

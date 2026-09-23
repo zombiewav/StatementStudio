@@ -19,6 +19,7 @@ Thumbs.db
 
 # Local tooling config (not part of the app)
 .claude/
+finance-app/tmp/
 
 # Logs
 npm-debug.log*

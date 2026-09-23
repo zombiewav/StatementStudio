@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { computeClosingEntryLines, findFiscalCloseBlockers } from './closingEntries';
-import { Account, JournalEntry } from '../types';
+import { computeClosingEntryLines, excludeClosingEntries, findFiscalCloseBlockers } from './closingEntries';
+import { Account, ClosingRecord, JournalEntry } from '../types';
 
 const accounts: Account[] = [
   { code: '1010', name: 'Cash on Hand', type: 'Assets', normalBalance: 'Debit', description: '', isActive: true },
@@ -110,3 +110,31 @@ describe('findFiscalCloseBlockers', () => {
     expect(findFiscalCloseBlockers([original], reviewAccounts)[0].restrictedRemaining).toBe(1000);
   });
 });
+
+describe('excludeClosingEntries', () => {
+  it('keeps ordinary activity while removing recorded closing entries from performance reports', () => {
+    const activity = entryForCloseTest('je-1', 'Membership dues');
+    const closing = entryForCloseTest('je-2', 'Closing Entries — FY 2026');
+    const records: ClosingRecord[] = [{
+      id: 'close-1',
+      fiscalYear: 'FY 2026',
+      closingDate: '2026-12-31',
+      netIncome: 300,
+      journalEntryId: 'je-2',
+      closedAt: '2026-12-31T12:00:00.000Z',
+    }];
+
+    expect(excludeClosingEntries([activity, closing], records)).toEqual([activity]);
+  });
+});
+
+function entryForCloseTest(id: string, description: string): JournalEntry {
+  return {
+    id,
+    reference: id.toUpperCase(),
+    date: '2026-12-31',
+    description,
+    project: 'General Fund Operations',
+    lines: [],
+  };
+}

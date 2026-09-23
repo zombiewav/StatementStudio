@@ -6,7 +6,7 @@
 // "carry forward" step — their balance is already the running total of
 // every entry to date, so posting this closing entry is the only action
 // required for next period to pick up where this one left off.
-import { Account, JournalEntry, JournalLine } from '../types';
+import { Account, ClosingRecord, JournalEntry, JournalLine } from '../types';
 import { computeTransactionReviewStates, TransactionReviewState } from './reviewEngine';
 
 export interface ClosingEntryResult {
@@ -14,6 +14,19 @@ export interface ClosingEntryResult {
   netIncome: number;
   totalRevenue: number;
   totalExpenses: number;
+}
+
+/**
+ * Closing entries belong in the ledger and point-in-time balances, but they
+ * are not operating activity. Excluding their recorded journal IDs preserves
+ * the original Revenue/Expense presentation on period-performance reports.
+ */
+export function excludeClosingEntries(
+  entries: JournalEntry[],
+  closedFiscalYears: ClosingRecord[]
+): JournalEntry[] {
+  const closingEntryIds = new Set(closedFiscalYears.map(record => record.journalEntryId));
+  return entries.filter(entry => !closingEntryIds.has(entry.id));
 }
 
 export function findFiscalCloseBlockers(entries: JournalEntry[], accounts: Account[]): TransactionReviewState[] {

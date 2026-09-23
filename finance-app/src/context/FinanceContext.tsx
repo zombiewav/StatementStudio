@@ -631,6 +631,7 @@ interface FinanceContextType {
   netIncome: number;
   isBalanced: boolean;
   clearAllData: () => void;
+  resetFinancialWorkspace: () => void;
   loadSampleData: () => void;
 
   exportBackupData: () => BackupPayload;
@@ -1038,6 +1039,23 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     logAudit('Clear Data', 'All financial journal entries have been cleared.');
   };
 
+  const resetFinancialWorkspace = () => {
+    const resetLogEntry: AuditLog = {
+      id: `log-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      timestamp: new Date().toISOString(),
+      action: 'Reset Financial Workspace',
+      details: 'Removed all financial records while preserving organization settings and the Chart of Accounts.',
+      user: settings.organizationName,
+    };
+
+    setJournalEntries([]);
+    setReceiptAttachments([]);
+    setProjects(DEFAULT_PROJECTS.map(project => ({ ...project })));
+    setClosedFiscalYears([]);
+    setCustomClassificationRules([]);
+    setAuditLogs([resetLogEntry]);
+  };
+
   const loadSampleData = () => {
     setAccounts(INITIAL_ACCOUNTS);
     setJournalEntries(INITIAL_JOURNALS);
@@ -1150,6 +1168,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       netIncome,
       isBalanced,
       clearAllData,
+      resetFinancialWorkspace,
       loadSampleData,
       exportBackupData,
       restoreBackupData

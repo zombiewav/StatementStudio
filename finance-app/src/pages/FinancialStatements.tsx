@@ -13,6 +13,7 @@ import { computeActivitiesExpenseBreakdown } from '../lib/activitiesBreakdown';
 import { computeAccountBalances, computeTypeTotals, isContraAccount } from '../lib/accountTotals';
 import { computeTransactionReviewStates } from '../lib/reviewEngine';
 import { computeCashFlowDetails } from '../lib/cashFlow';
+import { excludeClosingEntries } from '../lib/closingEntries';
 
 type ActiveStatementTab = 'position' | 'activities' | 'cashflow' | 'changes';
 
@@ -27,6 +28,7 @@ export function FinancialStatements(): React.ReactElement {
   const { 
     accounts, 
     journalEntries, 
+    closedFiscalYears,
     formatCurrency, 
     settings 
   } = useFinance();
@@ -58,6 +60,14 @@ export function FinancialStatements(): React.ReactElement {
     return journalEntries.filter(je => je.date >= startDate && je.date <= endDate);
   }, [journalEntries, startDate, endDate]);
 
+  // Closing entries stay in the ledger and point-in-time Balance Sheet, but
+  // must not erase or reclassify the original Revenue/Expense activity on
+  // the Statement of Activities and Changes in Fund Balance.
+  const performanceEntries = useMemo(
+    () => excludeClosingEntries(filteredEntries, closedFiscalYears),
+    [filteredEntries, closedFiscalYears]
+  );
+
   // Year-end gate: every REVIEW item has to be resolved before statements
   // can be generated — an unresolved item (e.g. a donation not yet
   // released, supplies not yet fully used) means part of the books is
@@ -79,14 +89,22 @@ export function FinancialStatements(): React.ReactElement {
   // carried over from before the range started (see cumulativeToEndTotals
   // below, which is what the Balance Sheet actually uses).
   const filteredBalances = useMemo(
-    () => computeAccountBalances(filteredEntries, accounts),
-    [filteredEntries, accounts]
+    () => computeAccountBalances(performanceEntries, accounts),
+    [performanceEntries, accounts]
   );
 
   // Compute Statements totals from filtered balances
   const filteredTotals = useMemo(
     () => computeTypeTotals(filteredBalances, accounts),
     [filteredBalances, accounts]
+  );
+
+  // Includes closing entries. This is intentionally separate from the
+  // performance totals above so a closed surplus is not counted once in
+  // Fund Balance and again as current-period net income on the Balance Sheet.
+  const ledgerPeriodTotals = useMemo(
+    () => computeTypeTotals(computeAccountBalances(filteredEntries, accounts), accounts),
+    [filteredEntries, accounts]
   );
 
   // Balance Sheet accounts (Assets/Liabilities/Fund Balance) as of the
@@ -115,7 +133,8 @@ export function FinancialStatements(): React.ReactElement {
   }, [journalEntries, startDate, accounts]);
 
   const fNetIncome = filteredTotals.Revenue - filteredTotals.Expenses;
-  const fEndingFundBalance = cumulativeToEndTotals['Fund Balance'] + fNetIncome;
+  const unclosedNetIncome = ledgerPeriodTotals.Revenue - ledgerPeriodTotals.Expenses;
+  const fEndingFundBalance = cumulativeToEndTotals['Fund Balance'] + unclosedNetIncome;
   const fTotalLiabilitiesAndFund = cumulativeToEndTotals.Liabilities + fEndingFundBalance;
 
   // Splits Operating Expenses on the Statement of Activities into
@@ -123,8 +142,8 @@ export function FinancialStatements(): React.ReactElement {
   // Transactions form) versus General & Administrative — see
   // computeActivitiesExpenseBreakdown for the rule.
   const activitiesExpenseBreakdown = useMemo(
-    () => computeActivitiesExpenseBreakdown(filteredEntries, accounts),
-    [filteredEntries, accounts]
+    () => computeActivitiesExpenseBreakdown(performanceEntries, accounts),
+    [performanceEntries, accounts]
   );
 
   // Print function
@@ -170,7 +189,7 @@ export function FinancialStatements(): React.ReactElement {
         accounts.filter(a => a.type === 'Fund Balance').forEach(acc => {
           csvContent += `"${acc.name}",${cumulativeToEndBalances[acc.code] || 0}\n`;
         });
-        csvContent += `"Accumulated Net Surplus",${fNetIncome}\n`;
+        csvContent += `"Accumulated Net Surplus",${unclosedNetIncome}\n`;
         csvContent += `"Total Fund Balance",${fEndingFundBalance}\n\n`;
         csvContent += `"Total Liabilities & Fund Balance",${fTotalLiabilitiesAndFund}\n`;
       } else if (activeTab === 'activities') {
@@ -515,7 +534,7 @@ export function FinancialStatements(): React.ReactElement {
                     })}
                     <div className="flex justify-between py-1 px-4 rounded-md text-blue-900 dark:text-blue-300 font-bold hover:bg-slate-50 dark:hover:bg-slate-800/50">
                       <span>Accumulated Net Surplus (Current Period)</span>
-                      <span>{formatCurrency(fNetIncome)}</span>
+                      <span>{formatCurrency(unclosedNetIncome)}</span>
                     </div>
                   </div>
                   <div className="flex justify-between py-2 border-t border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-slate-100 mt-2 px-2">
