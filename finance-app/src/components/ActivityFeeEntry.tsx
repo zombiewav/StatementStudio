@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { CalendarDays, ChevronDown, ChevronUp } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
+import { NewFeatureBadge } from './NewFeatureBadge';
 
 export function ActivityFeeEntry({ defaultOpen = false }: { defaultOpen?: boolean }): React.ReactElement {
   const { createActivityFeeRecord, settings, formatCurrency } = useFinance();
@@ -28,7 +29,7 @@ export function ActivityFeeEntry({ defaultOpen = false }: { defaultOpen?: boolea
   return (
     <section className="rounded-2xl border border-blue-200 bg-blue-50/60 dark:border-blue-500/20 dark:bg-blue-500/10">
       <button type="button" onClick={() => setOpen(value => !value)} className="flex w-full items-center justify-between gap-3 p-4 text-left">
-        <span><span className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-slate-100"><CalendarDays className="h-4 w-4 text-blue-700 dark:text-blue-300" /> Activity / Event Fees</span><span className="mt-1 block text-[10px] font-medium text-slate-600 dark:text-slate-400">Use this guided form for participant fee collections, including future events.</span></span>
+        <span><span className="flex items-center gap-2 text-sm font-bold text-violet-700 dark:text-violet-300"><CalendarDays className="h-4 w-4" /> Activity / Event Fees <NewFeatureBadge /></span><span className="mt-1 block text-[10px] font-medium text-slate-600 dark:text-slate-400">Use this guided form for participant fee collections, including future events.</span></span>
         {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
       </button>
       {open && (

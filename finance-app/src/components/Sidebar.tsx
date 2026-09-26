@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useFinance } from '../context/FinanceContext';
 import { computePendingObligations } from '../lib/reviewEngine';
+import { NewFeatureBadge } from './NewFeatureBadge';
 
 interface SidebarProps {
   activePage: string;
@@ -32,6 +33,7 @@ interface MenuItem {
   id: string;
   icon: React.ComponentType<{ className?: string }>;
   label: string;
+  isNew?: boolean;
 }
 
 export function Sidebar({
@@ -48,7 +50,7 @@ export function Sidebar({
   const menuItems: MenuItem[] = [
     { id: 'dashboard', icon: LayoutDashboard, label: "Dashboard" },
     { id: 'transactions', icon: ArrowRightLeft, label: "Transactions" },
-    { id: 'transaction-history', icon: History, label: "Transaction History" },
+    { id: 'transaction-history', icon: History, label: "Transaction History", isNew: true },
     { id: 'review', icon: ClipboardCheck, label: "Review" },
     { id: 'journals', icon: BookOpen, label: "Journal Entries" },
     { id: 'ledger', icon: Layers, label: "General Ledger" },
@@ -123,7 +125,8 @@ export function Sidebar({
                 type="button"
               >
                 <item.icon className={`w-4.5 h-4.5 shrink-0 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-blue-900 dark:group-hover:text-blue-200 transition-colors'}`} />
-                {!isCollapsed && <span className="truncate flex-1 text-left">{item.label}</span>}
+                {!isCollapsed && <span className={`truncate flex-1 text-left ${item.isNew && !isActive ? 'text-violet-700 dark:text-violet-300' : ''}`}>{item.label}</span>}
+                {item.isNew && !isCollapsed && <NewFeatureBadge />}
                 {item.id === 'review' && pendingReviewCount > 0 && !isCollapsed && (
                   <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${isActive ? 'bg-white text-blue-900' : 'bg-amber-500 text-white'}`}>
                     {pendingReviewCount}

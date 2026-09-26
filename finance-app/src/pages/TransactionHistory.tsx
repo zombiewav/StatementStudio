@@ -3,6 +3,7 @@ import { History, Search } from 'lucide-react';
 import { InventorySummaryCard } from '../components/InventorySummaryCard';
 import { useFinance } from '../context/FinanceContext';
 import { buildAccountTransactionHistory } from '../lib/transactionHistory';
+import { NewFeatureBadge } from '../components/NewFeatureBadge';
 
 export function TransactionHistory(): React.ReactElement {
   const { accounts, journalEntries, formatCurrency } = useFinance();
@@ -18,7 +19,7 @@ export function TransactionHistory(): React.ReactElement {
   return (
     <div className="space-y-6 bg-slate-50 dark:bg-slate-950">
       <div>
-        <h2 className="flex items-center gap-2 text-xl font-bold text-slate-900 dark:text-slate-100"><History className="h-5 w-5 text-blue-700 dark:text-blue-300" /> Transaction History</h2>
+        <h2 className="flex items-center gap-2 text-xl font-bold text-violet-700 dark:text-violet-300"><History className="h-5 w-5" /> Transaction History <NewFeatureBadge /></h2>
         <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">Choose an account to see every posting and its running balance, including entries from prior years.</p>
       </div>
 

@@ -26,6 +26,7 @@ import { formatReceiptSize, prepareReceiptAttachment, validateReceiptCount } fro
 import { ActivityFeeEntry } from '../components/ActivityFeeEntry';
 import { InventorySummaryCard } from '../components/InventorySummaryCard';
 import { DatedAmountInputRow, DatedAmountRows } from '../components/DatedAmountRows';
+import { NewFeatureBadge } from '../components/NewFeatureBadge';
 import { categorizeTransactionRule, TRANSACTION_CATEGORIES, TransactionCategoryId } from '../lib/transactionCategories';
 import { merchandiseSaleCostError, MERCHANDISE_INVENTORY_CODE } from '../lib/transactionHistory';
 import {
@@ -737,6 +738,7 @@ export function Transactions(): React.ReactElement {
                     ? ShoppingCart
                     : LayoutGrid;
             const selected = selectedCategory === category.id;
+            const isNewCategory = ['activity-fees', 'merchandise', 'membership-fees'].includes(category.id);
             const optionCount = category.id === 'activity-fees'
               ? null
               : new Set(classificationRules.filter(rule => categorizeTransactionRule(rule) === category.id).map(rule => rule.description)).size;
@@ -751,7 +753,10 @@ export function Transactions(): React.ReactElement {
                   : 'border-slate-200 bg-slate-50 hover:border-blue-300 hover:bg-blue-50/50 dark:border-slate-700 dark:bg-slate-950/40 dark:hover:border-blue-500/50 dark:hover:bg-blue-500/5'}`}
               >
                 <span className={`mb-2 inline-flex rounded-lg p-2 ${selected ? 'bg-blue-700 text-white dark:bg-blue-500' : 'bg-white text-blue-700 shadow-sm dark:bg-slate-800 dark:text-blue-300'}`}><Icon className="h-4 w-4" /></span>
-                <span className="block text-xs font-bold text-slate-900 dark:text-slate-100">{category.label}</span>
+                <span className="flex items-center gap-1.5">
+                  <span className={`block text-xs font-bold ${isNewCategory ? 'text-violet-700 dark:text-violet-300' : 'text-slate-900 dark:text-slate-100'}`}>{category.label}</span>
+                  {isNewCategory && <NewFeatureBadge />}
+                </span>
                 <span className="mt-1 block text-[9px] font-medium leading-4 text-slate-500 dark:text-slate-400">{category.description}</span>
                 <span className="mt-2 block text-[9px] font-bold uppercase tracking-wide text-blue-700 dark:text-blue-300">{optionCount === null ? 'Guided workflow' : `${optionCount} type${optionCount === 1 ? '' : 's'}`}</span>
               </button>
@@ -935,7 +940,7 @@ export function Transactions(): React.ReactElement {
             {isMerchandiseAcquisition && (
               <div className="sm:col-span-2 space-y-4 rounded-xl border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-500/20 dark:bg-indigo-500/10">
                 <div>
-                  <h4 className="text-xs font-black text-indigo-950 dark:text-indigo-100">Merchandise batch information</h4>
+                  <h4 className="flex items-center gap-2 text-xs font-black text-violet-700 dark:text-violet-300">Merchandise batch information <NewFeatureBadge /></h4>
                   <p className="mt-1 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Record each purchase batch separately so its item, quantity, cost, and settlement remain traceable.</p>
                 </div>
 
@@ -1075,6 +1080,7 @@ export function Transactions(): React.ReactElement {
 
             {requiresAccrualCompletion && (
               <div className="sm:col-span-2 space-y-4 p-3.5 bg-amber-50 border border-amber-100 rounded-xl dark:bg-amber-500/10 dark:border-amber-500/20">
+                <h4 className="flex items-center gap-2 text-xs font-black text-violet-700 dark:text-violet-300">Membership Fees collection schedule <NewFeatureBadge /></h4>
                 <div>
                   <label className="block text-[11px] font-bold text-amber-900 dark:text-amber-300 mb-1.5">When did the membership period start? (Date 1) <span className="text-amber-600">*required</span></label>
                   <input type="date" value={date} onChange={event => setDate(event.target.value)} className="w-full rounded-lg border border-amber-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-amber-500/30 dark:bg-slate-800 dark:text-slate-100" required />
@@ -1111,7 +1117,7 @@ export function Transactions(): React.ReactElement {
             {isPriorMembershipCollection && (
               <div className="sm:col-span-2 space-y-3 rounded-xl border border-indigo-200 bg-indigo-50 p-3.5 dark:border-indigo-500/20 dark:bg-indigo-500/10">
                 <div>
-                  <h4 className="text-xs font-black text-indigo-950 dark:text-indigo-100">Collection of unpaid membership fees</h4>
+                  <h4 className="flex items-center gap-2 text-xs font-black text-violet-700 dark:text-violet-300">Collection of unpaid membership fees <NewFeatureBadge /></h4>
                   <p className="mt-1 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Use this for membership fees billed in an earlier period that remain in Membership Dues Receivable.</p>
                 </div>
                 <div>
@@ -1187,7 +1193,7 @@ export function Transactions(): React.ReactElement {
             {isMerchandiseSale && (
               <div className="sm:col-span-2 space-y-4 rounded-xl border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-500/20 dark:bg-indigo-500/10">
                 <div>
-                  <h4 className="text-xs font-black text-indigo-950 dark:text-indigo-100">Sale of merchandise</h4>
+                  <h4 className="flex items-center gap-2 text-xs font-black text-violet-700 dark:text-violet-300">Sale of merchandise <NewFeatureBadge /></h4>
                   <p className="mt-1 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Select the exact purchase batch so quantity sold and remaining units stay connected to Inventory Summary.</p>
                 </div>
 

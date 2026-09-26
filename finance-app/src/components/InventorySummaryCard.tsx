@@ -3,6 +3,7 @@ import { Boxes, TrendingDown, TrendingUp } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import { buildInventorySummary } from '../lib/transactionHistory';
 import { buildMerchandiseBatchBalances } from '../lib/merchandiseSale';
+import { NewFeatureBadge } from './NewFeatureBadge';
 
 export function InventorySummaryCard({ compact = false }: { compact?: boolean }): React.ReactElement {
   const { journalEntries, formatCurrency } = useFinance();
@@ -14,7 +15,7 @@ export function InventorySummaryCard({ compact = false }: { compact?: boolean })
     <section className="rounded-2xl border border-indigo-200 bg-indigo-50/60 p-4 dark:border-indigo-500/20 dark:bg-indigo-500/10 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-slate-100"><Boxes className="h-4 w-4 text-indigo-700 dark:text-indigo-300" /> Inventory Summary</h3>
+          <h3 className="flex items-center gap-2 text-sm font-bold text-violet-700 dark:text-violet-300"><Boxes className="h-4 w-4" /> Inventory Summary <NewFeatureBadge /></h3>
           <p className="mt-1 text-[10px] font-medium text-slate-600 dark:text-slate-400">Lifetime merchandise inventory balance. It carries forward across fiscal years until sold or otherwise released.</p>
         </div>
         <div className="rounded-xl bg-white px-4 py-2 text-right shadow-sm dark:bg-slate-900">
