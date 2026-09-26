@@ -14,6 +14,7 @@ import { computeAccountBalances, computeTypeTotals, isContraAccount } from '../l
 import { computeTransactionReviewStates } from '../lib/reviewEngine';
 import { computeCashFlowDetails } from '../lib/cashFlow';
 import { excludeClosingEntries } from '../lib/closingEntries';
+import { isActivityFeeIncomplete } from '../lib/activityFees';
 
 type ActiveStatementTab = 'position' | 'activities' | 'cashflow' | 'changes';
 
@@ -29,6 +30,7 @@ export function FinancialStatements(): React.ReactElement {
     accounts, 
     journalEntries, 
     closedFiscalYears,
+    activityFeeRecords,
     formatCurrency, 
     settings 
   } = useFinance();
@@ -80,7 +82,8 @@ export function FinancialStatements(): React.ReactElement {
     () => computeTransactionReviewStates(journalEntries, accounts).filter(item => item.status === 'incomplete'),
     [journalEntries, accounts]
   );
-  const isGated = incompleteReviewItems.length > 0;
+  const incompleteActivityFees = activityFeeRecords.filter(isActivityFeeIncomplete);
+  const isGated = incompleteReviewItems.length > 0 || incompleteActivityFees.length > 0;
 
   // Compute Account Balances specifically for the filtered date range —
   // right for Revenue/Expenses (a period's activity), but NOT for Assets,
@@ -439,7 +442,7 @@ export function FinancialStatements(): React.ReactElement {
               <ClipboardCheck className="w-10 h-10 text-amber-500 mx-auto mb-3" />
               <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Statements aren't ready yet</h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 max-w-md mx-auto">
-                {incompleteReviewItems.length} item{incompleteReviewItems.length === 1 ? '' : 's'} in REVIEW still need{incompleteReviewItems.length === 1 ? 's' : ''} an answer before the books are final. Resolve them in Review, then come back here.
+                {incompleteReviewItems.length + incompleteActivityFees.length} item{incompleteReviewItems.length + incompleteActivityFees.length === 1 ? '' : 's'} in REVIEW still need an answer before the books are final. Resolve them in Review, then come back here.
               </p>
               <div className="mt-6 max-w-md mx-auto text-left space-y-2">
                 {incompleteReviewItems.slice(0, 8).map(item => (

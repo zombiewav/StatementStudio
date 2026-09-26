@@ -13,7 +13,8 @@ import {
   ChevronRight,
   LogOut,
   Sparkles,
-  ClipboardCheck
+  ClipboardCheck,
+  History
 } from "lucide-react";
 import { useFinance } from '../context/FinanceContext';
 import { computePendingObligations } from '../lib/reviewEngine';
@@ -47,6 +48,7 @@ export function Sidebar({
   const menuItems: MenuItem[] = [
     { id: 'dashboard', icon: LayoutDashboard, label: "Dashboard" },
     { id: 'transactions', icon: ArrowRightLeft, label: "Transactions" },
+    { id: 'transaction-history', icon: History, label: "Transaction History" },
     { id: 'review', icon: ClipboardCheck, label: "Review" },
     { id: 'journals', icon: BookOpen, label: "Journal Entries" },
     { id: 'ledger', icon: Layers, label: "General Ledger" },

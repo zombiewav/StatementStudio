@@ -1,17 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Search, ListFilter, ArrowLeftRight } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
-
-
-interface LedgerLine {
-  date: string;
-  reference: string;
-  description: string;
-  project: string;
-  debit: number;
-  credit: number;
-  runningBalance: number;
-}
+import { AccountHistoryLine, buildAccountTransactionHistory } from '../lib/transactionHistory';
 
 export function GeneralLedger(): React.ReactElement {
   const { accounts, journalEntries, accountBalances, formatCurrency } = useFinance();
@@ -20,43 +10,10 @@ export function GeneralLedger(): React.ReactElement {
 
   // Compute the transaction history with running balances for each account
   const ledgerData = useMemo(() => {
-    const data: Record<string, LedgerLine[]> = {};
-
-    // Sort entries chronologically
-    const sortedEntries = [...journalEntries].sort((a, b) => 
-      a.date.localeCompare(b.date) || a.reference.localeCompare(b.reference)
-    );
+    const data: Record<string, AccountHistoryLine[]> = {};
 
     accounts.forEach(acc => {
-      let balance = 0;
-      const lines: LedgerLine[] = [];
-
-      sortedEntries.forEach(je => {
-        je.lines.forEach(line => {
-          if (line.accountCode === acc.code) {
-            const isDebitAcc = acc.normalBalance === 'Debit';
-            
-            // Adjust running balance
-            if (isDebitAcc) {
-              balance += (line.debit - line.credit);
-            } else {
-              balance += (line.credit - line.debit);
-            }
-
-            lines.push({
-              date: je.date,
-              reference: je.reference,
-              description: je.description,
-              project: je.project,
-              debit: line.debit,
-              credit: line.credit,
-              runningBalance: balance
-            });
-          }
-        });
-      });
-
-      data[acc.code] = lines;
+      data[acc.code] = buildAccountTransactionHistory(acc, journalEntries);
     });
 
     return data;

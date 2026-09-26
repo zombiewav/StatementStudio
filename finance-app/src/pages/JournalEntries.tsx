@@ -217,7 +217,8 @@ export function JournalEntries(): React.ReactElement {
                               {/* Headers */}
                               <div className="grid grid-cols-12 text-[10px] font-bold text-gray-400 uppercase tracking-wider border-b border-slate-50 pb-1">
                                 <div className="col-span-2">Account Code</div>
-                                <div className="col-span-6">Account Name</div>
+                                <div className="col-span-4">Account Name</div>
+                                <div className="col-span-2">Posting Date</div>
                                 <div className="col-span-2 text-right">Debit</div>
                                 <div className="col-span-2 text-right">Credit</div>
                               </div>
@@ -232,7 +233,8 @@ export function JournalEntries(): React.ReactElement {
                                     className={`grid grid-cols-12 py-1.5 border-b border-slate-50/30 last:border-0 font-medium ${isCredit ? 'pl-6 text-slate-700 dark:text-slate-200' : 'text-slate-900 dark:text-slate-100'}`}
                                   >
                                     <div className="col-span-2 font-bold text-slate-600 dark:text-slate-300">{line.accountCode}</div>
-                                    <div className="col-span-6 truncate font-semibold">{acc?.name || 'Unknown Account'}</div>
+                                    <div className="col-span-4 truncate font-semibold">{acc?.name || 'Unknown Account'}</div>
+                                    <div className="col-span-2 text-slate-500 dark:text-slate-400">{new Date(line.date || je.date).toLocaleDateString()}</div>
                                     <div className="col-span-2 text-right font-bold text-slate-900 dark:text-slate-100">
                                       {line.debit > 0 ? formatCurrency(line.debit) : ''}
                                     </div>

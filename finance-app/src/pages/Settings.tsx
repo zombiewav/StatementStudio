@@ -23,6 +23,7 @@ import { Account, AccountType, NormalBalanceType, BackupPayload } from '../types
 import { validateBackupPayload } from '../lib/backupValidation';
 import { findFiscalCloseBlockers } from '../lib/closingEntries';
 import { CustomTransactionTypesManager } from '../components/CustomTransactionTypesManager';
+import { isActivityFeeIncomplete } from '../lib/activityFees';
 
 export function Settings(): React.ReactElement {
   const {
@@ -39,6 +40,7 @@ export function Settings(): React.ReactElement {
     restoreBackupData,
     resetFinancialWorkspace,
     closedFiscalYears,
+    activityFeeRecords,
     closeFiscalYear
   } = useFinance();
 
@@ -89,6 +91,7 @@ export function Settings(): React.ReactElement {
     () => findFiscalCloseBlockers(journalEntries, accounts),
     [journalEntries, accounts]
   );
+  const activityFeeCloseBlockers = activityFeeRecords.filter(isActivityFeeIncomplete);
 
   // Beginning Balances (Sheet3 of the working paper: opening figures a
   // first-time user fills in before recording regular transactions). Posts
@@ -682,9 +685,9 @@ export function Settings(): React.ReactElement {
             {closingSuccess && (
               <p className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 rounded-lg px-3 py-2">{closingSuccess}</p>
             )}
-            {fiscalCloseBlockers.length > 0 && (
+            {(fiscalCloseBlockers.length > 0 || activityFeeCloseBlockers.length > 0) && (
               <p className="text-[10px] font-semibold text-rose-700 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">
-                Closing is blocked: {fiscalCloseBlockers.length} transaction{fiscalCloseBlockers.length === 1 ? '' : 's'} remain incomplete in Review. Resolve all red items first.
+                Closing is blocked: {fiscalCloseBlockers.length + activityFeeCloseBlockers.length} transaction{fiscalCloseBlockers.length + activityFeeCloseBlockers.length === 1 ? '' : 's'} remain incomplete in Review. Resolve all red items first.
               </p>
             )}
 
@@ -726,7 +729,7 @@ export function Settings(): React.ReactElement {
                 <button
                   type="button"
                   onClick={() => { setClosingError(''); setClosingSuccess(''); setShowCloseConfirm(true); }}
-                  disabled={fiscalCloseBlockers.length > 0}
+                  disabled={fiscalCloseBlockers.length > 0 || activityFeeCloseBlockers.length > 0}
                   className="w-full bg-amber-600 hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-40 text-white font-bold text-xs py-2.5 rounded-xl transition-colors"
                 >
                   Close Fiscal Year
@@ -747,7 +750,7 @@ export function Settings(): React.ReactElement {
                     <button
                       type="button"
                       onClick={handleCloseFiscalYear}
-                      disabled={fiscalCloseBlockers.length > 0}
+                      disabled={fiscalCloseBlockers.length > 0 || activityFeeCloseBlockers.length > 0}
                       className="flex-1 px-3 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-40 rounded-lg shadow-sm"
                     >
                       Confirm Close

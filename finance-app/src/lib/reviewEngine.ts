@@ -17,7 +17,7 @@ export const DONATED_FOOD_SUPPLIES_CODE = '1710';
 export const DONATED_EVENT_SUPPLIES_CODE = '1720';
 export const LOSS_FROM_SPOILAGE_CODE = '5170';
 export const DONATED_INVENTORY_ACCOUNT_CODES = [DONATED_FOOD_SUPPLIES_CODE, DONATED_EVENT_SUPPLIES_CODE] as const;
-export const OBLIGATION_ACCOUNT_CODES = ['2050', '2010', '1250', '1260', ...DONATED_INVENTORY_ACCOUNT_CODES] as const;
+export const OBLIGATION_ACCOUNT_CODES = ['2050', '2010', '2020', '1200', '1320', '1250', '1260', ...DONATED_INVENTORY_ACCOUNT_CODES] as const;
 export type ObligationAccountCode = typeof OBLIGATION_ACCOUNT_CODES[number];
 
 // Prepaid Expenses: the general "not yet used" holding account any
@@ -236,9 +236,16 @@ export function buildDonatedInventorySettlementLines(
 export function buildSimpleSettlementLines(
   obligationAccountCode: string,
   cashAccountCode: string,
-  amount: number
+  amount: number,
+  normalBalance: 'Debit' | 'Credit' = 'Credit'
 ): JournalLine[] {
   if (amount <= 0) return [];
+  if (normalBalance === 'Debit') {
+    return [
+      { accountCode: cashAccountCode, debit: amount, credit: 0 },
+      { accountCode: obligationAccountCode, debit: 0, credit: amount },
+    ];
+  }
   return [
     { accountCode: obligationAccountCode, debit: amount, credit: 0 },
     { accountCode: cashAccountCode, debit: 0, credit: amount },

@@ -3,6 +3,8 @@ import { ClipboardCheck, CheckCircle2, AlertCircle, Undo2 } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import { JournalEntry } from '../types';
 import { ReceiptAttachments } from '../components/ReceiptAttachments';
+import { ActivityFeeReview } from '../components/ActivityFeeReview';
+import { isActivityFeeIncomplete } from '../lib/activityFees';
 import {
   computePendingObligations,
   computeAdvanceSettlement,
@@ -76,6 +78,8 @@ function ObligationRow({
   const isDonatedInventory = isDonatedFood || obligation.accountCode === DONATED_EVENT_SUPPLIES_CODE;
   const donatedUsageExpenseAccountCode = isDonatedFood ? '5080' : '5160';
   const cashAccountCode = '1010';
+  const obligationAccount = accounts.find(account => account.code === obligation.accountCode);
+  const isReceivable = obligationAccount?.normalBalance === 'Debit' && !isAdvance && !isPrepaid && !isDonatedInventory;
 
   const handleDonatedInventorySubmit = () => {
     const usedAmount = Number(donatedUsedAmount) || 0;
@@ -148,7 +152,7 @@ function ObligationRow({
     }
     setRowMessage('');
 
-    const lines = buildSimpleSettlementLines(obligation.accountCode, cashAccountCode, amount);
+    const lines = buildSimpleSettlementLines(obligation.accountCode, cashAccountCode, amount, obligationAccount?.normalBalance || 'Credit');
     let postedEntry: JournalEntry | undefined;
     if (lines.length > 0) {
       postedEntry = addJournalEntry(
@@ -321,7 +325,11 @@ function ObligationRow({
           ) : !isAdvance ? (
             <>
               <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300">
-                {obligation.accountCode === '2050'
+                {isReceivable
+                  ? obligation.accountCode === '1320'
+                    ? 'How much has the accountable officer remitted to the organization?'
+                    : 'How much of this receivable has the organization collected?'
+                  : obligation.accountCode === '2050'
                   ? "Did you reimburse this person/officer yet using the organization's funds?"
                   : 'Have you paid this amount using the organization’s funds?'}
               </label>
@@ -331,9 +339,9 @@ function ObligationRow({
                 className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold p-2.5 outline-none text-slate-900 dark:text-slate-100"
               >
                 <option value="" disabled>Select an answer…</option>
-                <option value="full">Yes — paid in full ({formatCurrency(obligation.remainingAmount)})</option>
-                <option value="none">No — not yet</option>
-                <option value="partial">Partly — enter amount</option>
+                <option value="full">{isReceivable ? 'Collected/remitted in full' : 'Yes — paid in full'} ({formatCurrency(obligation.remainingAmount)})</option>
+                <option value="none">{isReceivable ? 'Nothing collected/remitted yet' : 'No — not yet'}</option>
+                <option value="partial">{isReceivable ? 'Partly collected/remitted — enter amount' : 'Partly — enter amount'}</option>
               </select>
 
               {simpleChoice === 'partial' && (
@@ -420,7 +428,7 @@ function ObligationRow({
 }
 
 export function Review(): React.ReactElement {
-  const { journalEntries, accounts, reverseJournalEntry, addJournalEntry, formatCurrency } = useFinance();
+  const { journalEntries, accounts, activityFeeRecords, reverseJournalEntry, addJournalEntry, formatCurrency } = useFinance();
   const pendingObligations = useMemo(() => computePendingObligations(journalEntries, accounts), [journalEntries, accounts]);
   const reviewStates = useMemo(() => computeTransactionReviewStates(journalEntries, accounts), [journalEntries, accounts]);
   const [statusFilter, setStatusFilter] = useState<'all' | ReviewStatus>('all');
@@ -455,7 +463,8 @@ export function Review(): React.ReactElement {
   const visibleStates = statusFilter === 'all'
     ? reviewStates
     : reviewStates.filter(state => state.status === statusFilter);
-  const incompleteCount = reviewStates.filter(state => state.status === 'incomplete').length;
+  const incompleteCount = reviewStates.filter(state => state.status === 'incomplete').length
+    + activityFeeRecords.filter(isActivityFeeIncomplete).length;
 
   return (
     <div className="space-y-6 bg-slate-50 dark:bg-slate-950">
@@ -492,6 +501,8 @@ export function Review(): React.ReactElement {
           ? `${incompleteCount} transaction${incompleteCount === 1 ? '' : 's'} must be completed before Financial Statements can be finalized.`
           : 'All recorded transactions are complete and ready for Financial Statements.'}
       </div>
+
+      <ActivityFeeReview />
 
       <section className="space-y-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

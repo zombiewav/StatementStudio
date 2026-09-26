@@ -9,7 +9,12 @@ import {
   TrendingUp,
   Undo2,
   Paperclip,
-  X
+  X,
+  CalendarDays,
+  ShoppingBag,
+  Users,
+  ShoppingCart,
+  LayoutGrid
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { useFinance, PurposeOption } from '../context/FinanceContext';
@@ -18,6 +23,24 @@ import { FUNDING_SOURCE_OPTIONS, buildJournalLines, buildCompoundJournalLines, p
 import { CASH_ACCOUNT_CODES } from '../lib/cashAccounts';
 import { PREPAID_EXPENSE_CODE } from '../lib/reviewEngine';
 import { formatReceiptSize, prepareReceiptAttachment, validateReceiptCount } from '../lib/receiptAttachments';
+import { ActivityFeeEntry } from '../components/ActivityFeeEntry';
+import { InventorySummaryCard } from '../components/InventorySummaryCard';
+import { DatedAmountInputRow, DatedAmountRows } from '../components/DatedAmountRows';
+import { categorizeTransactionRule, TRANSACTION_CATEGORIES, TransactionCategoryId } from '../lib/transactionCategories';
+import { merchandiseSaleCostError, MERCHANDISE_INVENTORY_CODE } from '../lib/transactionHistory';
+import {
+  buildMerchandiseAcquisitionPosting,
+  MerchandisePaymentMethod,
+} from '../lib/merchandiseAcquisition';
+import {
+  buildMerchandiseBatchBalances,
+  buildMerchandiseSalePosting,
+  MerchandiseCollectionMethod,
+} from '../lib/merchandiseSale';
+import {
+  buildCurrentMembershipFeePosting,
+  buildPriorMembershipCollectionPosting,
+} from '../lib/membershipFees';
 
 const GENERAL_FUND_PROJECT = 'General Fund Operations';
 // Working paper's Situation 5.1/5.2/5.3 branch: a donor-restricted
@@ -25,10 +48,13 @@ const GENERAL_FUND_PROJECT = 'General Fund Operations';
 const RESTRICTED_REVENUE_CODE = '4035';
 const UNRESTRICTED_REVENUE_CODE = '4030';
 const MEMBERSHIP_DUES_RECEIVABLE_CODE = '1300';
+const MERCHANDISE_ITEM_OPTIONS = ['Lanyard', 'Pins', 'Tote Bag', 'Mugs', 'Shirt', 'Others'] as const;
+const sumDatedAmounts = (rows: DatedAmountInputRow[]): number => rows.reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
 
 export function Transactions(): React.ReactElement {
   const {
     accounts,
+    journalEntries,
     projects,
     addJournalEntry,
     attachReceiptsToEntry,
@@ -42,6 +68,7 @@ export function Transactions(): React.ReactElement {
 
   // Form State
   const [txName, setTxName] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<TransactionCategoryId | null>(null);
   const [customName, setCustomName] = useState('');
   // Transaction Name search dropdown: open while the field has focus,
   // filtered live as you type. Selecting an option fills txName with its
@@ -68,6 +95,22 @@ export function Transactions(): React.ReactElement {
   const [pendingReceipts, setPendingReceipts] = useState<ReceiptAttachmentDraft[]>([]);
   const [receiptMessage, setReceiptMessage] = useState('');
   const [isProcessingReceipts, setIsProcessingReceipts] = useState(false);
+  const [merchandiseCost, setMerchandiseCost] = useState('');
+  const [merchandiseItem, setMerchandiseItem] = useState('');
+  const [merchandiseOtherTitle, setMerchandiseOtherTitle] = useState('');
+  const [merchandiseQuantity, setMerchandiseQuantity] = useState('');
+  const [merchandisePaymentMethod, setMerchandisePaymentMethod] = useState<MerchandisePaymentMethod>('organization-funds');
+  const [merchandiseOrganizationPayments, setMerchandiseOrganizationPayments] = useState<DatedAmountInputRow[]>([{ id: 'org-payment-1', date, amount: '' }]);
+  const [merchandiseOfficerPayments, setMerchandiseOfficerPayments] = useState<DatedAmountInputRow[]>([{ id: 'officer-payment-1', date, amount: '' }]);
+  const [merchandiseAdvancePayments, setMerchandiseAdvancePayments] = useState<DatedAmountInputRow[]>([{ id: 'advance-payment-1', date, amount: '' }]);
+  const [merchandiseReimbursements, setMerchandiseReimbursements] = useState<DatedAmountInputRow[]>([{ id: 'reimbursement-1', date, amount: '' }]);
+  const [merchandiseSaleBatchId, setMerchandiseSaleBatchId] = useState('');
+  const [merchandiseQuantitySold, setMerchandiseQuantitySold] = useState('');
+  const [merchandiseSellingPrice, setMerchandiseSellingPrice] = useState('');
+  const [merchandiseCollectionMethod, setMerchandiseCollectionMethod] = useState<MerchandiseCollectionMethod>('not-yet-collected');
+  const [merchandiseCollections, setMerchandiseCollections] = useState<DatedAmountInputRow[]>([{ id: 'collection-1', date, amount: '' }]);
+  const [merchandiseRemittances, setMerchandiseRemittances] = useState<DatedAmountInputRow[]>([{ id: 'remittance-1', date, amount: '' }]);
+  const [merchandiseCollectionOfficer, setMerchandiseCollectionOfficer] = useState('');
 
   // "Whose money paid for it?" (Question B from the posting-engine build
   // plan). Only meaningful when the credit side is a cash account — for a
@@ -85,12 +128,9 @@ export function Transactions(): React.ReactElement {
   const [restrictionAnswer, setRestrictionAnswer] = useState<'' | 'no' | 'yes'>('');
   const [samePeriodAnswer, setSamePeriodAnswer] = useState<'' | 'yes' | 'no'>('');
 
-  // Membership Fees accrual completion (working paper row 3-4): a second
-  // mandatory question that posts a second journal-line pair, so revenue
-  // is never understated relative to what's actually still owed this
-  // period. Kept as a string so "not yet answered" and "answered 0" are
-  // distinguishable — both are valid, only the former blocks posting.
-  const [remainingUnpaid, setRemainingUnpaid] = useState<string>('');
+  const [membershipCollections, setMembershipCollections] = useState<DatedAmountInputRow[]>([
+    { id: 'membership-collection-1', date: '', amount: '' },
+  ]);
 
   // "How much of this is not yet used?" (client's flowchart Q4/Q5) — the
   // general matching-principle question, shown on categories flagged
@@ -127,20 +167,33 @@ export function Transactions(): React.ReactElement {
   // Deduped, alphabetized list of known transaction types (two rules —
   // 'award'/'prize' — share the description "Awards & Prizes Expense",
   // since they're the same category under two different trigger words).
-  const transactionTypeOptions = useMemo(
-    () => Array.from(new Set(classificationRules.map(r => r.description))).sort(),
-    [classificationRules]
-  );
+  const transactionTypeOptions = useMemo(() => {
+    if (!selectedCategory || selectedCategory === 'activity-fees') return [];
+    return Array.from(new Set(
+      classificationRules
+        .filter(rule => categorizeTransactionRule(rule) === selectedCategory)
+        .map(rule => rule.description)
+    )).sort();
+  }, [classificationRules, selectedCategory]);
   const filteredTxTypeOptions = txName.trim()
     ? transactionTypeOptions.filter(d => d.toLowerCase().includes(txName.trim().toLowerCase()))
     : transactionTypeOptions;
   const selectedTransactionType = transactionTypeOptions.find(d => d.toLowerCase() === txName.trim().toLowerCase());
   const hasUnmatchedSearch = txName.trim().length > 0 && !classificationPreview;
 
+  const selectCategory = (category: TransactionCategoryId) => {
+    setSelectedCategory(category);
+    setTxName('');
+    setCustomName('');
+    setShowTxDropdown(false);
+    setErrorMessage('');
+  };
+
   // The funding-source question only makes sense while the credit side is
   // still a cash account — once it points at a revenue, loan, or accounts
   // payable account, "whose money paid for it?" no longer applies.
-  const showFundingSource = !!classificationPreview && CASH_ACCOUNT_CODES.includes(creditCode);
+  const isMerchandiseAcquisition = selectedCategory === 'merchandise' && debitCode === '1700';
+  const showFundingSource = !!classificationPreview && CASH_ACCOUNT_CODES.includes(creditCode) && !isMerchandiseAcquisition;
 
   // Only a cash contribution matched to Contributions Revenue - Unrestricted
   // can raise the restriction question — a release-from-restriction entry
@@ -150,15 +203,19 @@ export function Transactions(): React.ReactElement {
   const showSamePeriodQuestion = showRestrictionQuestion && restrictionAnswer === 'yes';
   const isRestricted = showRestrictionQuestion && restrictionAnswer === 'yes' && samePeriodAnswer === 'no';
   const effectiveCreditCode = isRestricted ? RESTRICTED_REVENUE_CODE : creditCode;
-  const needsCounterpartyName = !!classificationPreview && (effectiveCreditCode === '2050' || effectiveCreditCode === '2010' || debitCode === '1250');
-  const counterpartyLabel = effectiveCreditCode === '2010'
+  const merchandiseUsesOfficer = isMerchandiseAcquisition && (merchandisePaymentMethod === 'officer-personal' || merchandisePaymentMethod === 'advance-and-personal');
+  const needsCounterpartyName = !!classificationPreview && ((effectiveCreditCode === '2050' || effectiveCreditCode === '2010' || debitCode === '1250') || merchandiseUsesOfficer);
+  const counterpartyLabel = merchandiseUsesOfficer
+    ? 'Accountable Officer Name'
+    : effectiveCreditCode === '2010'
     ? 'Supplier / Payee Name'
     : 'Officer / Accountable Person Name';
 
-  // The working paper's own accrual-completion example: Membership Fees
-  // for the current school year needs a second mandatory answer (how much
-  // remains unpaid) before it can post.
+  // Membership Fees for the current school year recognizes the full fee on
+  // Date 1, then routes same-day cash and later dated collections correctly.
+  // Prior-period collections clear an existing receivable instead.
   const requiresAccrualCompletion = !!classificationPreview?.requiresAccrualCompletion;
+  const isPriorMembershipCollection = !!classificationPreview && debitCode === '1010' && creditCode === MEMBERSHIP_DUES_RECEIVABLE_CODE;
 
   // The general "not yet used" question — see mayDeferPortion's doc
   // comment in FinanceContext.tsx. officer-cash-advance is excluded: that
@@ -175,10 +232,26 @@ export function Transactions(): React.ReactElement {
       setClassificationPreview(match);
       setRestrictionAnswer('');
       setSamePeriodAnswer('');
-      setRemainingUnpaid('');
+      setMembershipCollections([{ id: `membership-collection-${Date.now()}`, date: '', amount: '' }]);
       setNotYetUsedAmount('');
       setExpectedUsePeriod('within');
       setCounterpartyName('');
+      setMerchandiseCost('');
+      setMerchandiseItem('');
+      setMerchandiseOtherTitle('');
+      setMerchandiseQuantity('');
+      setMerchandisePaymentMethod('organization-funds');
+      setMerchandiseOrganizationPayments([{ id: `org-payment-${Date.now()}`, date, amount: '' }]);
+      setMerchandiseOfficerPayments([{ id: `officer-payment-${Date.now()}`, date, amount: '' }]);
+      setMerchandiseAdvancePayments([{ id: `advance-payment-${Date.now()}`, date, amount: '' }]);
+      setMerchandiseReimbursements([{ id: `reimbursement-${Date.now()}`, date, amount: '' }]);
+      setMerchandiseSaleBatchId('');
+      setMerchandiseQuantitySold('');
+      setMerchandiseSellingPrice('');
+      setMerchandiseCollectionMethod('not-yet-collected');
+      setMerchandiseCollections([{ id: `collection-${Date.now()}`, date, amount: '' }]);
+      setMerchandiseRemittances([{ id: `remittance-${Date.now()}`, date, amount: '' }]);
+      setMerchandiseCollectionOfficer('');
 
       // Keep the funding-source dropdown in sync with whichever cash
       // account the matched rule assumed, so the two controls never
@@ -204,10 +277,26 @@ export function Transactions(): React.ReactElement {
       setDescription('');
       setRestrictionAnswer('');
       setSamePeriodAnswer('');
-      setRemainingUnpaid('');
+      setMembershipCollections([{ id: `membership-collection-${Date.now()}`, date: '', amount: '' }]);
       setNotYetUsedAmount('');
       setExpectedUsePeriod('within');
       setCounterpartyName('');
+      setMerchandiseCost('');
+      setMerchandiseItem('');
+      setMerchandiseOtherTitle('');
+      setMerchandiseQuantity('');
+      setMerchandisePaymentMethod('organization-funds');
+      setMerchandiseOrganizationPayments([{ id: `org-payment-${Date.now()}`, date, amount: '' }]);
+      setMerchandiseOfficerPayments([{ id: `officer-payment-${Date.now()}`, date, amount: '' }]);
+      setMerchandiseAdvancePayments([{ id: `advance-payment-${Date.now()}`, date, amount: '' }]);
+      setMerchandiseReimbursements([{ id: `reimbursement-${Date.now()}`, date, amount: '' }]);
+      setMerchandiseSaleBatchId('');
+      setMerchandiseQuantitySold('');
+      setMerchandiseSellingPrice('');
+      setMerchandiseCollectionMethod('not-yet-collected');
+      setMerchandiseCollections([{ id: `collection-${Date.now()}`, date, amount: '' }]);
+      setMerchandiseRemittances([{ id: `remittance-${Date.now()}`, date, amount: '' }]);
+      setMerchandiseCollectionOfficer('');
     }
   }, [txName]);
 
@@ -251,7 +340,92 @@ export function Transactions(): React.ReactElement {
   // fee must have been billed (via the current-school-year accrual
   // question) before there's anything to collect.
   const membershipReceivableOutstanding = accountBalances[MEMBERSHIP_DUES_RECEIVABLE_CODE] || 0;
-  const showMembershipReceivableWarning = debitCode === '1010' && creditCode === MEMBERSHIP_DUES_RECEIVABLE_CODE && amount > membershipReceivableOutstanding;
+  const membershipCollectionTotal = sumDatedAmounts(membershipCollections);
+  const showMembershipReceivableWarning = isPriorMembershipCollection && membershipCollectionTotal > membershipReceivableOutstanding;
+  const isMerchandiseSale = effectiveCreditCode === '4070';
+  const merchandiseInventoryBalance = accountBalances[MERCHANDISE_INVENTORY_CODE] || 0;
+  const merchandiseBatches = useMemo(() => buildMerchandiseBatchBalances(journalEntries), [journalEntries]);
+  const selectedMerchandiseBatch = merchandiseBatches.find(batch => batch.entryId === merchandiseSaleBatchId);
+  const merchandiseSaleTotal = Math.round((Number(merchandiseQuantitySold) || 0) * (Number(merchandiseSellingPrice) || 0) * 100) / 100;
+  const merchandiseCollectionTotal = sumDatedAmounts(merchandiseCollections);
+  const merchandiseRemittanceTotal = sumDatedAmounts(merchandiseRemittances);
+  const merchandiseItemLabel = merchandiseItem === 'Others' ? merchandiseOtherTitle.trim() : merchandiseItem;
+  const merchandiseOrganizationPaymentTotal = sumDatedAmounts(merchandiseOrganizationPayments);
+  const merchandiseOfficerPaymentTotal = sumDatedAmounts(merchandiseOfficerPayments);
+  const merchandiseAdvancePaymentTotal = sumDatedAmounts(merchandiseAdvancePayments);
+  const merchandiseReimbursementTotal = sumDatedAmounts(merchandiseReimbursements);
+
+  useEffect(() => {
+    if (isPriorMembershipCollection) setAmount(membershipCollectionTotal);
+  }, [isPriorMembershipCollection, membershipCollectionTotal]);
+
+  const membershipPostingResult = useMemo(() => {
+    try {
+      const collections = membershipCollections.map(row => ({ date: row.date, amount: Number(row.amount) || 0 }));
+      if (requiresAccrualCompletion) {
+        if (amount <= 0) return { posting: null, error: '' };
+        return { posting: buildCurrentMembershipFeePosting({ totalFees: amount, dateOne: date, collections }), error: '' };
+      }
+      if (isPriorMembershipCollection) {
+        if (membershipCollectionTotal <= 0) return { posting: null, error: '' };
+        return { posting: buildPriorMembershipCollectionPosting({ availableReceivable: membershipReceivableOutstanding, dateOne: date, collections }), error: '' };
+      }
+      return { posting: null, error: '' };
+    } catch (error) {
+      return { posting: null, error: error instanceof Error ? error.message : 'The membership-fee amounts are invalid.' };
+    }
+  }, [requiresAccrualCompletion, isPriorMembershipCollection, amount, date, membershipCollections, membershipCollectionTotal, membershipReceivableOutstanding]);
+
+  const merchandiseAcquisitionResult = useMemo(() => {
+    if (!isMerchandiseAcquisition || amount <= 0) return { posting: null, error: '' };
+    try {
+      return {
+        posting: buildMerchandiseAcquisitionPosting({
+          totalCost: amount,
+          paymentMethod: merchandisePaymentMethod,
+          transactionDate: date,
+          organizationPayment: merchandiseOrganizationPaymentTotal,
+          organizationPayments: merchandiseOrganizationPayments.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })),
+          officerPayment: merchandiseOfficerPaymentTotal,
+          officerPayments: merchandiseOfficerPayments.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })),
+          advancePayment: merchandiseAdvancePaymentTotal,
+          advancePayments: merchandiseAdvancePayments.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })),
+          reimbursement: merchandiseReimbursementTotal,
+          reimbursements: merchandiseReimbursements.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })),
+          availableAdvance: advancesOutstanding,
+          cashAccountCode: '1010',
+        }),
+        error: '',
+      };
+    } catch (error) {
+      return { posting: null, error: error instanceof Error ? error.message : 'The acquisition amounts are invalid.' };
+    }
+  }, [isMerchandiseAcquisition, amount, merchandisePaymentMethod, date, merchandiseOrganizationPaymentTotal, merchandiseOrganizationPayments, merchandiseOfficerPaymentTotal, merchandiseOfficerPayments, merchandiseAdvancePaymentTotal, merchandiseAdvancePayments, merchandiseReimbursementTotal, merchandiseReimbursements, advancesOutstanding]);
+
+  useEffect(() => {
+    if (isMerchandiseSale) setAmount(merchandiseSaleTotal);
+  }, [isMerchandiseSale, merchandiseSaleTotal]);
+
+  const merchandiseSaleResult = useMemo(() => {
+    if (!isMerchandiseSale || merchandiseSaleTotal <= 0 || Number(merchandiseCost) <= 0) return { posting: null, error: '' };
+    try {
+      return {
+        posting: buildMerchandiseSalePosting({
+          totalSales: merchandiseSaleTotal,
+          inventoryCost: Number(merchandiseCost),
+          collectionMethod: merchandiseCollectionMethod,
+          transactionDate: date,
+          totalCollected: merchandiseCollectionMethod === 'not-yet-collected' ? 0 : merchandiseCollectionTotal,
+          collections: merchandiseCollectionMethod === 'not-yet-collected' ? [] : merchandiseCollections.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })),
+          totalRemitted: merchandiseCollectionMethod === 'officer-to-remit' ? merchandiseRemittanceTotal : 0,
+          remittances: merchandiseCollectionMethod === 'officer-to-remit' ? merchandiseRemittances.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })) : [],
+        }),
+        error: '',
+      };
+    } catch (error) {
+      return { posting: null, error: error instanceof Error ? error.message : 'The merchandise sale amounts are invalid.' };
+    }
+  }, [isMerchandiseSale, merchandiseSaleTotal, merchandiseCost, merchandiseCollectionMethod, date, merchandiseCollectionTotal, merchandiseCollections, merchandiseRemittanceTotal, merchandiseRemittances]);
 
   // Derived Account lookups
   const debitAccount = activeAccounts.find(a => a.code === debitCode);
@@ -259,12 +433,11 @@ export function Transactions(): React.ReactElement {
 
   const previewLines = useMemo<JournalLine[]>(() => {
     if (!classificationPreview || amount <= 0 || !debitCode || !effectiveCreditCode) return [];
+    if (isMerchandiseAcquisition) return merchandiseAcquisitionResult.posting?.lines || [];
     const deferredAmount = showDeferPortionQuestion ? (Number(notYetUsedAmount) || 0) : 0;
-    if (requiresAccrualCompletion) {
-      return buildCompoundJournalLines([
-        { debitAccountCode: debitCode, creditAccountCode: effectiveCreditCode, amount },
-        { debitAccountCode: MEMBERSHIP_DUES_RECEIVABLE_CODE, creditAccountCode: effectiveCreditCode, amount: Number(remainingUnpaid) || 0 },
-      ]);
+    if (requiresAccrualCompletion || isPriorMembershipCollection) return membershipPostingResult.posting?.lines || [];
+    if (isMerchandiseSale) {
+      return merchandiseSaleResult.posting?.lines || [];
     }
     if (deferredAmount > 0) {
       return buildCompoundJournalLines([
@@ -273,7 +446,7 @@ export function Transactions(): React.ReactElement {
       ]);
     }
     return buildJournalLines(debitCode, effectiveCreditCode, amount);
-  }, [classificationPreview, amount, debitCode, effectiveCreditCode, requiresAccrualCompletion, remainingUnpaid, showDeferPortionQuestion, notYetUsedAmount]);
+  }, [classificationPreview, amount, debitCode, effectiveCreditCode, isMerchandiseAcquisition, merchandiseAcquisitionResult, requiresAccrualCompletion, isPriorMembershipCollection, membershipPostingResult, isMerchandiseSale, merchandiseSaleResult, showDeferPortionQuestion, notYetUsedAmount]);
 
   const projectedImpacts = useMemo(
     () => projectJournalLineImpacts(previewLines, activeAccounts, accountBalances),
@@ -315,8 +488,42 @@ export function Transactions(): React.ReactElement {
       setErrorMessage('Please select a transaction type from the list so its accounts can be determined automatically.');
       return;
     }
+    if (isMerchandiseSale) {
+      if (!selectedMerchandiseBatch) {
+        setErrorMessage('Please select a merchandise purchase batch with units still available.');
+        return;
+      }
+      if (!Number.isInteger(Number(merchandiseQuantitySold)) || Number(merchandiseQuantitySold) <= 0 || Number(merchandiseQuantitySold) > selectedMerchandiseBatch.remainingQuantity) {
+        setErrorMessage(`Quantity sold must be a whole number from 1 to ${selectedMerchandiseBatch.remainingQuantity}.`);
+        return;
+      }
+    }
+    if (isMerchandiseSale && Number(merchandiseSellingPrice) <= 0) {
+      setErrorMessage('Please enter a selling price greater than zero.');
+      return;
+    }
+    if (isMerchandiseSale && merchandiseCollectionMethod !== 'not-yet-collected' && merchandiseCollectionTotal <= 0) {
+      setErrorMessage('Add at least one dated collection amount greater than zero.');
+      return;
+    }
+    if (isMerchandiseSale && merchandiseCollectionMethod === 'officer-to-remit' && !merchandiseCollectionOfficer.trim()) {
+      setErrorMessage('Please enter the accountable officer who collected the merchandise payments.');
+      return;
+    }
     if (amount <= 0) {
       setErrorMessage('Please enter a valid amount greater than zero.');
+      return;
+    }
+    if (isMerchandiseAcquisition && !merchandiseItemLabel) {
+      setErrorMessage('Please select the merchandise purchased and enter a title when choosing Others.');
+      return;
+    }
+    if (isMerchandiseAcquisition && (!Number.isInteger(Number(merchandiseQuantity)) || Number(merchandiseQuantity) <= 0)) {
+      setErrorMessage('Please enter a whole-number quantity greater than zero for this merchandise batch.');
+      return;
+    }
+    if (isMerchandiseAcquisition && merchandiseAcquisitionResult.error) {
+      setErrorMessage(merchandiseAcquisitionResult.error);
       return;
     }
     if (debitCode === effectiveCreditCode) {
@@ -331,8 +538,12 @@ export function Transactions(): React.ReactElement {
       setErrorMessage('Please answer: will the event happen in the same reporting period the donation is received?');
       return;
     }
-    if (requiresAccrualCompletion && remainingUnpaid.trim() === '') {
-      setErrorMessage('Please enter how much remains unpaid this period (enter 0 if none).');
+    if ((requiresAccrualCompletion || isPriorMembershipCollection) && membershipPostingResult.error) {
+      setErrorMessage(membershipPostingResult.error);
+      return;
+    }
+    if (isPriorMembershipCollection && membershipCollectionTotal <= 0) {
+      setErrorMessage('Add at least one membership-fee collection greater than zero.');
       return;
     }
     if (needsCounterpartyName && !counterpartyName.trim()) {
@@ -347,6 +558,17 @@ export function Transactions(): React.ReactElement {
       setErrorMessage('Caution: this exceeds the Membership Dues Receivable currently on the books — make sure the fee was billed this school year (via the accrual question) before collecting it.');
       return;
     }
+    if (isMerchandiseSale) {
+      const merchandiseError = merchandiseSaleCostError(Number(merchandiseCost), merchandiseInventoryBalance);
+      if (merchandiseError) {
+        setErrorMessage(merchandiseError);
+        return;
+      }
+      if (merchandiseSaleResult.error) {
+        setErrorMessage(merchandiseSaleResult.error);
+        return;
+      }
+    }
     if (showDeferPortionQuestion && notYetUsedAmount.trim() === '') {
       setErrorMessage('Please enter how much of this is not yet used, consumed, or benefited from (enter 0 if it’s all used already).');
       return;
@@ -359,14 +581,21 @@ export function Transactions(): React.ReactElement {
       // Post Journal Entry
       const deferredAmount = showDeferPortionQuestion ? (Number(notYetUsedAmount) || 0) : 0;
       const lines = previewLines;
+      if (lines.length === 0) throw new Error('Complete the required acquisition amounts before posting.');
 
       const usePeriodNote = deferredAmount > 0
         ? ` (${formatCurrency(deferredAmount)} not yet used — expected ${expectedUsePeriod === 'within' ? 'within this period' : 'next period'})`
         : '';
 
+      const entryDescription = isMerchandiseAcquisition
+        ? (customName.trim() || `${description || txName} - ${merchandiseItemLabel}`)
+        : isMerchandiseSale
+          ? (customName.trim() || `Sale of Merchandise - ${selectedMerchandiseBatch?.item || 'Merchandise'}`)
+        : (customName.trim() || description || txName) + usePeriodNote;
+
       const je = addJournalEntry(
         date,
-        (customName.trim() || description || txName) + usePeriodNote,
+        entryDescription,
         isProgramSpecific ? selectedProject : GENERAL_FUND_PROJECT,
         lines,
         isProgramSpecific ? selectedProject : undefined,
@@ -379,7 +608,9 @@ export function Transactions(): React.ReactElement {
             purpose: classificationPreview.purposeOptions?.[purposeIndex]?.label,
             fundingSourceId: showFundingSource ? fundingSourceId : undefined,
             sponsorshipKind: classificationPreview.sponsorshipKind,
-            counterpartyName: counterpartyName.trim() || undefined,
+            counterpartyName: isMerchandiseSale && merchandiseCollectionMethod === 'officer-to-remit'
+              ? merchandiseCollectionOfficer.trim()
+              : counterpartyName.trim() || undefined,
             eventRelated: isProgramSpecific,
             donorRestriction: showRestrictionQuestion
               ? restrictionAnswer === 'no'
@@ -391,9 +622,34 @@ export function Transactions(): React.ReactElement {
             restrictionEventPeriod: restrictionAnswer === 'yes'
               ? samePeriodAnswer === 'yes' ? 'same-period' : 'future'
               : undefined,
-            membershipUnpaidAmount: requiresAccrualCompletion ? Number(remainingUnpaid) || 0 : undefined,
+            membershipUnpaidAmount: requiresAccrualCompletion ? membershipPostingResult.posting?.amountStillReceivable : undefined,
+            membershipTotalFees: requiresAccrualCompletion ? amount : undefined,
+            membershipPeriodStartDate: (requiresAccrualCompletion || isPriorMembershipCollection) ? date : undefined,
+            membershipCollections: (requiresAccrualCompletion || isPriorMembershipCollection) ? membershipPostingResult.posting?.collections : undefined,
             deferredAmount: showDeferPortionQuestion ? deferredAmount : undefined,
             expectedUsePeriod: deferredAmount > 0 ? expectedUsePeriod : undefined,
+            inventoryCost: isMerchandiseSale ? Number(merchandiseCost) : undefined,
+            merchandiseQuantity: isMerchandiseAcquisition ? Number(merchandiseQuantity) : undefined,
+            merchandisePaymentMethod: isMerchandiseAcquisition ? merchandisePaymentMethod : undefined,
+            merchandiseOrganizationPayment: isMerchandiseAcquisition ? merchandiseOrganizationPaymentTotal : undefined,
+            merchandiseOrganizationPayments: isMerchandiseAcquisition ? merchandiseOrganizationPayments.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })) : undefined,
+            merchandiseOfficerPayment: isMerchandiseAcquisition ? merchandiseOfficerPaymentTotal : undefined,
+            merchandiseOfficerPayments: isMerchandiseAcquisition ? merchandiseOfficerPayments.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })) : undefined,
+            merchandiseAdvancePayment: isMerchandiseAcquisition ? merchandiseAdvancePaymentTotal : undefined,
+            merchandiseAdvancePayments: isMerchandiseAcquisition ? merchandiseAdvancePayments.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })) : undefined,
+            merchandiseReimbursement: isMerchandiseAcquisition ? merchandiseReimbursementTotal : undefined,
+            merchandiseReimbursements: isMerchandiseAcquisition ? merchandiseReimbursements.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })) : undefined,
+            merchandisePayableAmount: isMerchandiseAcquisition ? merchandiseAcquisitionResult.posting?.merchandisePayable : undefined,
+            merchandiseItem: isMerchandiseSale ? selectedMerchandiseBatch?.item : isMerchandiseAcquisition ? merchandiseItemLabel : undefined,
+            merchandiseBatchEntryId: isMerchandiseSale ? merchandiseSaleBatchId : undefined,
+            merchandiseQuantitySold: isMerchandiseSale ? Number(merchandiseQuantitySold) : undefined,
+            merchandiseSellingPrice: isMerchandiseSale ? Number(merchandiseSellingPrice) : undefined,
+            merchandiseTotalSales: isMerchandiseSale ? merchandiseSaleTotal : undefined,
+            merchandiseCollectionMethod: isMerchandiseSale ? merchandiseCollectionMethod : undefined,
+            merchandiseCollections: isMerchandiseSale ? merchandiseCollections.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })) : undefined,
+            merchandiseRemittances: isMerchandiseSale ? merchandiseRemittances.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })) : undefined,
+            merchandiseAccountsReceivable: isMerchandiseSale ? merchandiseSaleResult.posting?.accountsReceivable : undefined,
+            merchandiseDueFromOfficer: isMerchandiseSale ? merchandiseSaleResult.posting?.dueFromOfficer : undefined,
             receiptAttachmentIds: [],
           },
         }
@@ -419,10 +675,26 @@ export function Transactions(): React.ReactElement {
       setPurposeIndex(0);
       setRestrictionAnswer('');
       setSamePeriodAnswer('');
-      setRemainingUnpaid('');
+      setMembershipCollections([{ id: `membership-collection-${Date.now()}`, date: '', amount: '' }]);
       setNotYetUsedAmount('');
       setExpectedUsePeriod('within');
       setCounterpartyName('');
+      setMerchandiseCost('');
+      setMerchandiseItem('');
+      setMerchandiseOtherTitle('');
+      setMerchandiseQuantity('');
+      setMerchandisePaymentMethod('organization-funds');
+      setMerchandiseOrganizationPayments([{ id: `org-payment-${Date.now()}`, date, amount: '' }]);
+      setMerchandiseOfficerPayments([{ id: `officer-payment-${Date.now()}`, date, amount: '' }]);
+      setMerchandiseAdvancePayments([{ id: `advance-payment-${Date.now()}`, date, amount: '' }]);
+      setMerchandiseReimbursements([{ id: `reimbursement-${Date.now()}`, date, amount: '' }]);
+      setMerchandiseSaleBatchId('');
+      setMerchandiseQuantitySold('');
+      setMerchandiseSellingPrice('');
+      setMerchandiseCollectionMethod('not-yet-collected');
+      setMerchandiseCollections([{ id: `collection-${Date.now()}`, date, amount: '' }]);
+      setMerchandiseRemittances([{ id: `remittance-${Date.now()}`, date, amount: '' }]);
+      setMerchandiseCollectionOfficer('');
       setIsProgramSpecific(false);
       setSelectedProject(GENERAL_FUND_PROJECT);
       setPendingReceipts([]);
@@ -448,6 +720,58 @@ export function Transactions(): React.ReactElement {
         <p className="text-xs text-slate-700 dark:text-slate-400 mt-1 font-medium">Auto-classify transaction fields instantly using our rule-based accounting engine.</p>
       </div>
 
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-5">
+        <div className="mb-4">
+          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Choose a transaction category</h3>
+          <p className="mt-1 text-[10px] font-medium text-slate-500 dark:text-slate-400">Pick a category first so you only see the transaction types relevant to your task.</p>
+        </div>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
+          {TRANSACTION_CATEGORIES.map(category => {
+            const Icon = category.id === 'activity-fees'
+              ? CalendarDays
+              : category.id === 'merchandise'
+                ? ShoppingBag
+                : category.id === 'membership-fees'
+                  ? Users
+                  : category.id === 'purchases'
+                    ? ShoppingCart
+                    : LayoutGrid;
+            const selected = selectedCategory === category.id;
+            const optionCount = category.id === 'activity-fees'
+              ? null
+              : new Set(classificationRules.filter(rule => categorizeTransactionRule(rule) === category.id).map(rule => rule.description)).size;
+            return (
+              <button
+                key={category.id}
+                type="button"
+                aria-pressed={selected}
+                onClick={() => selectCategory(category.id)}
+                className={`rounded-xl border p-3 text-left transition-all ${selected
+                  ? 'border-blue-700 bg-blue-50 ring-2 ring-blue-700/10 dark:border-blue-400 dark:bg-blue-500/10'
+                  : 'border-slate-200 bg-slate-50 hover:border-blue-300 hover:bg-blue-50/50 dark:border-slate-700 dark:bg-slate-950/40 dark:hover:border-blue-500/50 dark:hover:bg-blue-500/5'}`}
+              >
+                <span className={`mb-2 inline-flex rounded-lg p-2 ${selected ? 'bg-blue-700 text-white dark:bg-blue-500' : 'bg-white text-blue-700 shadow-sm dark:bg-slate-800 dark:text-blue-300'}`}><Icon className="h-4 w-4" /></span>
+                <span className="block text-xs font-bold text-slate-900 dark:text-slate-100">{category.label}</span>
+                <span className="mt-1 block text-[9px] font-medium leading-4 text-slate-500 dark:text-slate-400">{category.description}</span>
+                <span className="mt-2 block text-[9px] font-bold uppercase tracking-wide text-blue-700 dark:text-blue-300">{optionCount === null ? 'Guided workflow' : `${optionCount} type${optionCount === 1 ? '' : 's'}`}</span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      {!selectedCategory && (
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-white/60 px-5 py-10 text-center dark:border-slate-700 dark:bg-slate-900/40">
+          <LayoutGrid className="mx-auto h-6 w-6 text-slate-400" />
+          <p className="mt-2 text-xs font-bold text-slate-700 dark:text-slate-300">Select a category to start recording a transaction.</p>
+        </div>
+      )}
+
+      {selectedCategory === 'activity-fees' && <ActivityFeeEntry defaultOpen />}
+
+      {selectedCategory === 'merchandise' && <InventorySummaryCard compact />}
+
+      {selectedCategory && selectedCategory !== 'activity-fees' && (
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
         {/* Left Column: Entry Form */}
         <form onSubmit={handlePost} className="xl:col-span-7 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm p-6 sm:p-8 space-y-5">
@@ -608,6 +932,76 @@ export function Transactions(): React.ReactElement {
               </div>
             )}
 
+            {isMerchandiseAcquisition && (
+              <div className="sm:col-span-2 space-y-4 rounded-xl border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-500/20 dark:bg-indigo-500/10">
+                <div>
+                  <h4 className="text-xs font-black text-indigo-950 dark:text-indigo-100">Merchandise batch information</h4>
+                  <p className="mt-1 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Record each purchase batch separately so its item, quantity, cost, and settlement remain traceable.</p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Merchandise purchased</label>
+                    <select value={merchandiseItem} onChange={event => { setMerchandiseItem(event.target.value); if (event.target.value !== 'Others') setMerchandiseOtherTitle(''); }} className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required>
+                      <option value="" disabled>Select merchandise…</option>
+                      {MERCHANDISE_ITEM_OPTIONS.map(item => <option key={item} value={item}>{item}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Quantity purchased</label>
+                    <input type="number" min="1" step="1" value={merchandiseQuantity} onChange={event => setMerchandiseQuantity(event.target.value)} placeholder="Number of units" className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-bold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required />
+                  </div>
+                </div>
+
+                {merchandiseItem === 'Others' && (
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Other merchandise title</label>
+                    <input type="text" value={merchandiseOtherTitle} onChange={event => setMerchandiseOtherTitle(event.target.value)} placeholder="Enter the merchandise name" className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required />
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Total cost of this batch</label>
+                  <div className="relative mt-1.5">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-indigo-500">{settings.currencySymbol}</span>
+                    <input type="number" min="0.01" step="0.01" value={amount || ''} onChange={event => setAmount(Number(event.target.value))} placeholder="Full cost whether paid or unpaid" className="w-full rounded-lg border border-indigo-200 bg-white p-2.5 pl-8 text-xs font-bold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">How will the merchandise be paid?</label>
+                  <select value={merchandisePaymentMethod} onChange={event => setMerchandisePaymentMethod(event.target.value as MerchandisePaymentMethod)} className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100">
+                    <option value="organization-funds">Paid directly from organization funds</option>
+                    <option value="officer-personal">Paid by an officer using personal money</option>
+                    <option value="organization-advance">Paid using an organization advance</option>
+                    <option value="advance-and-personal">Combination of advance and officer personal money</option>
+                    <option value="not-yet-paid">Not yet paid</option>
+                  </select>
+                </div>
+
+                {merchandisePaymentMethod === 'organization-funds' && (
+                  <DatedAmountRows label="How much was paid by the organization to the supplier?" rows={merchandiseOrganizationPayments} onChange={setMerchandiseOrganizationPayments} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={amount} addLabel="Add payment" />
+                )}
+
+                {(merchandisePaymentMethod === 'organization-advance' || merchandisePaymentMethod === 'advance-and-personal') && (
+                  <div>
+                    <DatedAmountRows label="How much was paid using the organization advance?" rows={merchandiseAdvancePayments} onChange={setMerchandiseAdvancePayments} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={Math.min(amount || advancesOutstanding, advancesOutstanding)} addLabel="Add advance payment" />
+                    <p className="mt-1 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Available recorded advance: {formatCurrency(advancesOutstanding)}.</p>
+                  </div>
+                )}
+
+                {(merchandisePaymentMethod === 'officer-personal' || merchandisePaymentMethod === 'advance-and-personal') && (
+                  <div className="space-y-4">
+                    <DatedAmountRows label="How much was paid personally by the officer?" rows={merchandiseOfficerPayments} onChange={setMerchandiseOfficerPayments} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={Math.max(0, amount - (merchandisePaymentMethod === 'advance-and-personal' ? merchandiseAdvancePaymentTotal : 0))} addLabel="Add officer payment" />
+                    <DatedAmountRows label="How much was reimbursed to the officer?" rows={merchandiseReimbursements} onChange={setMerchandiseReimbursements} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={merchandiseOfficerPaymentTotal} addLabel="Add reimbursement" />
+                  </div>
+                )}
+
+                {merchandisePaymentMethod === 'not-yet-paid' && <p className="rounded-lg bg-white/80 p-3 text-[10px] font-semibold text-indigo-800 dark:bg-slate-900/60 dark:text-indigo-200">The full batch cost will remain in Merchandise Payable and appear in Review until settled.</p>}
+                {merchandiseAcquisitionResult.error && amount > 0 && <p className="text-[10px] font-bold text-rose-700 dark:text-rose-300">{merchandiseAcquisitionResult.error}</p>}
+              </div>
+            )}
+
             {showFundingSource && (
               <div className="sm:col-span-2">
                 <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Whose Money Paid For This?</label>
@@ -680,22 +1074,63 @@ export function Transactions(): React.ReactElement {
             )}
 
             {requiresAccrualCompletion && (
-              <div className="sm:col-span-2 p-3.5 bg-amber-50 border border-amber-100 rounded-xl dark:bg-amber-500/10 dark:border-amber-500/20">
-                <label className="block text-[11px] font-bold text-amber-900 dark:text-amber-300 mb-1.5">How much remains unpaid this period? <span className="text-amber-600">*required</span></label>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-amber-500">{settings.currencySymbol}</span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={remainingUnpaid}
-                    onChange={(e) => setRemainingUnpaid(e.target.value)}
-                    placeholder="0.00 if none"
-                    className="w-full bg-white border border-amber-200 text-slate-900 rounded-lg text-xs font-bold p-2.5 pl-8 outline-none dark:bg-slate-800 dark:border-amber-500/30 dark:text-slate-100"
-                    required
-                  />
+              <div className="sm:col-span-2 space-y-4 p-3.5 bg-amber-50 border border-amber-100 rounded-xl dark:bg-amber-500/10 dark:border-amber-500/20">
+                <div>
+                  <label className="block text-[11px] font-bold text-amber-900 dark:text-amber-300 mb-1.5">When did the membership period start? (Date 1) <span className="text-amber-600">*required</span></label>
+                  <input type="date" value={date} onChange={event => setDate(event.target.value)} className="w-full rounded-lg border border-amber-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-amber-500/30 dark:bg-slate-800 dark:text-slate-100" required />
                 </div>
-                <p className="text-[10px] text-amber-700 dark:text-amber-400 font-medium mt-1.5">Posted to Membership Dues Receivable, so full-period revenue isn't understated just because it wasn't all collected in cash.</p>
+                <div>
+                  <label className="block text-[11px] font-bold text-amber-900 dark:text-amber-300 mb-1.5">Total membership fees collectible from all members <span className="text-amber-600">*required</span></label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-amber-500">{settings.currencySymbol}</span>
+                    <input type="number" step="0.01" min="0.01" value={amount || ''} onChange={event => setAmount(Number(event.target.value))} placeholder="0.00" className="w-full bg-white border border-amber-200 text-slate-900 rounded-lg text-xs font-bold p-2.5 pl-8 outline-none dark:bg-slate-800 dark:border-amber-500/30 dark:text-slate-100" required />
+                  </div>
+                </div>
+                <DatedAmountRows
+                  label="How much of the membership fees has been collected?"
+                  rows={membershipCollections}
+                  onChange={setMembershipCollections}
+                  currencySymbol={settings.currencySymbol}
+                  defaultDate={date}
+                  maxTotal={amount || undefined}
+                  addLabel="Add collection"
+                  allowBlankDates
+                  allowEmptyAmounts
+                  blankDateHelp={`Leave Date 2, Date 3, or another collection date blank to use Date 1 (${date || 'transaction date'}).`}
+                />
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <div className="rounded-lg bg-white/80 p-3 dark:bg-slate-900/60"><span className="text-[9px] font-bold text-slate-500">TOTAL FEES</span><p className="mt-1 text-xs font-black text-slate-900 dark:text-slate-100">{formatCurrency(amount)}</p></div>
+                  <div className="rounded-lg bg-white/80 p-3 dark:bg-slate-900/60"><span className="text-[9px] font-bold text-slate-500">COLLECTED</span><p className="mt-1 text-xs font-black text-emerald-700 dark:text-emerald-300">{formatCurrency(membershipCollectionTotal)}</p></div>
+                  <div className="rounded-lg bg-white/80 p-3 dark:bg-slate-900/60"><span className="text-[9px] font-bold text-slate-500">STILL RECEIVABLE</span><p className="mt-1 text-xs font-black text-rose-700 dark:text-rose-300">{formatCurrency(Math.max(0, amount - membershipCollectionTotal))}</p></div>
+                </div>
+                <p className="text-[10px] text-amber-700 dark:text-amber-400 font-medium">The full fee is recognized on Date 1. Same-day collections go directly to Cash; later collections automatically reduce Membership Dues Receivable on their own ledger dates.</p>
+                {membershipPostingResult.error && <p className="text-[10px] font-bold text-rose-700 dark:text-rose-300">{membershipPostingResult.error}</p>}
+              </div>
+            )}
+
+            {isPriorMembershipCollection && (
+              <div className="sm:col-span-2 space-y-3 rounded-xl border border-indigo-200 bg-indigo-50 p-3.5 dark:border-indigo-500/20 dark:bg-indigo-500/10">
+                <div>
+                  <h4 className="text-xs font-black text-indigo-950 dark:text-indigo-100">Collection of unpaid membership fees</h4>
+                  <p className="mt-1 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Use this for membership fees billed in an earlier period that remain in Membership Dues Receivable.</p>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-indigo-900 dark:text-indigo-200">Date 1 / default collection date</label>
+                  <input type="date" value={date} onChange={event => setDate(event.target.value)} className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required />
+                </div>
+                <DatedAmountRows
+                  label="How much was collected?"
+                  rows={membershipCollections}
+                  onChange={setMembershipCollections}
+                  currencySymbol={settings.currencySymbol}
+                  defaultDate={date}
+                  maxTotal={membershipReceivableOutstanding}
+                  addLabel="Add collection"
+                  allowBlankDates
+                  blankDateHelp={`A blank collection date uses Date 1 (${date || 'transaction date'}).`}
+                />
+                <div className="rounded-lg bg-white/80 p-3 text-[10px] dark:bg-slate-900/60"><span className="font-bold text-slate-500">Receivable remaining after these collections</span><p className="mt-1 font-black text-indigo-800 dark:text-indigo-200">{formatCurrency(Math.max(0, membershipReceivableOutstanding - membershipCollectionTotal))}</p></div>
+                {membershipPostingResult.error && <p className="text-[10px] font-bold text-rose-700 dark:text-rose-300">{membershipPostingResult.error}</p>}
               </div>
             )}
 
@@ -749,7 +1184,83 @@ export function Transactions(): React.ReactElement {
               </div>
             )}
 
-            <div>
+            {isMerchandiseSale && (
+              <div className="sm:col-span-2 space-y-4 rounded-xl border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-500/20 dark:bg-indigo-500/10">
+                <div>
+                  <h4 className="text-xs font-black text-indigo-950 dark:text-indigo-100">Sale of merchandise</h4>
+                  <p className="mt-1 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Select the exact purchase batch so quantity sold and remaining units stay connected to Inventory Summary.</p>
+                </div>
+
+                {merchandiseBatches.length === 0 ? (
+                  <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[10px] font-bold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">No purchase batch with available units was found. Record an Acquisition of Merchandise first.</p>
+                ) : (
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Merchandise / purchase batch</label>
+                    <select value={merchandiseSaleBatchId} onChange={event => { setMerchandiseSaleBatchId(event.target.value); setMerchandiseQuantitySold(''); }} className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required>
+                      <option value="" disabled>Select an available batch…</option>
+                      {merchandiseBatches.map(batch => <option key={batch.entryId} value={batch.entryId}>{batch.item} — {batch.reference} — {batch.remainingQuantity} units available</option>)}
+                    </select>
+                    {selectedMerchandiseBatch && <p className="mt-1 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Purchased {selectedMerchandiseBatch.purchasedQuantity} units for {formatCurrency(selectedMerchandiseBatch.acquisitionCost)} · reference unit cost {formatCurrency(selectedMerchandiseBatch.referenceUnitCost)}.</p>}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-[10px] font-bold text-indigo-900 dark:text-indigo-200">Quantity sold</label>
+                    <input type="number" min="1" step="1" max={selectedMerchandiseBatch?.remainingQuantity} value={merchandiseQuantitySold} onChange={event => setMerchandiseQuantitySold(event.target.value)} placeholder="Number of units" className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-bold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-indigo-900 dark:text-indigo-200">Selling price per unit</label>
+                    <div className="relative mt-1.5"><span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-indigo-500">{settings.currencySymbol}</span><input type="number" min="0.01" step="0.01" value={merchandiseSellingPrice} onChange={event => setMerchandiseSellingPrice(event.target.value)} placeholder="0.00" className="w-full rounded-lg border border-indigo-200 bg-white p-2.5 pl-8 text-xs font-bold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required /></div>
+                  </div>
+                </div>
+
+                <div className="rounded-lg bg-white/80 p-3 dark:bg-slate-900/60">
+                  <span className="text-[9px] font-bold uppercase text-slate-500">Total sales — automatically computed</span>
+                  <p className="mt-1 text-lg font-black text-indigo-800 dark:text-indigo-200">{formatCurrency(merchandiseSaleTotal)}</p>
+                  <p className="text-[9px] text-slate-500">Quantity sold × selling price</p>
+                </div>
+
+                <div>
+                  <label className="flex items-center gap-1.5 text-[10px] font-bold text-indigo-900 dark:text-indigo-200">Cost of all items sold <span title="Cost of sales is the total cost of the items sold. It may include the purchase price and other costs directly related to preparing or producing them, such as materials, design fees, or labor." className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-indigo-300 text-[9px] font-black">?</span></label>
+                  <div className="relative mt-1.5"><span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-indigo-500">{settings.currencySymbol}</span><input type="number" step="0.01" min="0.01" max={merchandiseInventoryBalance || undefined} value={merchandiseCost} onChange={event => setMerchandiseCost(event.target.value)} placeholder="Unit cost × units sold, including eligible direct costs" className="w-full rounded-lg border border-indigo-200 bg-white p-2.5 pl-8 text-xs font-bold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required /></div>
+                  <p className="mt-1.5 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Available inventory value: {formatCurrency(merchandiseInventoryBalance)}. This automatically debits Cost of Sales and credits Merchandise Inventory.</p>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">How was payment collected during this reporting period?</label>
+                  <select value={merchandiseCollectionMethod} onChange={event => setMerchandiseCollectionMethod(event.target.value as MerchandiseCollectionMethod)} className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100">
+                    <option value="not-yet-collected">Not yet collected</option>
+                    <option value="organization-direct">Collected directly by the organization</option>
+                    <option value="officer-to-remit">Collected by an officer, to be remitted</option>
+                  </select>
+                </div>
+
+                {merchandiseCollectionMethod !== 'not-yet-collected' && (
+                  <DatedAmountRows label={merchandiseCollectionMethod === 'officer-to-remit' ? 'How much was collected by the officer?' : 'How much was collected by the organization?'} rows={merchandiseCollections} onChange={setMerchandiseCollections} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={merchandiseSaleTotal} addLabel="Add collection" />
+                )}
+
+                {merchandiseCollectionMethod === 'officer-to-remit' && (
+                  <>
+                    <div>
+                      <label className="block text-[10px] font-bold text-indigo-900 dark:text-indigo-200">Accountable officer</label>
+                      <input type="text" value={merchandiseCollectionOfficer} onChange={event => setMerchandiseCollectionOfficer(event.target.value)} placeholder="Officer who collected the payments" className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required />
+                    </div>
+                    <DatedAmountRows label="How much was remitted to the organization?" rows={merchandiseRemittances} onChange={setMerchandiseRemittances} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={merchandiseCollectionTotal} addLabel="Add remittance" />
+                  </>
+                )}
+
+                {merchandiseSaleResult.posting && (
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <div className="rounded-lg bg-white/80 p-3 text-[10px] dark:bg-slate-900/60"><span className="font-bold text-slate-500">Still receivable from buyers</span><p className="mt-1 font-black text-rose-700 dark:text-rose-300">{formatCurrency(merchandiseSaleResult.posting.accountsReceivable)}</p></div>
+                    {merchandiseCollectionMethod === 'officer-to-remit' && <div className="rounded-lg bg-white/80 p-3 text-[10px] dark:bg-slate-900/60"><span className="font-bold text-slate-500">Still held by officer</span><p className="mt-1 font-black text-amber-700 dark:text-amber-300">{formatCurrency(merchandiseSaleResult.posting.dueFromOfficer)}</p></div>}
+                  </div>
+                )}
+                {merchandiseSaleResult.error && <p className="text-[10px] font-bold text-rose-700 dark:text-rose-300">{merchandiseSaleResult.error}</p>}
+              </div>
+            )}
+
+            {!isMerchandiseAcquisition && !isMerchandiseSale && !requiresAccrualCompletion && !isPriorMembershipCollection && <div>
               <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Amount</label>
               <div className="relative">
                 <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 dark:text-slate-400">{settings.currencySymbol}</span>
@@ -765,9 +1276,9 @@ export function Transactions(): React.ReactElement {
               </div>
               {/* Remove accidental duplicate light-only amount control (was causing permanent light/dark mismatch) */}
               <div className="hidden" />
-            </div>
+            </div>}
 
-            <div>
+            {!requiresAccrualCompletion && !isPriorMembershipCollection && <div>
               <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Date</label>
               <input
                 type="date"
@@ -776,7 +1287,7 @@ export function Transactions(): React.ReactElement {
                 className="w-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-blue-900 focus:ring-blue-900/10 rounded-xl text-xs font-semibold p-2.5 outline-none transition-colors dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/20"
                 required
               />
-            </div>
+            </div>}
 
             <div className="sm:col-span-2 rounded-xl border border-dashed border-slate-300 bg-slate-50/70 p-3.5 dark:border-slate-700 dark:bg-slate-950/30">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -889,7 +1400,7 @@ export function Transactions(): React.ReactElement {
                   <div key={`${line.accountCode}-${index}`} className={`grid grid-cols-[1fr_7rem] items-center gap-3 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800/50 p-2 rounded-xl ${line.credit > 0 ? 'pl-6' : ''}`}>
                     <div>
                       <p className="text-slate-900 dark:text-slate-100">{account?.name || line.accountCode}</p>
-                      <p className="text-[9px] text-slate-500 dark:text-slate-400">Code: {line.accountCode} • Normal: {account?.normalBalance}</p>
+                      <p className="text-[9px] text-slate-500 dark:text-slate-400">Code: {line.accountCode} • Date: {line.date || date} • Normal: {account?.normalBalance}</p>
                     </div>
                     <div className="grid grid-cols-2 gap-3 text-right">
                       <span className="font-bold text-slate-900 dark:text-slate-100">{line.debit > 0 ? formatCurrency(line.debit) : '—'}</span>
@@ -959,6 +1470,7 @@ export function Transactions(): React.ReactElement {
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }

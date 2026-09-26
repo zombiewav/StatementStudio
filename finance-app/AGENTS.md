@@ -70,6 +70,7 @@ before considering a change done. Both must be clean.
 | `ss_closings` | `ClosingRecord[]` — completed fiscal-year closes (see Closing Entries below). |
 | `ss_receipts` | Compressed JPG receipt/supporting-photo records linked to journal-entry IDs. |
 | `ss_custom_rules` | User-created automatic transaction types; built-in rules remain source-controlled and protected. |
+| `ss_activity_fees` | Activity/Event Fee workflow records, prior-period collections, receivables, deferrals, and refunds. |
 | `ss_theme` | `'light' \| 'dark'`. |
 
 `INITIAL_ACCOUNTS`/`INITIAL_JOURNALS`/`INITIAL_PROJECTS` in `FinanceContext.tsx` are the
@@ -142,6 +143,49 @@ login flag. This is still local-browser authentication, not secure multi-device 
   currency, and Chart of Accounts.
 - **Chart of Accounts pagination**: Settings shows 10 accounts per page with numbered previous/next
   controls, avoiding a very tall account table while preserving add, edit, and status actions.
+- **Activity/Event Fees**: Transactions has a guided form for events already held versus future
+  events. Review carries each uniquely referenced event through additional collections,
+  postponement, recognition, refundable/non-refundable cancellation, and refunds. Accounts
+  1310/2110/4090 hold receivables, deferred fees, and recognized revenue. Incomplete activity-fee
+  records block Financial Statements and fiscal-year closing.
+- **Transaction categories**: Transactions first presents Activity Fees, Merchandise Transactions,
+  Membership Fees, Purchases, and Other Transactions. Choosing a category opens the existing form
+  with its searchable type list filtered to that category; account selection remains automatic and
+  custom transaction names remain labels only. `transactionCategories.ts` owns the tested grouping.
+- **Transaction History / inventory summary**: The sidebar Transaction History page selects one
+  account at a time and shows its lifetime postings and running balance. Merchandise Inventory
+  (1700) also has a lifetime summary on that page and inside the Merchandise category. Merchandise
+  sales require the inventory cost sold and automatically add Dr Cost of Sales - Merchandise (5240)
+  / Cr Inventory - Merchandise (1700), so inventory carries across years until fully released.
+- **Merchandise acquisition (first-period rules)**: Merchandise Transactions includes a guided
+  acquisition form for Lanyards, Pins, Tote Bags, Mugs, Shirts, and an Other title. Each posted
+  batch saves its quantity, full cost, payment method, officer/advance/reimbursement breakdown,
+  dated payment details, and receipts. Payment, advance, officer-paid, and reimbursement questions
+  use repeatable date-plus-amount rows with automatic totals. The posting engine supports organization cash, officer personal funds, an existing
+  organization advance, a combination of advance and personal funds, or not-yet-paid purchases;
+  it omits zero-value lines and leaves unsettled supplier amounts in Merchandise Payable (2020),
+  which the normal Review settlement flow clears later. The client's second-year unit movement
+  and batch-depletion rules are intentionally not guessed and remain pending their follow-up.
+- **Merchandise sales and dated collections**: Sale of Merchandise selects an available acquisition
+  batch, validates units sold against that batch, computes total sales from quantity times unit
+  price, and records Cost of Sales against Merchandise Inventory. Payment may be not yet collected,
+  collected directly by the organization, or collected by an accountable officer for later
+  remittance. Collection and remittance questions use repeatable date-plus-amount rows with an
+  automatic total. Uncollected buyer balances post to Accounts Receivable (1200); collections still
+  held by an officer post to Due from Officers (1320). Both stay incomplete in Review and settle as
+  Dr Cash / Cr receivable. Purchase batches and remaining unit counts stay visible in Inventory
+  Summary, including depleted historical batches.
+- **Line-level posting dates**: Repeatable merchandise payments, collections, reimbursements, and
+  remittances create separate journal lines carrying the date entered for that specific amount.
+  Journal Entries shows each line's Posting Date, while General Ledger and Transaction History sort
+  and calculate running balances from that line date. Older journal lines without a date continue
+  to use their journal entry's main date.
+- **Membership Fees collection schedule**: Current-school-year fees now ask for Date 1, total fees
+  collectible, and repeatable dated collections. The system automatically handles same-day, later,
+  and mixed collections, recognizes the full fee on Date 1, and computes the remaining Membership
+  Dues Receivable. Earlier-period unpaid-fee collections use the same dated-row format and cannot
+  exceed the receivable on the books. A blank Date 2, Date 3, or later collection date inherits
+  Date 1; each resolved date is saved on its journal lines for the ledger.
 
 ## Known bugs / gaps, not yet fixed (flagged, intentionally left alone)
 

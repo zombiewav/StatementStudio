@@ -14,6 +14,9 @@ export interface JournalLine {
   accountCode: string;
   debit: number;
   credit: number;
+  // Optional because entries created before dated payments existed only have
+  // one journal-level date. Ledger views fall back to JournalEntry.date.
+  date?: string;
 }
 
 export interface ReceiptAttachmentDraft {
@@ -29,6 +32,11 @@ export interface ReceiptAttachment extends ReceiptAttachmentDraft {
   entryId: string;
 }
 
+export interface DatedAmountRecord {
+  date: string;
+  amount: number;
+}
+
 export interface TransactionDetails {
   memo?: string;
   purpose?: string;
@@ -39,8 +47,33 @@ export interface TransactionDetails {
   donorRestriction?: 'none' | 'satisfied-in-period' | 'temporary';
   restrictionEventPeriod?: 'same-period' | 'future';
   membershipUnpaidAmount?: number;
+  membershipTotalFees?: number;
+  membershipPeriodStartDate?: string;
+  membershipCollections?: DatedAmountRecord[];
   deferredAmount?: number;
   expectedUsePeriod?: 'within' | 'next';
+  inventoryCost?: number;
+  merchandiseItem?: string;
+  merchandiseQuantity?: number;
+  merchandisePaymentMethod?: 'organization-funds' | 'officer-personal' | 'organization-advance' | 'advance-and-personal' | 'not-yet-paid';
+  merchandiseOrganizationPayment?: number;
+  merchandiseOrganizationPayments?: DatedAmountRecord[];
+  merchandiseOfficerPayment?: number;
+  merchandiseOfficerPayments?: DatedAmountRecord[];
+  merchandiseAdvancePayment?: number;
+  merchandiseAdvancePayments?: DatedAmountRecord[];
+  merchandiseReimbursement?: number;
+  merchandiseReimbursements?: DatedAmountRecord[];
+  merchandisePayableAmount?: number;
+  merchandiseBatchEntryId?: string;
+  merchandiseQuantitySold?: number;
+  merchandiseSellingPrice?: number;
+  merchandiseTotalSales?: number;
+  merchandiseCollectionMethod?: 'not-yet-collected' | 'organization-direct' | 'officer-to-remit';
+  merchandiseCollections?: DatedAmountRecord[];
+  merchandiseRemittances?: DatedAmountRecord[];
+  merchandiseAccountsReceivable?: number;
+  merchandiseDueFromOfficer?: number;
   receiptAttachmentIds: string[];
 }
 
@@ -132,6 +165,37 @@ export interface ClosingRecord {
   closedAt: string;
 }
 
+export type ActivityFeeStatus =
+  | 'receivable'
+  | 'scheduled'
+  | 'postponed'
+  | 'refund-due'
+  | 'complete';
+
+export interface ActivityFeeHistoryItem {
+  id: string;
+  date: string;
+  reportingPeriod: string;
+  action: 'initial' | 'collection' | 'held' | 'postponed' | 'cancelled-refundable' | 'cancelled-nonrefundable' | 'refund';
+  amount: number;
+  journalEntryId?: string;
+}
+
+export interface ActivityFeeRecord {
+  id: string;
+  reference: string;
+  eventName: string;
+  totalExpected: number;
+  totalCollected: number;
+  totalRefunded: number;
+  receivableBalance: number;
+  deferredBalance: number;
+  status: ActivityFeeStatus;
+  createdAt: string;
+  updatedAt: string;
+  history: ActivityFeeHistoryItem[];
+}
+
 // Full export of everything StatementStudio persists to localStorage
 // (accounts, journalEntries, projects, auditLogs, settings), so a user can
 // back up and later restore their entire workspace. `schemaVersion` exists
@@ -153,4 +217,5 @@ export interface BackupPayload {
   // were supported.
   receiptAttachments?: ReceiptAttachment[];
   customClassificationRules?: CustomClassificationRule[];
+  activityFeeRecords?: ActivityFeeRecord[];
 }

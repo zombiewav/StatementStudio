@@ -11,13 +11,15 @@ import {
   TransactionMetadata,
   ReceiptAttachment,
   ReceiptAttachmentDraft,
-  CustomClassificationRule
+  CustomClassificationRule,
+  ActivityFeeRecord
 } from '../types';
 import { validateBackupPayload } from '../lib/backupValidation';
 import { computeAccountBalances, computeTypeTotals } from '../lib/accountTotals';
 import { computeClosingEntryLines, findFiscalCloseBlockers } from '../lib/closingEntries';
 import { linkReceiptIdsToEntry } from '../lib/receiptAttachments';
 import { getEffectiveClassificationRules, validateCustomTransactionRule } from '../lib/customTransactionRules';
+import { ActivityFeeFollowUp, buildActivityFeeFollowUp, buildInitialActivityFeePosting, isActivityFeeIncomplete } from '../lib/activityFees';
 
 // The default catch-all project and the account closing entries post their
 // net income plug to — same constants Transactions.tsx and INITIAL_PROJECTS
@@ -78,7 +80,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
   // and 1015 belong to).
   { code: '1010', name: 'Cash on Hand', type: 'Assets', normalBalance: 'Debit', description: 'Physical cash held directly by the organization (petty cash, cash box)', isActive: true },
   { code: '1015', name: 'Cash in Bank', type: 'Assets', normalBalance: 'Debit', description: 'Funds held in bank accounts, GCash, Maya, and other e-wallets', isActive: true },
-  { code: '1200', name: 'Receivables', type: 'Assets', normalBalance: 'Debit', description: 'Uncollected amounts due from sponsors, partners, and other receivables', isActive: true },
+  { code: '1200', name: 'Accounts Receivable', type: 'Assets', normalBalance: 'Debit', description: 'Amounts earned or billed but not yet collected from customers, sponsors, or partners', isActive: true },
   { code: '1250', name: 'Advances to Officers', type: 'Assets', normalBalance: 'Debit', description: 'Cash advances given to officers for organization expenses, pending liquidation', isActive: true },
   // The matching principle, generalized: whenever a transaction's own
   // classification rule allows it (mayDeferPortion — see DEFAULT_RULES),
@@ -109,6 +111,8 @@ export const INITIAL_ACCOUNTS: Account[] = [
   // elsewhere — see workingPaper.fixtures.ts's own note on not normalizing
   // ambiguity away).
   { code: '1300', name: 'Membership Dues Receivable', type: 'Assets', normalBalance: 'Debit', description: 'Membership dues billed to members but not yet collected', isActive: true },
+  { code: '1310', name: 'Activity Fees Receivable', type: 'Assets', normalBalance: 'Debit', description: 'Activity or event fees earned but not yet collected from participants', isActive: true },
+  { code: '1320', name: 'Due from Officers', type: 'Assets', normalBalance: 'Debit', description: 'Organization collections still held by an accountable officer and not yet remitted', isActive: true },
   { code: '1350', name: 'Due from Other Organization', type: 'Assets', normalBalance: 'Debit', description: 'Amounts owed to the organization by another organization or affiliate', isActive: true },
 
   // Liabilities (Normal: Credit)
@@ -117,7 +121,9 @@ export const INITIAL_ACCOUNTS: Account[] = [
   // to a supplier/vendor) from Due to Officers (owed to a person) in the
   // REVIEW settlement mechanism, which asks a different question for each.
   { code: '2010', name: 'Due to Supplier', type: 'Liabilities', normalBalance: 'Credit', description: 'Outstanding unpaid bills owed directly to a supplier or vendor', isActive: true },
+  { code: '2020', name: 'Merchandise Payable', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid cost of merchandise acquired for resale', isActive: true },
   { code: '2050', name: 'Due to Officers', type: 'Liabilities', normalBalance: 'Credit', description: 'Amounts owed to officers who paid organization expenses out of their own money, pending reimbursement', isActive: true },
+  { code: '2110', name: 'Deferred Activity Fees', type: 'Liabilities', normalBalance: 'Credit', description: 'Activity or event fees collected before the event occurs or while refunds remain due', isActive: true },
   { code: '2200', name: 'Loans & Financial Obligations', type: 'Liabilities', normalBalance: 'Credit', description: 'Loans and other financial obligations payable within a year', isActive: true },
   { code: '2300', name: 'Accrued Liabilities', type: 'Liabilities', normalBalance: 'Credit', description: 'Accrued unpaid expenses such as taxes or interest', isActive: true },
   
@@ -148,6 +154,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
   { code: '4060', name: 'Interest Income', type: 'Revenue', normalBalance: 'Credit', description: 'Interest earned on bank deposits or investments', isActive: true },
   { code: '4070', name: 'Merchandise Sales', type: 'Revenue', normalBalance: 'Credit', description: 'Revenue from selling organization merchandise or apparel', isActive: true },
   { code: '4080', name: 'Ticket Sales', type: 'Revenue', normalBalance: 'Credit', description: 'Revenue from ticket sales to events', isActive: true },
+  { code: '4090', name: 'Activity Fees Revenue', type: 'Revenue', normalBalance: 'Credit', description: 'Activity or event fees recognized when the event occurs or when cancelled fees are non-refundable', isActive: true },
 
   // Expenses (Normal: Debit)
   { code: '5010', name: 'Salaries & Wages', type: 'Expenses', normalBalance: 'Debit', description: 'Staff payroll, social security, and benefits', isActive: true },
@@ -181,6 +188,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
   { code: '5210', name: 'Membership Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Dues and fees the organization itself pays to join another association or federation', isActive: true },
   { code: '5220', name: 'Service Charge', type: 'Expenses', normalBalance: 'Debit', description: 'Third-party service charges (distinct from Bank Charges)', isActive: true },
   { code: '5230', name: 'Donation Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Donations given out by the organization to other causes or organizations', isActive: true },
+  { code: '5240', name: 'Cost of Sales - Merchandise', type: 'Expenses', normalBalance: 'Debit', description: 'Cost carried in inventory for merchandise that has been sold', isActive: true },
 ];
 
 // Sample Projects — fabricated demo programs and budgets, opt-in only via
@@ -397,7 +405,8 @@ const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   { keyword: 'furniture', debitAccountCode: '1650', creditAccountCode: '1010', description: 'Furniture & Fixtures Purchase' },
 
   // --- Inventory (goods for resale) ---------------------------------------------
-  { keyword: 'inventory', debitAccountCode: '1700', creditAccountCode: '1010', description: 'Merchandise Inventory Purchase' },
+  { keyword: 'acquisition of merchandise', debitAccountCode: '1700', creditAccountCode: '1010', description: 'Acquisition of Merchandise for Sale' },
+  { keyword: 'inventory', debitAccountCode: '1700', creditAccountCode: '1010', description: 'Acquisition of Merchandise for Sale' },
 
   // --- Inter-organization loans (working paper row 20) ---------------------------
   // Checked before bare 'loan' below (money the org itself borrows) — this
@@ -599,6 +608,7 @@ interface FinanceContextType {
   customClassificationRules: CustomClassificationRule[];
   closedFiscalYears: ClosingRecord[];
   receiptAttachments: ReceiptAttachment[];
+  activityFeeRecords: ActivityFeeRecord[];
 
   addJournalEntry: (date: string, description: string, project: string, lines: { accountCode: string; debit: number; credit: number }[], eventName?: string, settlesEntryId?: string, transactionMeta?: TransactionMetadata) => JournalEntry;
   reverseJournalEntry: (id: string) => void;
@@ -606,6 +616,8 @@ interface FinanceContextType {
   attachReceiptsToEntry: (entryId: string, receipts: ReceiptAttachmentDraft[]) => void;
   addCustomClassificationRule: (description: string, debitAccountCode: string, creditAccountCode: string) => void;
   updateCustomClassificationRule: (id: string, updated: Partial<Pick<CustomClassificationRule, 'description' | 'debitAccountCode' | 'creditAccountCode' | 'isActive'>>) => void;
+  createActivityFeeRecord: (input: { eventName: string; totalExpected: number; collected: number; eventOccurred: boolean; date: string; reportingPeriod: string }) => ActivityFeeRecord;
+  updateActivityFeeRecord: (id: string, followUp: ActivityFeeFollowUp, date: string, reportingPeriod: string) => ActivityFeeRecord;
   
   addAccount: (account: Account) => void;
   updateAccount: (code: string, updated: Partial<Account>) => void;
@@ -650,11 +662,11 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     // Additive only — never overwrites or removes an account the user
     // already has, so their own edits, custom accounts, and balances
     // (driven by journalEntries, saved separately) are untouched.
-    const saved: Account[] = (JSON.parse(local) as Account[]).map(account =>
-      account.code === '4035' && account.name === 'Contributions Revenue - Restricted'
-        ? { ...account, name: 'Contributions Revenue - Temporarily Restricted' }
-        : account
-    );
+    const saved: Account[] = (JSON.parse(local) as Account[]).map(account => {
+      if (account.code === '4035' && account.name === 'Contributions Revenue - Restricted') return { ...account, name: 'Contributions Revenue - Temporarily Restricted' };
+      if (account.code === '1200' && account.name === 'Receivables') return { ...account, name: 'Accounts Receivable', description: 'Amounts earned or billed but not yet collected from customers, sponsors, or partners' };
+      return account;
+    });
     const savedCodes = new Set(saved.map(a => a.code));
     const missingDefaults = INITIAL_ACCOUNTS.filter(a => !savedCodes.has(a.code));
     return missingDefaults.length > 0
@@ -709,6 +721,11 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     return local ? JSON.parse(local) : [];
   });
 
+  const [activityFeeRecords, setActivityFeeRecords] = useState<ActivityFeeRecord[]>(() => {
+    const local = localStorage.getItem('ss_activity_fees');
+    return local ? JSON.parse(local) : [];
+  });
+
   // Sync to LocalStorage
   useEffect(() => {
     localStorage.setItem('ss_accounts', JSON.stringify(accounts));
@@ -741,6 +758,10 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     localStorage.setItem('ss_custom_rules', JSON.stringify(customClassificationRules));
   }, [customClassificationRules]);
+
+  useEffect(() => {
+    localStorage.setItem('ss_activity_fees', JSON.stringify(activityFeeRecords));
+  }, [activityFeeRecords]);
 
   const logAudit = (action: string, details: string) => {
     const newLog: AuditLog = {
@@ -877,6 +898,50 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     logAudit('Reverse Journal Entry', `Reversed ${entry.reference}: ${entry.description} (via new entry ${reference})`);
   };
 
+  const createActivityFeeRecord = (input: { eventName: string; totalExpected: number; collected: number; eventOccurred: boolean; date: string; reportingPeriod: string }): ActivityFeeRecord => {
+    if (!input.eventName.trim()) throw new Error('Event name is required.');
+    const posting = buildInitialActivityFeePosting(input.totalExpected, input.collected, input.eventOccurred);
+    const now = new Date().toISOString();
+    const nextNumber = activityFeeRecords.reduce((max, record) => {
+      const match = record.reference.match(/AF-(\d+)/);
+      return match ? Math.max(max, Number(match[1])) : max;
+    }, 0) + 1;
+    const entry = posting.lines.length > 0
+      ? addJournalEntry(input.date, `${posting.description}: ${input.eventName.trim()}`, GENERAL_FUND_PROJECT, posting.lines, input.eventName.trim())
+      : undefined;
+    const record: ActivityFeeRecord = {
+      id: `activity-fee-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      reference: `AF-${String(nextNumber).padStart(4, '0')}`,
+      eventName: input.eventName.trim(),
+      totalExpected: input.totalExpected,
+      ...posting.next,
+      createdAt: now,
+      updatedAt: now,
+      history: [{ id: `afh-${Date.now()}`, date: input.date, reportingPeriod: input.reportingPeriod, action: posting.action, amount: posting.amount, ...(entry ? { journalEntryId: entry.id } : {}) }],
+    };
+    setActivityFeeRecords(previous => [...previous, record]);
+    logAudit('Activity Fee Event', `Created ${record.reference} for ${record.eventName}.`);
+    return record;
+  };
+
+  const updateActivityFeeRecord = (id: string, followUp: ActivityFeeFollowUp, date: string, reportingPeriod: string): ActivityFeeRecord => {
+    const current = activityFeeRecords.find(record => record.id === id);
+    if (!current) throw new Error('Activity fee event not found.');
+    const posting = buildActivityFeeFollowUp(current, followUp);
+    const entry = posting.lines.length > 0
+      ? addJournalEntry(date, `${posting.description}: ${current.eventName}`, GENERAL_FUND_PROJECT, posting.lines, current.eventName)
+      : undefined;
+    const updated: ActivityFeeRecord = {
+      ...current,
+      ...posting.next,
+      updatedAt: new Date().toISOString(),
+      history: [...current.history, { id: `afh-${Date.now()}-${Math.floor(Math.random() * 1000)}`, date, reportingPeriod, action: posting.action, amount: posting.amount, ...(entry ? { journalEntryId: entry.id } : {}) }],
+    };
+    setActivityFeeRecords(previous => previous.map(record => record.id === id ? updated : record));
+    logAudit('Update Activity Fee Event', `${current.reference}: ${posting.description}.`);
+    return updated;
+  };
+
   const addCustomClassificationRule = (description: string, debitAccountCode: string, creditAccountCode: string) => {
     const input = { description, debitAccountCode, creditAccountCode };
     const validation = validateCustomTransactionRule(input, accounts, DEFAULT_RULES, customClassificationRules);
@@ -937,8 +1002,10 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       throw new Error(`${fiscalYear} has already been closed.`);
     }
     const blockers = findFiscalCloseBlockers(journalEntries, accounts);
-    if (blockers.length > 0) {
-      throw new Error(`Cannot close the fiscal year while ${blockers.length} transaction${blockers.length === 1 ? '' : 's'} remain incomplete in Review.`);
+    const activityFeeBlockers = activityFeeRecords.filter(isActivityFeeIncomplete);
+    if (blockers.length > 0 || activityFeeBlockers.length > 0) {
+      const totalBlockers = blockers.length + activityFeeBlockers.length;
+      throw new Error(`Cannot close the fiscal year while ${totalBlockers} transaction${totalBlockers === 1 ? '' : 's'} remain incomplete in Review.`);
     }
 
     const entriesToDate = journalEntries.filter(je => je.date <= closingDate);
@@ -1036,7 +1103,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   const clearAllData = () => {
     setJournalEntries([]);
     setReceiptAttachments([]);
-    logAudit('Clear Data', 'All financial journal entries have been cleared.');
+    setActivityFeeRecords([]);
+    logAudit('Clear Data', 'All journal entries, receipt attachments, and activity-fee records have been cleared.');
   };
 
   const resetFinancialWorkspace = () => {
@@ -1053,6 +1121,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     setProjects(DEFAULT_PROJECTS.map(project => ({ ...project })));
     setClosedFiscalYears([]);
     setCustomClassificationRules([]);
+    setActivityFeeRecords([]);
     setAuditLogs([resetLogEntry]);
   };
 
@@ -1061,6 +1130,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     setJournalEntries(INITIAL_JOURNALS);
     setProjects(INITIAL_PROJECTS);
     setReceiptAttachments([]);
+    setActivityFeeRecords([]);
     logAudit('Load Sample Data', 'Reset database to original sample data.');
   };
 
@@ -1079,6 +1149,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     closedFiscalYears,
     receiptAttachments,
     customClassificationRules,
+    activityFeeRecords,
   });
 
   // Replaces the entire workspace with a previously exported backup. The
@@ -1110,6 +1181,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     setClosedFiscalYears(Array.isArray(payload.closedFiscalYears) ? payload.closedFiscalYears : []);
     setReceiptAttachments(Array.isArray(payload.receiptAttachments) ? payload.receiptAttachments : []);
     setCustomClassificationRules(Array.isArray(payload.customClassificationRules) ? payload.customClassificationRules : []);
+    setActivityFeeRecords(Array.isArray(payload.activityFeeRecords) ? payload.activityFeeRecords : []);
   };
 
   // Computations
@@ -1150,12 +1222,15 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       customClassificationRules,
       closedFiscalYears,
       receiptAttachments,
+      activityFeeRecords,
       addJournalEntry,
       reverseJournalEntry,
       closeFiscalYear,
       attachReceiptsToEntry,
       addCustomClassificationRule,
       updateCustomClassificationRule,
+      createActivityFeeRecord,
+      updateActivityFeeRecord,
       addAccount,
       updateAccount,
       addProject,

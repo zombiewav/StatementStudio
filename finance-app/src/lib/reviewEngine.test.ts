@@ -14,11 +14,14 @@ import { Account, JournalEntry } from '../types';
 
 const accounts: Account[] = [
   { code: '1010', name: 'Cash on Hand', type: 'Assets', normalBalance: 'Debit', description: '', isActive: true },
+  { code: '1200', name: 'Accounts Receivable', type: 'Assets', normalBalance: 'Debit', description: '', isActive: true },
+  { code: '1320', name: 'Due from Officers', type: 'Assets', normalBalance: 'Debit', description: '', isActive: true },
   { code: '1250', name: 'Advances to Officers', type: 'Assets', normalBalance: 'Debit', description: '', isActive: true },
   { code: '1260', name: 'Prepaid Expenses', type: 'Assets', normalBalance: 'Debit', description: '', isActive: true },
   { code: '1710', name: 'Donated Food Supplies', type: 'Assets', normalBalance: 'Debit', description: '', isActive: true },
   { code: '1720', name: 'Donated Event Supplies', type: 'Assets', normalBalance: 'Debit', description: '', isActive: true },
   { code: '2010', name: 'Due to Supplier', type: 'Liabilities', normalBalance: 'Credit', description: '', isActive: true },
+  { code: '2020', name: 'Merchandise Payable', type: 'Liabilities', normalBalance: 'Credit', description: '', isActive: true },
   { code: '2050', name: 'Due to Officers', type: 'Liabilities', normalBalance: 'Credit', description: '', isActive: true },
   { code: '5020', name: 'Rent Expense', type: 'Expenses', normalBalance: 'Debit', description: '', isActive: true },
   { code: '5080', name: 'Meals & Refreshments', type: 'Expenses', normalBalance: 'Debit', description: '', isActive: true },
@@ -95,6 +98,27 @@ describe('computePendingObligations', () => {
       }),
     ];
     expect(computePendingObligations(entries, accounts)).toHaveLength(0);
+  });
+
+  it('tracks an unpaid merchandise acquisition until it is settled', () => {
+    const entries = [
+      baseEntry({
+        lines: [
+          { accountCode: '1700', debit: 1000, credit: 0 },
+          { accountCode: '2020', debit: 0, credit: 1000 },
+        ],
+      }),
+    ];
+    const pending = computePendingObligations(entries, accounts);
+    expect(pending).toHaveLength(1);
+    expect(pending[0]).toMatchObject({ accountCode: '2020', remainingAmount: 1000 });
+  });
+
+  it('collects a debit-normal receivable with debit Cash and credit Receivable', () => {
+    expect(buildSimpleSettlementLines('1200', '1010', 400, 'Debit')).toEqual([
+      { accountCode: '1010', debit: 400, credit: 0 },
+      { accountCode: '1200', debit: 0, credit: 400 },
+    ]);
   });
 
   it('restores an obligation when its settlement is reversed', () => {
