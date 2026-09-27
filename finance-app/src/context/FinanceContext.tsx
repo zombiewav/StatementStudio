@@ -492,7 +492,7 @@ const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   // (Membership Dues Receivable, 1300) rather than hitting revenue again —
   // the revenue was already recognized in full when the dues were
   // originally billed (see 'current school year' below).
-  { keyword: 'previous school year', debitAccountCode: '1010', creditAccountCode: '1300', description: "Collection of Previous School Year's Membership Fees Still Receivable" },
+  { keyword: 'previous school year', debitAccountCode: '1010', creditAccountCode: '1300', description: 'Collection of Unpaid Membership Fees from Previous Period (e.g. Previous Semester)' },
   // "Current school year" collection is the working paper's own accrual-
   // completion example (row 3-4): the cash-collected portion posted here
   // is only half the story — requiresAccrualCompletion drives the second
@@ -545,10 +545,9 @@ const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   // 'national membership' (matching the paper's own real wording, "Paid
   // national membership fee") rather than bare 'membership fee': the org's
   // own members paying dues IN also gets naturally described as a
-  // "membership fee" (see the revenue-side 'membership fee' keyword below),
-  // and "national membership fee" contains that phrase as a substring — so
-  // the more specific keyword has to be checked first, same ordering
-  // principle as 'donation expense'/'service charge' above.
+  // "membership fee", so the more specific keyword avoids ever colliding
+  // with a revenue-side membership rule, same ordering principle as
+  // 'donation expense'/'service charge' above.
   { keyword: 'national membership', debitAccountCode: '5210', creditAccountCode: '1010', description: 'Membership Fee Paid to Another Association' },
   { keyword: 'service charge', debitAccountCode: '5220', creditAccountCode: '1010', description: 'Service Charge Payment' },
   // Same collision, same fix, for "Paid for GCash Service Fee" — the
@@ -572,8 +571,12 @@ const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   // this bare 'loan' is money the org itself borrows, the opposite
   // direction.
   { keyword: 'loan', debitAccountCode: '1010', creditAccountCode: '2200', description: 'Bank Loan Capital Funding' },
+  // 'Membership Fees Collected' (keyword 'membership fee') used to exist as
+  // a second entry here, identical in effect (Dr 1010 / Cr 4040) to this
+  // one — a pure duplicate of this ad-hoc collection type, and confusing
+  // next to the two structured Membership Fees schedule types (current /
+  // previous period). Removed per client feedback; keep just this one.
   { keyword: 'membership dues', debitAccountCode: '1010', creditAccountCode: '4040', description: 'Membership Dues Collected' },
-  { keyword: 'membership fee', debitAccountCode: '1010', creditAccountCode: '4040', description: 'Membership Fees Collected' },
   { keyword: 'other income', debitAccountCode: '1010', creditAccountCode: '4050', description: 'Other Income Received' },
   { keyword: 'interest', debitAccountCode: '1010', creditAccountCode: '4060', description: 'Interest Income Received' },
   { keyword: 'sale of merchandise', debitAccountCode: '1010', creditAccountCode: '4070', description: 'Sale of Merchandise' },

@@ -237,10 +237,10 @@ export function Transactions(): React.ReactElement {
       setCreditCode(match.creditAccountCode);
       setIsSmartMatched(true);
       setClassificationPreview(match);
-      // The Custom Transaction Name and Receipt fields are hidden for this
-      // type (see their render conditions below), so leftover values from a
-      // previously selected type must not silently carry into this entry.
-      if (match.requiresAccrualCompletion) {
+      // The Custom Transaction Name and Receipt fields are hidden for these
+      // types (see their render conditions below), so leftover values from
+      // a previously selected type must not silently carry into this entry.
+      if (match.requiresAccrualCompletion || (match.debitAccountCode === '1010' && match.creditAccountCode === MEMBERSHIP_DUES_RECEIVABLE_CODE)) {
         setCustomName('');
         setPendingReceipts([]);
       }
@@ -932,7 +932,7 @@ export function Transactions(): React.ReactElement {
               )}
             </div>
 
-            {!requiresAccrualCompletion && (
+            {!requiresAccrualCompletion && !isPriorMembershipCollection && (
               <div className="sm:col-span-2">
                 <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Custom Transaction Name <span className="normal-case text-slate-400">(optional)</span></label>
                 <input
@@ -1186,7 +1186,7 @@ export function Transactions(): React.ReactElement {
               <div className="sm:col-span-2 space-y-3 rounded-xl border border-indigo-200 bg-indigo-50 p-3.5 dark:border-indigo-500/20 dark:bg-indigo-500/10">
                 <div>
                   <h4 className="flex items-center gap-2 text-xs font-black text-violet-700 dark:text-violet-300">Collection of unpaid membership fees <NewFeatureBadge /></h4>
-                  <p className="mt-1 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Use this for membership fees billed in an earlier period that remain in Membership Dues Receivable.</p>
+                  <p className="mt-1 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Use this for membership fees that have not yet been paid (e.g. last semester).</p>
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold text-indigo-900 dark:text-indigo-200">Date 1 / default collection date</label>
@@ -1202,6 +1202,7 @@ export function Transactions(): React.ReactElement {
                   addLabel="Add collection"
                   allowBlankDates
                   blankDateHelp={`A blank collection date uses Date 1 (${date || 'transaction date'}).`}
+                  allowMultiple={false}
                 />
                 <div className="rounded-lg bg-white/80 p-3 text-[10px] dark:bg-slate-900/60"><span className="font-bold text-slate-500">Receivable remaining after these collections</span><p className="mt-1 font-black text-indigo-800 dark:text-indigo-200">{formatCurrency(Math.max(0, membershipReceivableOutstanding - membershipCollectionTotal))}</p></div>
                 {membershipPostingResult.error && <p className="text-[10px] font-bold text-rose-700 dark:text-rose-300">{membershipPostingResult.error}</p>}
@@ -1363,7 +1364,7 @@ export function Transactions(): React.ReactElement {
               />
             </div>}
 
-            {!requiresAccrualCompletion && (
+            {!requiresAccrualCompletion && !isPriorMembershipCollection && (
               <div className="sm:col-span-2 rounded-xl border border-dashed border-slate-300 bg-slate-50/70 p-3.5 dark:border-slate-700 dark:bg-slate-950/30">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
