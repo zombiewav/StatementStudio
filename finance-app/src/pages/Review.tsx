@@ -427,8 +427,14 @@ function ObligationRow({
   );
 }
 
-export function Review(): React.ReactElement {
-  const { journalEntries, accounts, activityFeeRecords, reverseJournalEntry, addJournalEntry, formatCurrency } = useFinance();
+interface ReviewProps {
+  // Called when the user clicks "Continue" on a draft — App.tsx switches
+  // the active page to Transactions and loads that draft into the form.
+  onContinueDraft: (draftId: string) => void;
+}
+
+export function Review({ onContinueDraft }: ReviewProps): React.ReactElement {
+  const { journalEntries, accounts, activityFeeRecords, draftTransactions, deleteDraftTransaction, reverseJournalEntry, addJournalEntry, formatCurrency } = useFinance();
   const pendingObligations = useMemo(() => computePendingObligations(journalEntries, accounts), [journalEntries, accounts]);
   const reviewStates = useMemo(() => computeTransactionReviewStates(journalEntries, accounts), [journalEntries, accounts]);
   const [statusFilter, setStatusFilter] = useState<'all' | ReviewStatus>('all');
@@ -501,6 +507,41 @@ export function Review(): React.ReactElement {
           ? `${incompleteCount} transaction${incompleteCount === 1 ? '' : 's'} must be completed before Financial Statements can be finalized.`
           : 'All recorded transactions are complete and ready for Financial Statements.'}
       </div>
+
+      {draftTransactions.length > 0 && (
+        <section className="space-y-3">
+          <div>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Draft Transactions</h3>
+            <p className="mt-0.5 text-[10px] font-medium text-slate-500 dark:text-slate-400">Saved but not yet posted — nothing here has touched the books. Continue to finish and post, or discard.</p>
+          </div>
+          <div className="space-y-2">
+            {draftTransactions.map(draft => (
+              <div key={draft.id} className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3.5 dark:border-amber-500/30 dark:bg-amber-500/10 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-bold text-slate-900 dark:text-slate-100">{draft.label}</p>
+                  <p className="mt-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">Saved {new Date(draft.savedAt).toLocaleString()}</p>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onContinueDraft(draft.id)}
+                    className="rounded-lg bg-blue-700 px-3 py-1.5 text-[10px] font-bold text-white transition-colors hover:bg-blue-800 dark:bg-blue-600 dark:hover:bg-blue-500"
+                  >
+                    Continue
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteDraftTransaction(draft.id)}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-bold text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+                  >
+                    Discard
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <ActivityFeeReview />
 

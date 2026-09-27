@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   PlusCircle,
   Sparkles,
@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { useFinance, PurposeOption } from '../context/FinanceContext';
-import { JournalLine, ReceiptAttachmentDraft } from '../types';
+import { JournalLine, ReceiptAttachmentDraft, TransactionDraft } from '../types';
 import { FUNDING_SOURCE_OPTIONS, buildJournalLines, buildCompoundJournalLines, projectJournalLineImpacts, computeStatementImpact } from '../lib/journalEngine';
 import { PREPAID_EXPENSE_CODE } from '../lib/reviewEngine';
 import { formatReceiptSize, prepareReceiptAttachment, validateReceiptCount } from '../lib/receiptAttachments';
@@ -53,7 +53,57 @@ const MEMBERSHIP_DUES_RECEIVABLE_CODE = '1300';
 const MERCHANDISE_ITEM_OPTIONS = ['Lanyard', 'Pins', 'Tote Bag', 'Mugs', 'Shirt', 'Others'] as const;
 const sumDatedAmounts = (rows: DatedAmountInputRow[]): number => rows.reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
 
-export function Transactions(): React.ReactElement {
+// The generic bag saved as a draft's TransactionDraft.formState — mirrors
+// every field of this form that's worth resuming later, except Activity
+// Fees (that category's fields live entirely inside the separate
+// ActivityFeeEntry component and aren't lifted up here, so drafts aren't
+// offered for it yet).
+interface TransactionFormSnapshot {
+  txName: string;
+  selectedCategory: TransactionCategoryId | null;
+  customName: string;
+  description: string;
+  amount: number;
+  date: string;
+  purposeIndex: number;
+  pendingReceipts: ReceiptAttachmentDraft[];
+  fundingSourceId: string;
+  counterpartyName: string;
+  restrictionAnswer: '' | 'no' | 'yes';
+  samePeriodAnswer: '' | 'yes' | 'no';
+  membershipCollections: DatedAmountInputRow[];
+  notYetUsedAmount: string;
+  expectedUsePeriod: 'within' | 'next';
+  merchandiseCost: string;
+  merchandiseItem: string;
+  merchandiseOtherTitle: string;
+  merchandiseQuantity: string;
+  merchandiseBatch: string;
+  merchandisePrepaymentEntryId: string;
+  merchandisePaymentMethod: MerchandisePaymentMethod;
+  merchandiseOrganizationPayments: DatedAmountInputRow[];
+  merchandiseOfficerPayments: DatedAmountInputRow[];
+  merchandiseAdvancePayments: DatedAmountInputRow[];
+  merchandiseReimbursements: DatedAmountInputRow[];
+  merchandiseSaleBatchId: string;
+  merchandiseQuantitySold: string;
+  merchandiseSellingPrice: string;
+  merchandiseCollectionMethod: MerchandiseCollectionMethod;
+  merchandiseCollections: DatedAmountInputRow[];
+  merchandiseRemittances: DatedAmountInputRow[];
+  merchandiseCollectionOfficer: string;
+}
+
+interface TransactionsProps {
+  // The draft to load into the form, or null/undefined for a fresh entry.
+  // Owned by App.tsx (Review's "Continue" sets it, this component consumes
+  // it once via a ref guard, then calls onDraftResumed to clear it).
+  draftToResume?: TransactionDraft | null;
+  onDraftResumed?: () => void;
+  onDraftSaved?: () => void;
+}
+
+export function Transactions({ draftToResume = null, onDraftResumed, onDraftSaved }: TransactionsProps = {}): React.ReactElement {
   const {
     accounts,
     journalEntries,
@@ -65,7 +115,9 @@ export function Transactions(): React.ReactElement {
     isRuleAvailable,
     accountBalances,
     formatCurrency,
-    settings
+    settings,
+    saveDraftTransaction,
+    deleteDraftTransaction,
   } = useFinance();
 
   // Form State
@@ -153,6 +205,17 @@ export function Transactions(): React.ReactElement {
   // Event-Related.
   const [purposeIndex, setPurposeIndex] = useState(0);
 
+  // Non-null while this form is resuming/re-saving a specific draft rather
+  // than starting a fresh entry — "Save as Draft" updates this same draft
+  // instead of creating a duplicate, and a successful Post deletes it.
+  const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
+  // Set for exactly one effect pass right after a draft is hydrated, so the
+  // classification-match effect below (keyed on txName, which hydration
+  // also sets) doesn't immediately wipe the just-restored fields back to
+  // their blank defaults.
+  const justHydratedDraftRef = useRef(false);
+  const appliedDraftIdRef = useRef<string | null>(null);
+
   const [classificationPreview, setClassificationPreview] = useState<{
     debitAccountCode: string;
     creditAccountCode: string;
@@ -231,6 +294,14 @@ export function Transactions(): React.ReactElement {
 
   // Trigger classification suggestion on Name input change
   useEffect(() => {
+    if (justHydratedDraftRef.current) {
+      // A draft-resume effect just set every field directly (including
+      // txName, which is this effect's own dependency) — skip this one
+      // pass so its destructive "clear everything else" branch below
+      // doesn't immediately undo what was just restored.
+      justHydratedDraftRef.current = false;
+      return;
+    }
     const match = selectedTransactionType ? suggestTransactionClassification(selectedTransactionType) : null;
     if (match) {
       setDebitCode(match.debitAccountCode);
@@ -319,6 +390,68 @@ export function Transactions(): React.ReactElement {
       setMerchandiseCollectionOfficer('');
     }
   }, [txName]);
+
+  // Resume a draft: applies every saved field in one shot, once per draft
+  // id. Recomputes debitCode/creditCode/classificationPreview fresh from
+  // suggestTransactionClassification (rather than trusting stale saved
+  // values) so a rule renamed or resemestered since the draft was saved is
+  // reflected correctly; every other field is restored as saved.
+  useEffect(() => {
+    if (!draftToResume || appliedDraftIdRef.current === draftToResume.id) return;
+    appliedDraftIdRef.current = draftToResume.id;
+    justHydratedDraftRef.current = true;
+
+    const snapshot = draftToResume.formState as Partial<TransactionFormSnapshot>;
+    const fallbackDate = snapshot.date || '';
+    setEditingDraftId(draftToResume.id);
+    setSelectedCategory((draftToResume.category as TransactionCategoryId) || null);
+    setTxName(snapshot.txName || '');
+    setCustomName(snapshot.customName || '');
+    setDescription(snapshot.description || '');
+    setAmount(snapshot.amount || 0);
+    setDate(fallbackDate);
+    setPurposeIndex(snapshot.purposeIndex || 0);
+    setPendingReceipts(snapshot.pendingReceipts || []);
+    setFundingSourceId(snapshot.fundingSourceId || FUNDING_SOURCE_OPTIONS[0].id);
+    setCounterpartyName(snapshot.counterpartyName || '');
+    setRestrictionAnswer(snapshot.restrictionAnswer || '');
+    setSamePeriodAnswer(snapshot.samePeriodAnswer || '');
+    setMembershipCollections(snapshot.membershipCollections?.length ? snapshot.membershipCollections : [{ id: `membership-collection-${Date.now()}`, date: '', amount: '' }]);
+    setNotYetUsedAmount(snapshot.notYetUsedAmount || '');
+    setExpectedUsePeriod(snapshot.expectedUsePeriod || 'within');
+    setMerchandiseCost(snapshot.merchandiseCost || '');
+    setMerchandiseItem(snapshot.merchandiseItem || '');
+    setMerchandiseOtherTitle(snapshot.merchandiseOtherTitle || '');
+    setMerchandiseQuantity(snapshot.merchandiseQuantity || '');
+    setMerchandiseBatch(snapshot.merchandiseBatch || '');
+    setMerchandisePrepaymentEntryId(snapshot.merchandisePrepaymentEntryId || '');
+    setMerchandisePaymentMethod(snapshot.merchandisePaymentMethod || 'organization-funds');
+    setMerchandiseOrganizationPayments(snapshot.merchandiseOrganizationPayments?.length ? snapshot.merchandiseOrganizationPayments : [{ id: `org-payment-${Date.now()}`, date: fallbackDate, amount: '' }]);
+    setMerchandiseOfficerPayments(snapshot.merchandiseOfficerPayments?.length ? snapshot.merchandiseOfficerPayments : [{ id: `officer-payment-${Date.now()}`, date: fallbackDate, amount: '' }]);
+    setMerchandiseAdvancePayments(snapshot.merchandiseAdvancePayments?.length ? snapshot.merchandiseAdvancePayments : [{ id: `advance-payment-${Date.now()}`, date: fallbackDate, amount: '' }]);
+    setMerchandiseReimbursements(snapshot.merchandiseReimbursements?.length ? snapshot.merchandiseReimbursements : [{ id: `reimbursement-${Date.now()}`, date: fallbackDate, amount: '' }]);
+    setMerchandiseSaleBatchId(snapshot.merchandiseSaleBatchId || '');
+    setMerchandiseQuantitySold(snapshot.merchandiseQuantitySold || '');
+    setMerchandiseSellingPrice(snapshot.merchandiseSellingPrice || '');
+    setMerchandiseCollectionMethod(snapshot.merchandiseCollectionMethod || 'not-yet-collected');
+    setMerchandiseCollections(snapshot.merchandiseCollections?.length ? snapshot.merchandiseCollections : [{ id: `collection-${Date.now()}`, date: fallbackDate, amount: '' }]);
+    setMerchandiseRemittances(snapshot.merchandiseRemittances?.length ? snapshot.merchandiseRemittances : [{ id: `remittance-${Date.now()}`, date: fallbackDate, amount: '' }]);
+    setMerchandiseCollectionOfficer(snapshot.merchandiseCollectionOfficer || '');
+
+    const match = snapshot.txName ? suggestTransactionClassification(snapshot.txName) : null;
+    if (match) {
+      setDebitCode(match.debitAccountCode);
+      setCreditCode(match.creditAccountCode);
+      setIsSmartMatched(true);
+      setClassificationPreview(match);
+    } else {
+      setDebitCode('');
+      setCreditCode('');
+      setIsSmartMatched(false);
+      setClassificationPreview(null);
+    }
+    onDraftResumed?.();
+  }, [draftToResume]);
 
   // When the purpose is changed by hand, apply its description. It never
   // touches the debit/credit accounts — the keyword match already fixed
@@ -497,6 +630,75 @@ export function Transactions(): React.ReactElement {
     } finally {
       setIsProcessingReceipts(false);
     }
+  };
+
+  const buildFormSnapshot = (): TransactionFormSnapshot => ({
+    txName,
+    selectedCategory,
+    customName,
+    description,
+    amount,
+    date,
+    purposeIndex,
+    pendingReceipts,
+    fundingSourceId,
+    counterpartyName,
+    restrictionAnswer,
+    samePeriodAnswer,
+    membershipCollections,
+    notYetUsedAmount,
+    expectedUsePeriod,
+    merchandiseCost,
+    merchandiseItem,
+    merchandiseOtherTitle,
+    merchandiseQuantity,
+    merchandiseBatch,
+    merchandisePrepaymentEntryId,
+    merchandisePaymentMethod,
+    merchandiseOrganizationPayments,
+    merchandiseOfficerPayments,
+    merchandiseAdvancePayments,
+    merchandiseReimbursements,
+    merchandiseSaleBatchId,
+    merchandiseQuantitySold,
+    merchandiseSellingPrice,
+    merchandiseCollectionMethod,
+    merchandiseCollections,
+    merchandiseRemittances,
+    merchandiseCollectionOfficer,
+  });
+
+  const handleSaveDraft = () => {
+    setErrorMessage('');
+    setSuccessMessage('');
+    if (!selectedCategory) {
+      setErrorMessage('Choose a transaction category before saving a draft.');
+      return;
+    }
+    if (selectedCategory === 'activity-fees') {
+      setErrorMessage('Drafts aren’t available yet for Activity Fees — please complete that form in one sitting for now.');
+      return;
+    }
+    if (!txName.trim() && amount <= 0) {
+      setErrorMessage('Enter at least a transaction type or an amount before saving as a draft.');
+      return;
+    }
+    const label = customName.trim() || txName.trim() || description.trim() || 'Untitled draft';
+    const id = saveDraftTransaction({
+      id: editingDraftId || undefined,
+      category: selectedCategory,
+      label,
+      formState: buildFormSnapshot() as unknown as Record<string, unknown>,
+    });
+    setEditingDraftId(id);
+    onDraftSaved?.();
+  };
+
+  const handleDiscardDraft = () => {
+    if (!editingDraftId) return;
+    deleteDraftTransaction(editingDraftId);
+    setEditingDraftId(null);
+    appliedDraftIdRef.current = null;
   };
 
   const handlePost = (e: React.FormEvent) => {
@@ -699,6 +901,12 @@ export function Transactions(): React.ReactElement {
       );
       attachReceiptsToEntry(je.id, pendingReceipts);
 
+      if (editingDraftId) {
+        deleteDraftTransaction(editingDraftId);
+        setEditingDraftId(null);
+        appliedDraftIdRef.current = null;
+      }
+
       // Trigger Confetti micro-animation!
       confetti({
         particleCount: 100,
@@ -763,6 +971,19 @@ export function Transactions(): React.ReactElement {
         <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 font-sans">Smart Transaction Entry</h2>
         <p className="text-xs text-slate-700 dark:text-slate-400 mt-1 font-medium">Auto-classify transaction fields instantly using our rule-based accounting engine.</p>
       </div>
+
+      {editingDraftId && (
+        <div className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-[11px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300 sm:flex-row sm:items-center sm:justify-between">
+          <span>Continuing a saved draft — missing details can still be completed below, then post it for real.</span>
+          <button
+            type="button"
+            onClick={handleDiscardDraft}
+            className="shrink-0 rounded-lg border border-amber-300 bg-white/70 px-3 py-1.5 text-[10px] font-bold text-amber-800 transition-colors hover:bg-white dark:border-amber-500/40 dark:bg-slate-900/40 dark:text-amber-300 dark:hover:bg-slate-900"
+          >
+            Discard this draft
+          </button>
+        </div>
+      )}
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-5">
         <div className="mb-4">
@@ -1427,13 +1648,22 @@ export function Transactions(): React.ReactElement {
 
           </div>
 
-          <button
-            type="submit"
-            disabled={isProcessingReceipts}
-            className="w-full bg-blue-700 hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-600 dark:hover:bg-blue-500 text-white font-bold text-xs p-3.5 rounded-xl transition-all shadow-md shadow-blue-900/10 cursor-pointer text-center mt-2 flex items-center justify-center gap-2"
-          >
-            <ArrowRightLeft className="w-4 h-4" /> Post Double-Entry Transaction
-          </button>
+          <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+            <button
+              type="submit"
+              disabled={isProcessingReceipts}
+              className="flex-1 bg-blue-700 hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-600 dark:hover:bg-blue-500 text-white font-bold text-xs p-3.5 rounded-xl transition-all shadow-md shadow-blue-900/10 cursor-pointer text-center flex items-center justify-center gap-2"
+            >
+              <ArrowRightLeft className="w-4 h-4" /> Post Double-Entry Transaction
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveDraft}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-3.5 text-xs font-bold text-slate-700 transition-all hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+            >
+              Save as Draft
+            </button>
+          </div>
         </form>
 
         {/* Right Column: Live Financial Preview */}

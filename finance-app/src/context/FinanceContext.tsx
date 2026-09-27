@@ -14,7 +14,8 @@ import {
   CustomClassificationRule,
   ActivityFeeRecord,
   DatedAmountRecord,
-  JournalLine
+  JournalLine,
+  TransactionDraft
 } from '../types';
 import { validateBackupPayload } from '../lib/backupValidation';
 import { computeAccountBalances, computeTypeTotals } from '../lib/accountTotals';
@@ -642,6 +643,7 @@ interface FinanceContextType {
   closedFiscalYears: ClosingRecord[];
   receiptAttachments: ReceiptAttachment[];
   activityFeeRecords: ActivityFeeRecord[];
+  draftTransactions: TransactionDraft[];
 
   addJournalEntry: (date: string, description: string, project: string, lines: JournalLine[], eventName?: string, settlesEntryId?: string, transactionMeta?: TransactionMetadata) => JournalEntry;
   reverseJournalEntry: (id: string) => void;
@@ -653,7 +655,13 @@ interface FinanceContextType {
   recognizeScheduledActivityFee: (id: string, totalExpected: number, eventDate: string, collections: DatedAmountRecord[], reportingPeriod: string) => ActivityFeeRecord;
   collectActivityFeeReceivable: (id: string, collections: DatedAmountRecord[], reportingPeriod: string) => ActivityFeeRecord;
   updateActivityFeeRecord: (id: string, followUp: ActivityFeeFollowUp, date: string, reportingPeriod: string) => ActivityFeeRecord;
-  
+  // Saves (or, when an id already exists, overwrites) an in-progress
+  // Transactions form as a draft — no ledger effect until it's actually
+  // posted. Returns the draft's id so the caller can keep updating the
+  // same draft on subsequent saves instead of creating duplicates.
+  saveDraftTransaction: (draft: { id?: string; category: string | null; label: string; formState: Record<string, unknown> }) => string;
+  deleteDraftTransaction: (id: string) => void;
+
   addAccount: (account: Account) => void;
   updateAccount: (code: string, updated: Partial<Account>) => void;
   
@@ -768,6 +776,11 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     return local ? JSON.parse(local) : [];
   });
 
+  const [draftTransactions, setDraftTransactions] = useState<TransactionDraft[]>(() => {
+    const local = localStorage.getItem('ss_drafts');
+    return local ? JSON.parse(local) : [];
+  });
+
   // Sync to LocalStorage
   useEffect(() => {
     localStorage.setItem('ss_accounts', JSON.stringify(accounts));
@@ -804,6 +817,10 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     localStorage.setItem('ss_activity_fees', JSON.stringify(activityFeeRecords));
   }, [activityFeeRecords]);
+
+  useEffect(() => {
+    localStorage.setItem('ss_drafts', JSON.stringify(draftTransactions));
+  }, [draftTransactions]);
 
   const logAudit = (action: string, details: string) => {
     const newLog: AuditLog = {
@@ -1184,6 +1201,31 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     setAuditLogs(prev => [newLog, ...prev].slice(0, 100));
   };
 
+  const saveDraftTransaction = (draft: { id?: string; category: string | null; label: string; formState: Record<string, unknown> }): string => {
+    const id = draft.id || `draft-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const savedAt = new Date().toISOString();
+    setDraftTransactions(prev => {
+      const next: TransactionDraft = { id, savedAt, category: draft.category, label: draft.label, formState: draft.formState };
+      const existingIndex = prev.findIndex(d => d.id === id);
+      if (existingIndex >= 0) {
+        const copy = [...prev];
+        copy[existingIndex] = next;
+        return copy;
+      }
+      return [next, ...prev];
+    });
+    logAudit('Save Draft Transaction', `Saved "${draft.label}" as a draft to finish later in Review.`);
+    return id;
+  };
+
+  const deleteDraftTransaction = (id: string) => {
+    setDraftTransactions(prev => {
+      const existing = prev.find(d => d.id === id);
+      if (existing) logAudit('Discard Draft Transaction', `Discarded draft "${existing.label}".`);
+      return prev.filter(d => d.id !== id);
+    });
+  };
+
   const formatCurrency = (val: number): string => {
     const formatted = new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -1206,6 +1248,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     setJournalEntries([]);
     setReceiptAttachments([]);
     setActivityFeeRecords([]);
+    setDraftTransactions([]);
     logAudit('Clear Data', 'All journal entries, receipt attachments, and activity-fee records have been cleared.');
   };
 
@@ -1224,6 +1267,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     setClosedFiscalYears([]);
     setCustomClassificationRules([]);
     setActivityFeeRecords([]);
+    setDraftTransactions([]);
     setAuditLogs([resetLogEntry]);
   };
 
@@ -1233,6 +1277,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     setProjects(INITIAL_PROJECTS);
     setReceiptAttachments([]);
     setActivityFeeRecords([]);
+    setDraftTransactions([]);
     logAudit('Load Sample Data', 'Reset database to original sample data.');
   };
 
@@ -1252,6 +1297,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     receiptAttachments,
     customClassificationRules,
     activityFeeRecords,
+    draftTransactions,
   });
 
   // Replaces the entire workspace with a previously exported backup. The
@@ -1284,6 +1330,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     setReceiptAttachments(Array.isArray(payload.receiptAttachments) ? payload.receiptAttachments : []);
     setCustomClassificationRules(Array.isArray(payload.customClassificationRules) ? payload.customClassificationRules : []);
     setActivityFeeRecords(Array.isArray(payload.activityFeeRecords) ? payload.activityFeeRecords : []);
+    setDraftTransactions(Array.isArray(payload.draftTransactions) ? payload.draftTransactions : []);
   };
 
   // Computations
@@ -1325,6 +1372,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       closedFiscalYears,
       receiptAttachments,
       activityFeeRecords,
+      draftTransactions,
       addJournalEntry,
       reverseJournalEntry,
       closeFiscalYear,
@@ -1335,6 +1383,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       recognizeScheduledActivityFee,
       collectActivityFeeReceivable,
       updateActivityFeeRecord,
+      saveDraftTransaction,
+      deleteDraftTransaction,
       addAccount,
       updateAccount,
       addProject,

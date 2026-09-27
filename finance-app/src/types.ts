@@ -200,6 +200,22 @@ export interface ActivityFeeHistoryItem {
   journalEntryId?: string;
 }
 
+// A transaction the user started but hasn't finished/posted yet — saved from
+// the Transactions form via "Save as Draft" whenever required data is still
+// missing, then resumed and finalized from Review. `formState` is a generic
+// bag rather than a strict shape here (types.ts otherwise depends on
+// nothing outside itself) — Transactions.tsx owns the real shape and casts
+// on read. Never touches the ledger/account balances until actually posted.
+export interface TransactionDraft {
+  id: string;
+  savedAt: string;
+  // Mirrors TransactionCategoryId from lib/transactionCategories.ts, kept
+  // as a plain string here for the same dependency-free reason as above.
+  category: string | null;
+  label: string;
+  formState: Record<string, unknown>;
+}
+
 export interface ActivityFeeRecord {
   id: string;
   reference: string;
@@ -240,4 +256,7 @@ export interface BackupPayload {
   receiptAttachments?: ReceiptAttachment[];
   customClassificationRules?: CustomClassificationRule[];
   activityFeeRecords?: ActivityFeeRecord[];
+  // Optional for compatibility with backups created before draft
+  // transactions existed.
+  draftTransactions?: TransactionDraft[];
 }

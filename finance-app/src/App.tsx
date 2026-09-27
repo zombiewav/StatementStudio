@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Navigate, Route, Routes, useNavigate } from 'react-router';
-import { FinanceProvider } from './context/FinanceContext';
+import { FinanceProvider, useFinance } from './context/FinanceContext';
 import { Sidebar } from './components/Sidebar';
 import { Navbar } from './components/Navbar';
 import { Dashboard } from './pages/Dashboard';
@@ -24,17 +24,29 @@ function DashboardLayout() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
+  // Set from Review's "Continue" on a draft — looked up fresh each render
+  // so Transactions always sees the current saved state, then cleared once
+  // Transactions has consumed it.
+  const [resumeDraftId, setResumeDraftId] = useState<string | null>(null);
+  const { draftTransactions } = useFinance();
+  const draftToResume = resumeDraftId ? draftTransactions.find(d => d.id === resumeDraftId) || null : null;
 
   const renderActivePage = () => {
     switch (activePage) {
       case 'dashboard':
         return <Dashboard />;
       case 'transactions':
-        return <Transactions />;
+        return (
+          <Transactions
+            draftToResume={draftToResume}
+            onDraftResumed={() => setResumeDraftId(null)}
+            onDraftSaved={() => setActivePage('review')}
+          />
+        );
       case 'transaction-history':
         return <TransactionHistory />;
       case 'review':
-        return <Review />;
+        return <Review onContinueDraft={(draftId) => { setResumeDraftId(draftId); setActivePage('transactions'); }} />;
       case 'journals':
         return <JournalEntries />;
       case 'ledger':
