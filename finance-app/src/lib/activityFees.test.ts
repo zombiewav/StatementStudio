@@ -34,6 +34,24 @@ describe('final activity fee workflow', () => {
     schedule.postings.forEach(posting => balanced(posting.lines));
   });
 
+  it('defaults a blank collection date to the event date for a same-day collection', () => {
+    const schedule = buildInitialActivityFeeSchedule({
+      eventOccursThisPeriod: true,
+      eventDate: '2026-09-15',
+      totalExpected: 1000,
+      collections: [{ date: '', amount: 300 }],
+    });
+    expect(schedule.postings).toHaveLength(1);
+    expect(schedule.postings[0].date).toBe('2026-09-15');
+    const lines = schedule.postings[0].lines;
+    expect(lines).toContainEqual(expect.objectContaining({ accountCode: '1010', debit: 300, date: '2026-09-15' }));
+    balanced(lines);
+  });
+
+  it('still requires a date for a future-event collection, with no event date yet to default to', () => {
+    expect(() => buildInitialActivityFeeSchedule({ eventOccursThisPeriod: false, collections: [{ date: '', amount: 100 }] })).toThrow('Each activity-fee collection needs a date.');
+  });
+
   it('recognizes an event with a full receivable when nothing has been collected', () => {
     const schedule = buildInitialActivityFeeSchedule({ eventOccursThisPeriod: true, eventDate: '2026-09-15', totalExpected: 1000, collections: [] });
     expect(schedule.next).toMatchObject({ receivableBalance: 1000, status: 'receivable' });
@@ -44,6 +62,12 @@ describe('final activity fee workflow', () => {
     const schedule = buildScheduledActivityFeeRecognition(record(), 1000, '2027-01-10', [{ date: '2027-01-10', amount: 100 }]);
     expect(schedule.next).toMatchObject({ totalExpected: 1000, totalCollected: 500, receivableBalance: 500, deferredBalance: 0, status: 'receivable' });
     balanced(schedule.postings[0].lines);
+  });
+
+  it('also defaults a blank additional-collection date to the event date when a scheduled event is finally held', () => {
+    const schedule = buildScheduledActivityFeeRecognition(record(), 1000, '2027-01-10', [{ date: '', amount: 100 }]);
+    expect(schedule.next.totalCollected).toBe(500);
+    expect(schedule.postings[0].date).toBe('2027-01-10');
   });
 
   it('records each receivable collection by date and enforces the remaining balance', () => {

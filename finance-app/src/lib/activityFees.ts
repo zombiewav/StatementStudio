@@ -51,13 +51,20 @@ function clean(lines: JournalLine[]): JournalLine[] {
   return lines.filter(line => line.debit > 0 || line.credit > 0);
 }
 
-function validateCollections(collections: DatedAmountRecord[]): DatedAmountRecord[] {
+// `defaultDate` lets a blank collection date fall back to the event date
+// (recognition schedule, where one is already known and required) instead
+// of being rejected — same-day collections are the common case, so forcing
+// a redundant date entry there is pure friction. Left undefined (the
+// future-event schedule, with no event date yet to fall back to), a blank
+// date is still an error — there's nothing sensible to default it to.
+function validateCollections(collections: DatedAmountRecord[], defaultDate?: string): DatedAmountRecord[] {
   return collections
     .filter(collection => collection.amount > 0)
     .map(collection => {
-      if (!collection.date) throw new Error('Each activity-fee collection needs a date.');
+      const date = collection.date || defaultDate;
+      if (!date) throw new Error('Each activity-fee collection needs a date.');
       positive(collection.amount, 'Collection amount');
-      return collection;
+      return { ...collection, date };
     })
     .sort((a, b) => a.date.localeCompare(b.date));
 }
@@ -83,7 +90,7 @@ function buildRecognitionSchedule(existingUnearned: number, totalExpected: numbe
   positive(totalExpected, 'Total activity fees');
   positive(existingUnearned, 'Activity fees collected in previous periods', true);
   if (!eventDate) throw new Error('Event date is required.');
-  const dated = validateCollections(collections);
+  const dated = validateCollections(collections, eventDate);
   const currentCollected = sum(dated);
   if (existingUnearned + currentCollected > totalExpected) throw new Error('Previous and current collections cannot exceed the total activity fees for the event.');
 
@@ -119,21 +126,24 @@ function buildRecognitionSchedule(existingUnearned: number, totalExpected: numbe
 }
 
 export function buildInitialActivityFeeSchedule(input: InitialActivityFeeInput): ActivityFeeSchedule {
-  const collections = validateCollections(input.collections);
   if (!input.eventOccursThisPeriod) {
+    // No event date exists yet to default a blank collection date to.
+    const collections = validateCollections(input.collections);
     const totalCollected = sum(collections);
     return {
       postings: collections.map(collection => collectionPosting(collection, UNEARNED_ACTIVITY_FEE_CODE, 'initial', 'Activity fees collected before a future event')),
       next: { totalExpected: 0, totalCollected, totalRefunded: 0, receivableBalance: 0, deferredBalance: totalCollected, status: 'scheduled' },
     };
   }
-  return buildRecognitionSchedule(input.priorPeriodCollected || 0, input.totalExpected || 0, input.eventDate || '', collections);
+  // buildRecognitionSchedule re-validates with input.eventDate as the
+  // blank-date default, so the raw (unvalidated) collections pass through.
+  return buildRecognitionSchedule(input.priorPeriodCollected || 0, input.totalExpected || 0, input.eventDate || '', input.collections);
 }
 
 export function buildScheduledActivityFeeRecognition(record: ActivityFeeRecord, totalExpected: number, eventDate: string, collections: DatedAmountRecord[]): ActivityFeeSchedule {
   if (!['scheduled', 'postponed'].includes(record.status)) throw new Error('This event is not waiting to be held.');
   const schedule = buildRecognitionSchedule(record.deferredBalance, totalExpected, eventDate, collections);
-  return { ...schedule, next: { ...schedule.next, totalCollected: record.totalCollected + sum(validateCollections(collections)), totalRefunded: record.totalRefunded } };
+  return { ...schedule, next: { ...schedule.next, totalCollected: record.totalCollected + sum(validateCollections(collections, eventDate)), totalRefunded: record.totalRefunded } };
 }
 
 export function buildActivityFeeReceivableCollections(record: ActivityFeeRecord, collections: DatedAmountRecord[]): ActivityFeeSchedule {
