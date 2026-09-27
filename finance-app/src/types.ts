@@ -145,6 +145,13 @@ export interface AppSettings {
   organizationName: string;
   currencySymbol: string;
   currencyCode: string;
+  // The org's currently active semester, set via the Navbar's fiscal year
+  // picker (see reportingPeriod.ts for the canonical Semester type — kept
+  // as a literal union here rather than imported, since types.ts otherwise
+  // depends on nothing outside itself). Empty until the org sets it once.
+  // Drives which semester-restricted classification rules are selectable
+  // (see availableInSemester on ClassificationRuleWithWorkflow).
+  semester?: '1st Semester' | '2nd Semester' | '';
 }
 
 export interface ClassificationRule {

@@ -64,6 +64,24 @@ export interface ClassificationRuleWithWorkflow extends ClassificationRule {
   // in src/lib/reviewEngine.ts, which resolves it later.
   mayDeferPortion?: boolean;
   sponsorshipKind?: 'cash' | 'food' | 'supplies';
+
+  // Restricts this type to only when the org's currently active semester
+  // (Navbar fiscal year picker, settings.semester) matches — absent when
+  // it applies year-round. The "current school year" membership billing
+  // is 1st-Semester-only (that's when the whole year's dues get billed);
+  // a separate "New/Additional Members" type covers anyone who joins
+  // mid-year, 2nd-Semester-only. Enforced both in the searchable dropdown
+  // (isRuleAvailable) and in suggestTransactionClassification itself, so
+  // a restricted type can't be triggered by typing its keyword directly
+  // either.
+  availableInSemester?: '1st Semester' | '2nd Semester';
+  // Distinguishes which pool of members the accrual-completion question
+  // is asking about, for requiresAccrualCompletion rules only — "all
+  // members" (the whole year's billing) vs. "new/additional members"
+  // (anyone who joined mid-year). Changes only the question's wording on
+  // the Transactions form; the underlying Dr Cash / Cr Membership Dues +
+  // accrual mechanics are identical either way.
+  accrualAudience?: 'all' | 'new';
 }
 
 export interface PurposeOption {

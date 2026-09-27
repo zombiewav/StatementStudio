@@ -62,7 +62,7 @@ export function Navbar({ onMenuToggle, searchTerm, setSearchTerm }: NavbarProps)
     if (!fySemester) { setFyError('Select a semester.'); return; }
     try {
       const year = parseReportingYear(fyYear);
-      updateSettings({ fiscalYear: `FY ${year}-${year + 1} • ${fySemester}` });
+      updateSettings({ fiscalYear: `FY ${year}-${year + 1} • ${fySemester}`, semester: fySemester });
       setShowFiscalYearDropdown(false);
     } catch (err) {
       setFyError(err instanceof Error ? err.message : 'Enter a valid year.');
