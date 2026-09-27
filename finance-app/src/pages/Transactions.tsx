@@ -237,6 +237,13 @@ export function Transactions(): React.ReactElement {
       setCreditCode(match.creditAccountCode);
       setIsSmartMatched(true);
       setClassificationPreview(match);
+      // The Custom Transaction Name and Receipt fields are hidden for this
+      // type (see their render conditions below), so leftover values from a
+      // previously selected type must not silently carry into this entry.
+      if (match.requiresAccrualCompletion) {
+        setCustomName('');
+        setPendingReceipts([]);
+      }
       setRestrictionAnswer('');
       setSamePeriodAnswer('');
       setMembershipCollections([{ id: `membership-collection-${Date.now()}`, date: '', amount: '' }]);
@@ -262,13 +269,15 @@ export function Transactions(): React.ReactElement {
       setMerchandiseRemittances([{ id: `remittance-${Date.now()}`, date, amount: '' }]);
       setMerchandiseCollectionOfficer('');
 
-      // Keep the funding-source dropdown in sync with whichever cash
-      // account the matched rule assumed, so the two controls never
-      // silently disagree about who's paying.
+      // Keep the funding-source state in sync with whichever cash account
+      // the matched rule assumed. When the new type has no funding-source
+      // mapping (e.g. it credits Membership Dues, not a cash account),
+      // reset to the default rather than leaving it at whatever the
+      // previously selected transaction type left behind — otherwise a
+      // stale 'officer-cash-advance' from an earlier entry can silently
+      // trigger the cash-advance warning on an unrelated transaction.
       const matchingSource = FUNDING_SOURCE_OPTIONS.find(o => o.creditAccountCode === match.creditAccountCode);
-      if (matchingSource) {
-        setFundingSourceId(matchingSource.id);
-      }
+      setFundingSourceId(matchingSource ? matchingSource.id : FUNDING_SOURCE_OPTIONS[0].id);
 
       if (match.purposeOptions && match.purposeOptions.length > 0) {
         // Ambiguous category — default to its first purpose, same as
@@ -329,7 +338,11 @@ export function Transactions(): React.ReactElement {
   // transaction was never recorded — or was already fully spent — so this
   // expense would silently understate what's actually owed.
   const advancesOutstanding = accountBalances['1250'] || 0;
-  const showCashAdvanceWarning = fundingSourceId === 'officer-cash-advance' && amount > advancesOutstanding;
+  // Membership Fees collections are never paid via an officer's cash
+  // advance (they're money coming in from members, not an expense paid
+  // out), so this warning must never apply there regardless of whatever
+  // fundingSourceId happens to hold.
+  const showCashAdvanceWarning = !requiresAccrualCompletion && fundingSourceId === 'officer-cash-advance' && amount > advancesOutstanding;
 
   // Same sequencing idea, for the other direction (client note sheet row
   // 17): collecting previous-period membership fees against the
@@ -919,18 +932,20 @@ export function Transactions(): React.ReactElement {
               )}
             </div>
 
-            <div className="sm:col-span-2">
-              <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Custom Transaction Name <span className="normal-case text-slate-400">(optional)</span></label>
-              <input
-                type="text"
-                value={customName}
-                onChange={(e) => setCustomName(e.target.value)}
-                placeholder={classificationPreview ? `Example: September ${classificationPreview.defaultDesc}` : 'Select a transaction type first'}
-                disabled={!classificationPreview}
-                className="w-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 disabled:bg-slate-100 disabled:text-slate-400 focus:border-blue-900 focus:ring-blue-900/10 rounded-xl text-xs font-semibold p-3 outline-none transition-colors dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500 dark:focus:border-blue-500"
-              />
-              <p className="text-[10px] text-slate-500 mt-1 font-medium dark:text-slate-400">This label identifies the transaction; it does not change its accounting rule.</p>
-            </div>
+            {!requiresAccrualCompletion && (
+              <div className="sm:col-span-2">
+                <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Custom Transaction Name <span className="normal-case text-slate-400">(optional)</span></label>
+                <input
+                  type="text"
+                  value={customName}
+                  onChange={(e) => setCustomName(e.target.value)}
+                  placeholder={classificationPreview ? `Example: September ${classificationPreview.defaultDesc}` : 'Select a transaction type first'}
+                  disabled={!classificationPreview}
+                  className="w-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 disabled:bg-slate-100 disabled:text-slate-400 focus:border-blue-900 focus:ring-blue-900/10 rounded-xl text-xs font-semibold p-3 outline-none transition-colors dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500 dark:focus:border-blue-500"
+                />
+                <p className="text-[10px] text-slate-500 mt-1 font-medium dark:text-slate-400">This label identifies the transaction; it does not change its accounting rule.</p>
+              </div>
+            )}
 
             <div className="sm:col-span-2 rounded-xl border border-violet-200 bg-violet-50 p-3.5 dark:border-violet-500/20 dark:bg-violet-500/10">
               <p className="mb-3 text-[10px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Reporting Period</p>
@@ -1348,51 +1363,53 @@ export function Transactions(): React.ReactElement {
               />
             </div>}
 
-            <div className="sm:col-span-2 rounded-xl border border-dashed border-slate-300 bg-slate-50/70 p-3.5 dark:border-slate-700 dark:bg-slate-950/30">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <p className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 dark:text-slate-200">
-                    <Paperclip className="h-3.5 w-3.5" /> Receipt / Supporting Photo <span className="font-medium text-slate-400">(optional)</span>
-                  </p>
-                  <p className="mt-0.5 text-[9px] font-medium text-slate-500 dark:text-slate-400">JPG, PNG, or WebP. Up to 3 images; photos are compressed before saving.</p>
+            {!requiresAccrualCompletion && (
+              <div className="sm:col-span-2 rounded-xl border border-dashed border-slate-300 bg-slate-50/70 p-3.5 dark:border-slate-700 dark:bg-slate-950/30">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 dark:text-slate-200">
+                      <Paperclip className="h-3.5 w-3.5" /> Receipt / Supporting Photo <span className="font-medium text-slate-400">(optional)</span>
+                    </p>
+                    <p className="mt-0.5 text-[9px] font-medium text-slate-500 dark:text-slate-400">JPG, PNG, or WebP. Up to 3 images; photos are compressed before saving.</p>
+                  </div>
+                  {pendingReceipts.length < 3 && (
+                    <label className="cursor-pointer rounded-lg bg-blue-700 px-3 py-1.5 text-[10px] font-bold text-white hover:bg-blue-800 dark:bg-blue-600 dark:hover:bg-blue-500">
+                      {isProcessingReceipts ? 'Processing…' : pendingReceipts.length > 0 ? 'Add another' : 'Choose image'}
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        multiple
+                        disabled={isProcessingReceipts}
+                        onChange={(event) => { void handleReceiptFiles(event.target.files); event.currentTarget.value = ''; }}
+                        className="sr-only"
+                      />
+                    </label>
+                  )}
                 </div>
-                {pendingReceipts.length < 3 && (
-                  <label className="cursor-pointer rounded-lg bg-blue-700 px-3 py-1.5 text-[10px] font-bold text-white hover:bg-blue-800 dark:bg-blue-600 dark:hover:bg-blue-500">
-                    {isProcessingReceipts ? 'Processing…' : pendingReceipts.length > 0 ? 'Add another' : 'Choose image'}
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      multiple
-                      disabled={isProcessingReceipts}
-                      onChange={(event) => { void handleReceiptFiles(event.target.files); event.currentTarget.value = ''; }}
-                      className="sr-only"
-                    />
-                  </label>
-                )}
-              </div>
-              {pendingReceipts.length > 0 && (
-                <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                  {pendingReceipts.map(receipt => (
-                    <div key={receipt.id} className="relative overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
-                      <img src={receipt.dataUrl} alt={`Receipt ${receipt.fileName}`} className="h-24 w-full object-cover" />
-                      <button
-                        type="button"
-                        onClick={() => setPendingReceipts(previous => previous.filter(candidate => candidate.id !== receipt.id))}
-                        className="absolute right-1.5 top-1.5 rounded-full bg-slate-950/70 p-1 text-white hover:bg-rose-600"
-                        aria-label={`Remove ${receipt.fileName}`}
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                      <div className="flex gap-1 p-2 text-[9px]">
-                        <span className="min-w-0 flex-1 truncate font-semibold text-slate-700 dark:text-slate-200">{receipt.fileName}</span>
-                        <span className="text-slate-400">{formatReceiptSize(receipt.size)}</span>
+                {pendingReceipts.length > 0 && (
+                  <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    {pendingReceipts.map(receipt => (
+                      <div key={receipt.id} className="relative overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+                        <img src={receipt.dataUrl} alt={`Receipt ${receipt.fileName}`} className="h-24 w-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => setPendingReceipts(previous => previous.filter(candidate => candidate.id !== receipt.id))}
+                          className="absolute right-1.5 top-1.5 rounded-full bg-slate-950/70 p-1 text-white hover:bg-rose-600"
+                          aria-label={`Remove ${receipt.fileName}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                        <div className="flex gap-1 p-2 text-[9px]">
+                          <span className="min-w-0 flex-1 truncate font-semibold text-slate-700 dark:text-slate-200">{receipt.fileName}</span>
+                          <span className="text-slate-400">{formatReceiptSize(receipt.size)}</span>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {receiptMessage && <p className="mt-2 text-[10px] font-semibold text-rose-600 dark:text-rose-300">{receiptMessage}</p>}
-            </div>
+                    ))}
+                  </div>
+                )}
+                {receiptMessage && <p className="mt-2 text-[10px] font-semibold text-rose-600 dark:text-rose-300">{receiptMessage}</p>}
+              </div>
+            )}
 
             <div className="sm:col-span-2">
               <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Memo / Description</label>
