@@ -596,12 +596,12 @@ const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   // this bare 'loan' is money the org itself borrows, the opposite
   // direction.
   { keyword: 'loan', debitAccountCode: '1010', creditAccountCode: '2200', description: 'Bank Loan Capital Funding' },
-  // 'Membership Fees Collected' (keyword 'membership fee') used to exist as
-  // a second entry here, identical in effect (Dr 1010 / Cr 4040) to this
-  // one — a pure duplicate of this ad-hoc collection type, and confusing
-  // next to the two structured Membership Fees schedule types (current /
-  // previous period). Removed per client feedback; keep just this one.
-  { keyword: 'membership dues', debitAccountCode: '1010', creditAccountCode: '4040', description: 'Membership Dues Collected' },
+  // Generic ad-hoc "Membership Dues Collected" (and its duplicate,
+  // "Membership Fees Collected") used to exist here — both removed per
+  // client feedback, since every real membership collection now belongs
+  // to one of three purpose-specific structured types instead: current
+  // school year (accrual, 1st Semester), previous period unpaid dues, or
+  // new/additional members (accrual, 2nd Semester).
   { keyword: 'other income', debitAccountCode: '1010', creditAccountCode: '4050', description: 'Other Income Received' },
   { keyword: 'interest', debitAccountCode: '1010', creditAccountCode: '4060', description: 'Interest Income Received' },
   { keyword: 'sale of merchandise', debitAccountCode: '1010', creditAccountCode: '4070', description: 'Sale of Merchandise' },
