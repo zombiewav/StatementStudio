@@ -40,6 +40,9 @@ export interface DatedAmountRecord {
 export interface TransactionDetails {
   memo?: string;
   purpose?: string;
+  semester?: '1st Semester' | '2nd Semester';
+  reportingPeriod?: 'August to December' | 'January to May';
+  reportingYear?: number;
   fundingSourceId?: string;
   sponsorshipKind?: 'cash' | 'food' | 'supplies';
   counterpartyName?: string;
@@ -54,6 +57,10 @@ export interface TransactionDetails {
   expectedUsePeriod?: 'within' | 'next';
   inventoryCost?: number;
   merchandiseItem?: string;
+  merchandiseBatch?: string;
+  merchandisePurchaseDate?: string;
+  merchandisePrepaymentEntryId?: string;
+  merchandisePrepaymentAmount?: number;
   merchandiseQuantity?: number;
   merchandisePaymentMethod?: 'organization-funds' | 'officer-personal' | 'organization-advance' | 'advance-and-personal' | 'not-yet-paid';
   merchandiseOrganizationPayment?: number;
@@ -191,6 +198,9 @@ export interface ActivityFeeRecord {
   receivableBalance: number;
   deferredBalance: number;
   status: ActivityFeeStatus;
+  eventDate?: string;
+  priorPeriodCollected?: number;
+  collections?: DatedAmountRecord[];
   createdAt: string;
   updatedAt: string;
   history: ActivityFeeHistoryItem[];

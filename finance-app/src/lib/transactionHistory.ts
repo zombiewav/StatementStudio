@@ -10,6 +10,8 @@ export interface AccountHistoryLine {
   reference: string;
   description: string;
   project: string;
+  eventName?: string;
+  merchandiseDetail?: string;
   debit: number;
   credit: number;
   runningBalance: number;
@@ -60,6 +62,10 @@ export function buildAccountTransactionHistory(account: Account, entries: Journa
         reference: entry.reference,
         description: entry.description,
         project: entry.project,
+        eventName: entry.eventName,
+        merchandiseDetail: entry.transactionDetails?.merchandiseItem
+          ? `${entry.transactionDetails.merchandiseItem}${entry.transactionDetails.merchandiseBatch ? ` — ${entry.transactionDetails.merchandiseBatch}` : ''}`
+          : undefined,
         debit: line.debit,
         credit: line.credit,
         runningBalance,

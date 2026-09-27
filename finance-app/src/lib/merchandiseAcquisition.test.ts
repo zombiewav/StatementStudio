@@ -17,6 +17,7 @@ describe('merchandise acquisition posting', () => {
       dueToOfficer: 0,
       advanceUsed: 0,
       cashPaid: 600,
+      prepaymentApplied: 0,
     });
   });
 
@@ -88,13 +89,47 @@ describe('merchandise acquisition posting', () => {
       ],
     }).lines).toEqual([
       { accountCode: '1700', debit: 1000, credit: 0, date: '2026-01-10' },
+      { accountCode: '2020', debit: 700, credit: 0, date: '2026-01-12' },
       { accountCode: '2050', debit: 0, credit: 700, date: '2026-01-12' },
       { accountCode: '2050', debit: 100, credit: 0, date: '2026-01-20' },
       { accountCode: '1010', debit: 0, credit: 100, date: '2026-01-20' },
       { accountCode: '2050', debit: 100, credit: 0, date: '2026-01-25' },
       { accountCode: '1010', debit: 0, credit: 100, date: '2026-01-25' },
-      { accountCode: '2020', debit: 0, credit: 300, date: '2026-01-10' },
+      { accountCode: '2020', debit: 0, credit: 1000, date: '2026-01-10' },
     ]);
+  });
+
+  it('applies a separately recorded supplier prepayment and keeps every posting date balanced', () => {
+    const posting = buildMerchandiseAcquisitionPosting({
+      totalCost: 1000,
+      paymentMethod: 'organization-funds',
+      transactionDate: '2026-02-10',
+      prepaymentAmount: 200,
+      organizationPayments: [
+        { date: '2026-02-10', amount: 300 },
+        { date: '2026-02-15', amount: 250 },
+      ],
+    });
+
+    expect(posting.lines).toEqual([
+      { accountCode: '1700', debit: 1000, credit: 0, date: '2026-02-10' },
+      { accountCode: '1270', debit: 0, credit: 200, date: '2026-02-10' },
+      { accountCode: '1010', debit: 0, credit: 300, date: '2026-02-10' },
+      { accountCode: '2020', debit: 250, credit: 0, date: '2026-02-15' },
+      { accountCode: '1010', debit: 0, credit: 250, date: '2026-02-15' },
+      { accountCode: '2020', debit: 0, credit: 500, date: '2026-02-10' },
+    ]);
+    expect(posting.merchandisePayable).toBe(250);
+    expect(posting.prepaymentApplied).toBe(200);
+  });
+
+  it('does not allow a supplier payment date before the goods were received', () => {
+    expect(() => buildMerchandiseAcquisitionPosting({
+      totalCost: 100,
+      paymentMethod: 'organization-funds',
+      transactionDate: '2026-02-10',
+      organizationPayments: [{ date: '2026-02-09', amount: 50 }],
+    })).toThrow(/earlier than the Date of Purchase/i);
   });
 
   it('rejects overpayments, excessive reimbursements, and unavailable advances', () => {

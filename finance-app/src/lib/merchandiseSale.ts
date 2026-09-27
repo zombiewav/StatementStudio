@@ -37,6 +37,9 @@ export interface MerchandiseBatchBalance {
   remainingQuantity: number;
   acquisitionCost: number;
   referenceUnitCost: number;
+  batch: string;
+  costOfSales: number;
+  netInventoryBalance: number;
 }
 
 const cents = (value: number): number => Math.round(value * 100) / 100;
@@ -112,6 +115,9 @@ export function buildMerchandiseBatchBalances(entries: JournalEntry[], includeDe
       const soldQuantity = entries
         .filter(sale => !sale.reversalOfEntryId && !sale.reversedByEntryId && sale.transactionDetails?.merchandiseBatchEntryId === entry.id)
         .reduce((sum, sale) => sum + (sale.transactionDetails?.merchandiseQuantitySold || 0), 0);
+      const costOfSales = cents(entries
+        .filter(sale => !sale.reversalOfEntryId && !sale.reversedByEntryId && sale.transactionDetails?.merchandiseBatchEntryId === entry.id)
+        .reduce((sum, sale) => sum + (sale.transactionDetails?.inventoryCost || 0), 0));
       const acquisitionCost = entry.lines.find(line => line.accountCode === MERCHANDISE_INVENTORY_ACCOUNT_CODE)?.debit || 0;
       return {
         entryId: entry.id,
@@ -123,6 +129,9 @@ export function buildMerchandiseBatchBalances(entries: JournalEntry[], includeDe
         remainingQuantity: Math.max(0, purchasedQuantity - soldQuantity),
         acquisitionCost,
         referenceUnitCost: purchasedQuantity > 0 ? cents(acquisitionCost / purchasedQuantity) : 0,
+        batch: entry.transactionDetails?.merchandiseBatch || entry.reference,
+        costOfSales,
+        netInventoryBalance: Math.max(0, cents(acquisitionCost - costOfSales)),
       };
     });
   return batches

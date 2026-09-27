@@ -3,6 +3,7 @@ import { DatedAmountRecord, JournalLine } from '../types';
 export const MERCHANDISE_INVENTORY_ACCOUNT_CODE = '1700';
 export const MERCHANDISE_PAYABLE_ACCOUNT_CODE = '2020';
 export const ADVANCES_TO_OFFICERS_ACCOUNT_CODE = '1250';
+export const ADVANCES_TO_SUPPLIERS_ACCOUNT_CODE = '1270';
 export const DUE_TO_OFFICERS_ACCOUNT_CODE = '2050';
 
 export type MerchandisePaymentMethod =
@@ -26,6 +27,7 @@ export interface MerchandiseAcquisitionInput {
   advancePayment?: number;
   advancePayments?: DatedAmountRecord[];
   availableAdvance?: number;
+  prepaymentAmount?: number;
 }
 
 export interface MerchandiseAcquisitionPosting {
@@ -34,6 +36,7 @@ export interface MerchandiseAcquisitionPosting {
   dueToOfficer: number;
   advanceUsed: number;
   cashPaid: number;
+  prepaymentApplied: number;
 }
 
 const cents = (value: number): number => Math.round(value * 100) / 100;
@@ -79,7 +82,20 @@ export function buildMerchandiseAcquisitionPosting(input: MerchandiseAcquisition
   const reimbursement = total(reimbursements);
   const advancePayment = total(advancePayments);
   const availableAdvance = requireNonNegative('Available officer advance', input.availableAdvance || 0);
+  const prepaymentAmount = requireNonNegative('Linked supplier prepayment', input.prepaymentAmount || 0);
   const cashAccountCode = input.cashAccountCode || '1010';
+  const purchaseDate = input.transactionDate || '';
+
+  const ensureNotBeforePurchase = (label: string, records: DatedAmountRecord[]) => {
+    if (!purchaseDate) return;
+    if (records.some(record => record.date && record.date < purchaseDate)) {
+      throw new Error(`${label} date cannot be earlier than the Date of Purchase.`);
+    }
+  };
+  ensureNotBeforePurchase('Supplier payment', organizationPayments);
+  ensureNotBeforePurchase('Officer payment', officerPayments);
+  ensureNotBeforePurchase('Advance payment', advancePayments);
+  ensureNotBeforePurchase('Reimbursement', reimbursements);
 
   let supplierPaid = 0;
   let cashPaid = 0;
@@ -108,32 +124,52 @@ export function buildMerchandiseAcquisitionPosting(input: MerchandiseAcquisition
   if (advanceUsed > availableAdvance) {
     throw new Error('The advance used cannot exceed the recorded Advances to Officers balance.');
   }
-  if (supplierPaid > totalCost) {
+  if (cents(prepaymentAmount + supplierPaid) > totalCost) {
     throw new Error('Payments to the supplier cannot exceed the total merchandise cost.');
   }
 
-  const merchandisePayable = cents(totalCost - supplierPaid);
+  const merchandisePayable = cents(totalCost - prepaymentAmount - supplierPaid);
   const lines: JournalLine[] = [];
   addLine(lines, MERCHANDISE_INVENTORY_ACCOUNT_CODE, totalCost, 0, input.transactionDate);
+  addLine(lines, ADVANCES_TO_SUPPLIERS_ACCOUNT_CODE, 0, prepaymentAmount, input.transactionDate);
+
+  const purchaseDatePayments = (records: DatedAmountRecord[]) => records.filter(record => !purchaseDate || !record.date || record.date === purchaseDate);
+  const laterPayments = (records: DatedAmountRecord[]) => records.filter(record => purchaseDate && record.date && record.date > purchaseDate);
 
   if (input.paymentMethod === 'organization-funds') {
-    organizationPayments.forEach(payment => addLine(lines, cashAccountCode, 0, payment.amount, payment.date));
+    purchaseDatePayments(organizationPayments).forEach(payment => addLine(lines, cashAccountCode, 0, payment.amount, payment.date));
+    laterPayments(organizationPayments).forEach(payment => {
+      addLine(lines, MERCHANDISE_PAYABLE_ACCOUNT_CODE, payment.amount, 0, payment.date);
+      addLine(lines, cashAccountCode, 0, payment.amount, payment.date);
+    });
   }
   if (input.paymentMethod === 'organization-advance' || input.paymentMethod === 'advance-and-personal') {
-    advancePayments.forEach(payment => addLine(lines, ADVANCES_TO_OFFICERS_ACCOUNT_CODE, 0, payment.amount, payment.date));
+    purchaseDatePayments(advancePayments).forEach(payment => addLine(lines, ADVANCES_TO_OFFICERS_ACCOUNT_CODE, 0, payment.amount, payment.date));
+    laterPayments(advancePayments).forEach(payment => {
+      addLine(lines, MERCHANDISE_PAYABLE_ACCOUNT_CODE, payment.amount, 0, payment.date);
+      addLine(lines, ADVANCES_TO_OFFICERS_ACCOUNT_CODE, 0, payment.amount, payment.date);
+    });
   }
   if (input.paymentMethod === 'officer-personal' || input.paymentMethod === 'advance-and-personal') {
-    officerPayments.forEach(payment => addLine(lines, DUE_TO_OFFICERS_ACCOUNT_CODE, 0, payment.amount, payment.date));
+    purchaseDatePayments(officerPayments).forEach(payment => addLine(lines, DUE_TO_OFFICERS_ACCOUNT_CODE, 0, payment.amount, payment.date));
+    laterPayments(officerPayments).forEach(payment => {
+      addLine(lines, MERCHANDISE_PAYABLE_ACCOUNT_CODE, payment.amount, 0, payment.date);
+      addLine(lines, DUE_TO_OFFICERS_ACCOUNT_CODE, 0, payment.amount, payment.date);
+    });
     reimbursements.forEach(payment => {
       addLine(lines, DUE_TO_OFFICERS_ACCOUNT_CODE, payment.amount, 0, payment.date);
       addLine(lines, cashAccountCode, 0, payment.amount, payment.date);
     });
   }
-  addLine(lines, MERCHANDISE_PAYABLE_ACCOUNT_CODE, 0, merchandisePayable, input.transactionDate);
+  const payableAtPurchase = cents(totalCost - prepaymentAmount
+    - total(purchaseDatePayments(organizationPayments))
+    - total(purchaseDatePayments(officerPayments))
+    - total(purchaseDatePayments(advancePayments)));
+  addLine(lines, MERCHANDISE_PAYABLE_ACCOUNT_CODE, 0, payableAtPurchase, input.transactionDate);
 
   const debits = cents(lines.reduce((sum, line) => sum + line.debit, 0));
   const credits = cents(lines.reduce((sum, line) => sum + line.credit, 0));
   if (debits !== credits) throw new Error('The merchandise acquisition entry is not balanced.');
 
-  return { lines, merchandisePayable, dueToOfficer, advanceUsed, cashPaid };
+  return { lines, merchandisePayable, dueToOfficer, advanceUsed, cashPaid, prepaymentApplied: prepaymentAmount };
 }

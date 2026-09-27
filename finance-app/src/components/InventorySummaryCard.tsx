@@ -49,15 +49,21 @@ export function InventorySummaryCard({ compact = false }: { compact?: boolean })
       {acquisitionBatches.length > 0 && (
         <div className="mt-4 border-t border-indigo-200 pt-3 dark:border-indigo-500/20">
           <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Recorded purchase batches</p>
-          <div className="mt-2 space-y-1.5">
+          <div className="mt-2 overflow-x-auto rounded-lg border border-indigo-100 dark:border-indigo-500/20">
+            <div className="grid min-w-[620px] grid-cols-[1.4fr_.8fr_.9fr_.9fr_.9fr] gap-2 bg-indigo-100/70 px-3 py-2 text-[9px] font-black uppercase tracking-wide text-indigo-900 dark:bg-indigo-500/15 dark:text-indigo-200">
+              <span>Merchandise / Batch</span><span>Units remaining</span><span className="text-right">Total cost</span><span className="text-right">Cost of sales</span><span className="text-right">Net inventory</span>
+            </div>
             {acquisitionBatches.map(batch => (
-              <div key={batch.entryId} className="grid grid-cols-[1fr_auto] gap-3 rounded-lg bg-white/70 px-3 py-2 text-[10px] dark:bg-slate-900/60">
-                <span className="min-w-0"><span className="font-bold text-slate-800 dark:text-slate-200">{batch.item}</span><span className="ml-2 text-slate-500">{batch.reference} · {batch.date}</span></span>
-                <span className="text-right font-bold text-slate-700 dark:text-slate-300">{batch.remainingQuantity} of {batch.purchasedQuantity} units · {formatCurrency(batch.acquisitionCost)}</span>
+              <div key={batch.entryId} className="grid min-w-[620px] grid-cols-[1.4fr_.8fr_.9fr_.9fr_.9fr] gap-2 border-t border-indigo-100 bg-white/70 px-3 py-2 text-[10px] dark:border-indigo-500/20 dark:bg-slate-900/60">
+                <span className="min-w-0"><span className="font-bold text-slate-800 dark:text-slate-200">{batch.item} — {batch.batch}</span><span className="block text-slate-500">{batch.reference} · {batch.date}</span></span>
+                <span className="font-bold text-slate-700 dark:text-slate-300">{batch.remainingQuantity} / {batch.purchasedQuantity}</span>
+                <span className="text-right font-bold text-slate-700 dark:text-slate-300">{formatCurrency(batch.acquisitionCost)}</span>
+                <span className="text-right font-bold text-rose-700 dark:text-rose-300">{formatCurrency(batch.costOfSales)}</span>
+                <span className="text-right font-black text-indigo-800 dark:text-indigo-200">{formatCurrency(batch.netInventoryBalance)}</span>
               </div>
             ))}
           </div>
-          <p className="mt-2 text-[9px] font-medium text-slate-500 dark:text-slate-400">Unit balances will use these saved batches when the follow-up sales/history rules are finalized.</p>
+          <p className="mt-2 text-[9px] font-medium text-slate-500 dark:text-slate-400">Each batch stays in this running summary across fiscal years until its inventory balance is fully released.</p>
         </div>
       )}
     </section>

@@ -112,7 +112,8 @@ export function GeneralLedger(): React.ReactElement {
                       <th className="py-2.5 px-6 w-28 text-slate-500 dark:text-slate-400">Date</th>
                       <th className="py-2.5 px-4 w-28 text-slate-500 dark:text-slate-400">Reference</th>
                       <th className="py-2.5 px-4 text-slate-500 dark:text-slate-400">Description</th>
-                      <th className="py-2.5 px-4 w-40 text-slate-500 dark:text-slate-400">Activity / Program</th>
+                      <th className="py-2.5 px-4 w-44 text-slate-500 dark:text-slate-400">Merchandise / Batch</th>
+                      <th className="py-2.5 px-4 w-40 text-slate-500 dark:text-slate-400">Event / Program</th>
                       <th className="py-2.5 px-4 w-28 text-right text-slate-500 dark:text-slate-400">Debit</th>
                       <th className="py-2.5 px-4 w-28 text-right text-slate-500 dark:text-slate-400">Credit</th>
                       <th className="py-2.5 px-6 w-32 text-right text-slate-500 dark:text-slate-400">Running Balance</th>
@@ -124,9 +125,10 @@ export function GeneralLedger(): React.ReactElement {
                         <td className="py-2 px-6 text-slate-900 dark:text-slate-100">{new Date(line.date).toLocaleDateString()}</td>
                         <td className="py-2 px-4 font-bold text-blue-900 dark:text-blue-200">{line.reference}</td>
                         <td className="py-2 px-4 text-slate-900 dark:text-slate-100 font-medium">{line.description}</td>
+                        <td className="py-2 px-4 text-slate-600 dark:text-slate-300">{line.merchandiseDetail || '—'}</td>
                         <td className="py-2 px-4">
                           <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-200 font-semibold text-[9px]">
-                            {line.project}
+                            {line.eventName || line.project}
                           </span>
                         </td>
                         <td className="py-2 px-4 text-right font-semibold text-slate-900 dark:text-slate-100">
@@ -142,7 +144,7 @@ export function GeneralLedger(): React.ReactElement {
                     ))}
                     {lines.length === 0 && (
                       <tr>
-                        <td colSpan={7} className="py-6 px-6 text-center text-slate-500 dark:text-slate-400 font-medium">
+                        <td colSpan={8} className="py-6 px-6 text-center text-slate-500 dark:text-slate-400 font-medium">
                           No transactions recorded for this account in the current period.
                         </td>
                       </tr>

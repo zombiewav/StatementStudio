@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { categorizeTransactionRule } from './transactionCategories';
+import { categorizeTransactionRule, TRANSACTION_CATEGORIES } from './transactionCategories';
 
 const rule = (debitAccountCode: string, creditAccountCode: string, description: string) => ({
   debitAccountCode,
@@ -22,5 +22,16 @@ describe('transaction categories', () => {
     expect(categorizeTransactionRule(rule('5040', '1010', 'Office Supplies Purchase'))).toBe('purchases');
     expect(categorizeTransactionRule(rule('1500', '1010', 'Developer Laptop Purchase'))).toBe('purchases');
     expect(categorizeTransactionRule(rule('1010', '4030', 'Sponsorship - Cash Contribution'))).toBe('other');
+  });
+
+  it('labels the catch-all group as Miscellaneous Transactions', () => {
+    expect(TRANSACTION_CATEGORIES.find(category => category.id === 'other')?.label).toBe('Miscellaneous Transactions');
+  });
+
+  it('groups the non-membership entries from the client note under miscellaneous', () => {
+    expect(categorizeTransactionRule(rule('1250', '1010', 'Cash Advance Given to Officer'))).toBe('other');
+    expect(categorizeTransactionRule(rule('1010', '4050', 'Advertising Revenue'))).toBe('other');
+    expect(categorizeTransactionRule(rule('1010', '4050', 'Income from Cash Prizes Received'))).toBe('other');
+    expect(categorizeTransactionRule(rule('1010', '4060', 'Interest Earned from Bank Savings'))).toBe('other');
   });
 });

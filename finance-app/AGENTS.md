@@ -143,15 +143,21 @@ login flag. This is still local-browser authentication, not secure multi-device 
   currency, and Chart of Accounts.
 - **Chart of Accounts pagination**: Settings shows 10 accounts per page with numbered previous/next
   controls, avoiding a very tall account table while preserving add, edit, and status actions.
-- **Activity/Event Fees**: Transactions has a guided form for events already held versus future
-  events. Review carries each uniquely referenced event through additional collections,
-  postponement, recognition, refundable/non-refundable cancellation, and refunds. Accounts
-  1310/2110/4090 hold receivables, deferred fees, and recognized revenue. Incomplete activity-fee
-  records block Financial Statements and fiscal-year closing.
+- **Activity/Event Fees (final client rule)**: Transactions asks whether the event happens in the
+  current reporting period and accepts repeatable dated collections. Collections before the event
+  credit Unearned Activity Fees (2110); on the event date the system releases prior/current
+  unearned collections, recognizes the full Activity Fees Revenue (4090), and creates Activity
+  Fees Receivable (1310) for the unpaid balance. Event-date cash is included in that recognition
+  entry; each post-event collection separately debits Cash and credits the receivable. A future-
+  period event may be saved without a known total, remains incomplete in Review, and is recognized
+  there once its total and event date are known. Ledger and Transaction History rows show the
+  specific event name. Incomplete activity-fee records block Financial Statements and closing.
 - **Transaction categories**: Transactions first presents Activity Fees, Merchandise Transactions,
-  Membership Fees, Purchases, and Other Transactions. Choosing a category opens the existing form
+  Membership Fees, Purchases, and Miscellaneous Transactions. Choosing a category opens the existing form
   with its searchable type list filtered to that category; account selection remains automatic and
   custom transaction names remain labels only. `transactionCategories.ts` owns the tested grouping.
+  Cash advances and non-membership income from the latest client note belong to Miscellaneous.
+  Every category shows the general reminder that incomplete information can be updated later in Review.
 - **Transaction History / inventory summary**: The sidebar Transaction History page selects one
   account at a time and shows its lifetime postings and running balance. Merchandise Inventory
   (1700) also has a lifetime summary on that page and inside the Merchandise category. Merchandise

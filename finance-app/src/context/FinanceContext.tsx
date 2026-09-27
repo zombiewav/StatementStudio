@@ -12,14 +12,16 @@ import {
   ReceiptAttachment,
   ReceiptAttachmentDraft,
   CustomClassificationRule,
-  ActivityFeeRecord
+  ActivityFeeRecord,
+  DatedAmountRecord,
+  JournalLine
 } from '../types';
 import { validateBackupPayload } from '../lib/backupValidation';
 import { computeAccountBalances, computeTypeTotals } from '../lib/accountTotals';
 import { computeClosingEntryLines, findFiscalCloseBlockers } from '../lib/closingEntries';
 import { linkReceiptIdsToEntry } from '../lib/receiptAttachments';
 import { getEffectiveClassificationRules, validateCustomTransactionRule } from '../lib/customTransactionRules';
-import { ActivityFeeFollowUp, buildActivityFeeFollowUp, buildInitialActivityFeePosting, isActivityFeeIncomplete } from '../lib/activityFees';
+import { ActivityFeeFollowUp, ActivityFeeSchedule, buildActivityFeeFollowUp, buildActivityFeeReceivableCollections, buildInitialActivityFeeSchedule, buildScheduledActivityFeeRecognition, isActivityFeeIncomplete } from '../lib/activityFees';
 
 // The default catch-all project and the account closing entries post their
 // net income plug to — same constants Transactions.tsx and INITIAL_PROJECTS
@@ -88,6 +90,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
   // instead of being expensed immediately, and REVIEW (src/lib/reviewEngine.ts)
   // reclassifies it into the real expense account once it's actually used.
   { code: '1260', name: 'Prepaid Expenses', type: 'Assets', normalBalance: 'Debit', description: 'Cash paid for goods/services not yet used, consumed, or benefited from this period', isActive: true },
+  { code: '1270', name: 'Advances to Suppliers - Prepayments', type: 'Assets', normalBalance: 'Debit', description: 'Downpayments for pre-ordered merchandise before the goods are received', isActive: true },
   { code: '1500', name: 'Equipment & Tools', type: 'Assets', normalBalance: 'Debit', description: 'Laptops, computers, hardware, tools, and other equipment used by the organization', isActive: true },
   // Contra-assets: Credit-normal despite being Assets-type accounts, so they
   // reduce Total Assets instead of adding to it (see isContraAccount in
@@ -123,7 +126,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
   { code: '2010', name: 'Due to Supplier', type: 'Liabilities', normalBalance: 'Credit', description: 'Outstanding unpaid bills owed directly to a supplier or vendor', isActive: true },
   { code: '2020', name: 'Merchandise Payable', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid cost of merchandise acquired for resale', isActive: true },
   { code: '2050', name: 'Due to Officers', type: 'Liabilities', normalBalance: 'Credit', description: 'Amounts owed to officers who paid organization expenses out of their own money, pending reimbursement', isActive: true },
-  { code: '2110', name: 'Deferred Activity Fees', type: 'Liabilities', normalBalance: 'Credit', description: 'Activity or event fees collected before the event occurs or while refunds remain due', isActive: true },
+  { code: '2110', name: 'Unearned Activity Fees', type: 'Liabilities', normalBalance: 'Credit', description: 'Activity or event fees collected before the event date', isActive: true },
   { code: '2200', name: 'Loans & Financial Obligations', type: 'Liabilities', normalBalance: 'Credit', description: 'Loans and other financial obligations payable within a year', isActive: true },
   { code: '2300', name: 'Accrued Liabilities', type: 'Liabilities', normalBalance: 'Credit', description: 'Accrued unpaid expenses such as taxes or interest', isActive: true },
   
@@ -406,6 +409,8 @@ const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
 
   // --- Inventory (goods for resale) ---------------------------------------------
   { keyword: 'acquisition of merchandise', debitAccountCode: '1700', creditAccountCode: '1010', description: 'Acquisition of Merchandise for Sale' },
+  { keyword: 'downpayment for pre-ordered merchandise', debitAccountCode: '1270', creditAccountCode: '1010', description: 'Downpayment for Pre-ordered Merchandise' },
+  { keyword: 'payment for unpaid merchandise', debitAccountCode: '2020', creditAccountCode: '1010', description: 'Payment for Unpaid Merchandise Purchased and Received in Previous Period/Semester' },
   { keyword: 'inventory', debitAccountCode: '1700', creditAccountCode: '1010', description: 'Acquisition of Merchandise for Sale' },
 
   // --- Inter-organization loans (working paper row 20) ---------------------------
@@ -571,7 +576,7 @@ const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   { keyword: 'membership fee', debitAccountCode: '1010', creditAccountCode: '4040', description: 'Membership Fees Collected' },
   { keyword: 'other income', debitAccountCode: '1010', creditAccountCode: '4050', description: 'Other Income Received' },
   { keyword: 'interest', debitAccountCode: '1010', creditAccountCode: '4060', description: 'Interest Income Received' },
-  { keyword: 'merchandise sales', debitAccountCode: '1010', creditAccountCode: '4070', description: 'Merchandise Sales Revenue' },
+  { keyword: 'sale of merchandise', debitAccountCode: '1010', creditAccountCode: '4070', description: 'Sale of Merchandise' },
   // Entrance ticket sales groups into Miscellaneous Income with printing-
   // services and rental income (see the dedicated section near the top of
   // this array, checked earlier) — see the comment there for why.
@@ -610,13 +615,15 @@ interface FinanceContextType {
   receiptAttachments: ReceiptAttachment[];
   activityFeeRecords: ActivityFeeRecord[];
 
-  addJournalEntry: (date: string, description: string, project: string, lines: { accountCode: string; debit: number; credit: number }[], eventName?: string, settlesEntryId?: string, transactionMeta?: TransactionMetadata) => JournalEntry;
+  addJournalEntry: (date: string, description: string, project: string, lines: JournalLine[], eventName?: string, settlesEntryId?: string, transactionMeta?: TransactionMetadata) => JournalEntry;
   reverseJournalEntry: (id: string) => void;
   closeFiscalYear: (fiscalYear: string, closingDate: string) => void;
   attachReceiptsToEntry: (entryId: string, receipts: ReceiptAttachmentDraft[]) => void;
   addCustomClassificationRule: (description: string, debitAccountCode: string, creditAccountCode: string) => void;
   updateCustomClassificationRule: (id: string, updated: Partial<Pick<CustomClassificationRule, 'description' | 'debitAccountCode' | 'creditAccountCode' | 'isActive'>>) => void;
-  createActivityFeeRecord: (input: { eventName: string; totalExpected: number; collected: number; eventOccurred: boolean; date: string; reportingPeriod: string }) => ActivityFeeRecord;
+  createActivityFeeRecord: (input: { eventName: string; eventOccursThisPeriod: boolean; eventDate?: string; totalExpected?: number; priorPeriodCollected?: number; collections: DatedAmountRecord[]; reportingPeriod: string }) => ActivityFeeRecord;
+  recognizeScheduledActivityFee: (id: string, totalExpected: number, eventDate: string, collections: DatedAmountRecord[], reportingPeriod: string) => ActivityFeeRecord;
+  collectActivityFeeReceivable: (id: string, collections: DatedAmountRecord[], reportingPeriod: string) => ActivityFeeRecord;
   updateActivityFeeRecord: (id: string, followUp: ActivityFeeFollowUp, date: string, reportingPeriod: string) => ActivityFeeRecord;
   
   addAccount: (account: Account) => void;
@@ -665,6 +672,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     const saved: Account[] = (JSON.parse(local) as Account[]).map(account => {
       if (account.code === '4035' && account.name === 'Contributions Revenue - Restricted') return { ...account, name: 'Contributions Revenue - Temporarily Restricted' };
       if (account.code === '1200' && account.name === 'Receivables') return { ...account, name: 'Accounts Receivable', description: 'Amounts earned or billed but not yet collected from customers, sponsors, or partners' };
+      if (account.code === '2110' && account.name === 'Deferred Activity Fees') return { ...account, name: 'Unearned Activity Fees', description: 'Activity or event fees collected before the event date' };
       return account;
     });
     const savedCodes = new Set(saved.map(a => a.code));
@@ -898,30 +906,79 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     logAudit('Reverse Journal Entry', `Reversed ${entry.reference}: ${entry.description} (via new entry ${reference})`);
   };
 
-  const createActivityFeeRecord = (input: { eventName: string; totalExpected: number; collected: number; eventOccurred: boolean; date: string; reportingPeriod: string }): ActivityFeeRecord => {
+  const commitActivityFeeSchedule = (schedule: ActivityFeeSchedule, eventName: string, reportingPeriod: string) => {
+    const firstReferenceNumber = journalEntries.reduce((max, entry) => {
+      const match = entry.reference.match(/^JE-(\d+)$/);
+      return match ? Math.max(max, Number(match[1])) : max;
+    }, 0) + 1;
+    const stamp = Date.now();
+    const entries: JournalEntry[] = schedule.postings.map((posting, index) => ({
+      id: `je-${stamp}-af-${index}`,
+      reference: `JE-${String(firstReferenceNumber + index).padStart(4, '0')}`,
+      date: posting.date,
+      description: `${posting.description}: ${eventName}`,
+      project: GENERAL_FUND_PROJECT,
+      lines: posting.lines,
+      eventName,
+    }));
+    if (entries.length > 0) setJournalEntries(previous => [...previous, ...entries]);
+    return schedule.postings.map((posting, index) => ({
+      id: `afh-${stamp}-${index}`,
+      date: posting.date,
+      reportingPeriod,
+      action: posting.action,
+      amount: posting.amount,
+      journalEntryId: entries[index].id,
+    }));
+  };
+
+  const createActivityFeeRecord = (input: { eventName: string; eventOccursThisPeriod: boolean; eventDate?: string; totalExpected?: number; priorPeriodCollected?: number; collections: DatedAmountRecord[]; reportingPeriod: string }): ActivityFeeRecord => {
     if (!input.eventName.trim()) throw new Error('Event name is required.');
-    const posting = buildInitialActivityFeePosting(input.totalExpected, input.collected, input.eventOccurred);
+    const schedule = buildInitialActivityFeeSchedule(input);
     const now = new Date().toISOString();
     const nextNumber = activityFeeRecords.reduce((max, record) => {
       const match = record.reference.match(/AF-(\d+)/);
       return match ? Math.max(max, Number(match[1])) : max;
     }, 0) + 1;
-    const entry = posting.lines.length > 0
-      ? addJournalEntry(input.date, `${posting.description}: ${input.eventName.trim()}`, GENERAL_FUND_PROJECT, posting.lines, input.eventName.trim())
-      : undefined;
+    const eventName = input.eventName.trim();
+    const history = commitActivityFeeSchedule(schedule, eventName, input.reportingPeriod);
     const record: ActivityFeeRecord = {
       id: `activity-fee-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       reference: `AF-${String(nextNumber).padStart(4, '0')}`,
-      eventName: input.eventName.trim(),
-      totalExpected: input.totalExpected,
-      ...posting.next,
+      eventName,
+      ...schedule.next,
+      ...(input.eventDate ? { eventDate: input.eventDate } : {}),
+      priorPeriodCollected: input.priorPeriodCollected || 0,
+      collections: input.collections,
       createdAt: now,
       updatedAt: now,
-      history: [{ id: `afh-${Date.now()}`, date: input.date, reportingPeriod: input.reportingPeriod, action: posting.action, amount: posting.amount, ...(entry ? { journalEntryId: entry.id } : {}) }],
+      history,
     };
     setActivityFeeRecords(previous => [...previous, record]);
     logAudit('Activity Fee Event', `Created ${record.reference} for ${record.eventName}.`);
     return record;
+  };
+
+  const recognizeScheduledActivityFee = (id: string, totalExpected: number, eventDate: string, collections: DatedAmountRecord[], reportingPeriod: string): ActivityFeeRecord => {
+    const current = activityFeeRecords.find(record => record.id === id);
+    if (!current) throw new Error('Activity fee event not found.');
+    const schedule = buildScheduledActivityFeeRecognition(current, totalExpected, eventDate, collections);
+    const history = commitActivityFeeSchedule(schedule, current.eventName, reportingPeriod);
+    const updated: ActivityFeeRecord = { ...current, ...schedule.next, eventDate, collections: [...(current.collections || []), ...collections], updatedAt: new Date().toISOString(), history: [...current.history, ...history] };
+    setActivityFeeRecords(previous => previous.map(record => record.id === id ? updated : record));
+    logAudit('Update Activity Fee Event', `${current.reference}: event held and activity fees recognized.`);
+    return updated;
+  };
+
+  const collectActivityFeeReceivable = (id: string, collections: DatedAmountRecord[], reportingPeriod: string): ActivityFeeRecord => {
+    const current = activityFeeRecords.find(record => record.id === id);
+    if (!current) throw new Error('Activity fee event not found.');
+    const schedule = buildActivityFeeReceivableCollections(current, collections);
+    const history = commitActivityFeeSchedule(schedule, current.eventName, reportingPeriod);
+    const updated: ActivityFeeRecord = { ...current, ...schedule.next, collections: [...(current.collections || []), ...collections], updatedAt: new Date().toISOString(), history: [...current.history, ...history] };
+    setActivityFeeRecords(previous => previous.map(record => record.id === id ? updated : record));
+    logAudit('Update Activity Fee Event', `${current.reference}: collected outstanding activity fees.`);
+    return updated;
   };
 
   const updateActivityFeeRecord = (id: string, followUp: ActivityFeeFollowUp, date: string, reportingPeriod: string): ActivityFeeRecord => {
@@ -1230,6 +1287,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       addCustomClassificationRule,
       updateCustomClassificationRule,
       createActivityFeeRecord,
+      recognizeScheduledActivityFee,
+      collectActivityFeeReceivable,
       updateActivityFeeRecord,
       addAccount,
       updateAccount,

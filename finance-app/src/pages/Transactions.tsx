@@ -20,13 +20,13 @@ import confetti from 'canvas-confetti';
 import { useFinance, PurposeOption } from '../context/FinanceContext';
 import { JournalLine, ReceiptAttachmentDraft } from '../types';
 import { FUNDING_SOURCE_OPTIONS, buildJournalLines, buildCompoundJournalLines, projectJournalLineImpacts, computeStatementImpact } from '../lib/journalEngine';
-import { CASH_ACCOUNT_CODES } from '../lib/cashAccounts';
 import { PREPAID_EXPENSE_CODE } from '../lib/reviewEngine';
 import { formatReceiptSize, prepareReceiptAttachment, validateReceiptCount } from '../lib/receiptAttachments';
 import { ActivityFeeEntry } from '../components/ActivityFeeEntry';
 import { InventorySummaryCard } from '../components/InventorySummaryCard';
 import { DatedAmountInputRow, DatedAmountRows } from '../components/DatedAmountRows';
 import { NewFeatureBadge } from '../components/NewFeatureBadge';
+import { ReviewLaterNote } from '../components/ReviewLaterNote';
 import { categorizeTransactionRule, TRANSACTION_CATEGORIES, TransactionCategoryId } from '../lib/transactionCategories';
 import { merchandiseSaleCostError, MERCHANDISE_INVENTORY_CODE } from '../lib/transactionHistory';
 import {
@@ -42,6 +42,15 @@ import {
   buildCurrentMembershipFeePosting,
   buildPriorMembershipCollectionPosting,
 } from '../lib/membershipFees';
+import {
+  parseReportingYear,
+  periodForSemester,
+  REPORTING_PERIOD_OPTIONS,
+  ReportingPeriodRange,
+  semesterForPeriod,
+  SEMESTER_OPTIONS,
+  Semester,
+} from '../lib/reportingPeriod';
 
 const GENERAL_FUND_PROJECT = 'General Fund Operations';
 // Working paper's Situation 5.1/5.2/5.3 branch: a donor-restricted
@@ -56,7 +65,6 @@ export function Transactions(): React.ReactElement {
   const {
     accounts,
     journalEntries,
-    projects,
     addJournalEntry,
     attachReceiptsToEntry,
     reverseJournalEntry,
@@ -80,13 +88,10 @@ export function Transactions(): React.ReactElement {
   const [showTxDropdown, setShowTxDropdown] = useState(false);
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState<number>(0);
-  const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
-  const [selectedProject, setSelectedProject] = useState(GENERAL_FUND_PROJECT);
-  // Program/Project Allocation only matters for a transaction that's
-  // actually tied to a specific program or event — most entries (a
-  // utility bill, a bank charge) aren't, and stay under General Fund
-  // Operations without ever showing this field.
-  const [isProgramSpecific, setIsProgramSpecific] = useState(false);
+  const [date, setDate] = useState('');
+  const [semester, setSemester] = useState<Semester | ''>('');
+  const [reportingPeriod, setReportingPeriod] = useState<ReportingPeriodRange | ''>('');
+  const [reportingYear, setReportingYear] = useState('');
   const [debitCode, setDebitCode] = useState('5030'); // default Utilities
   const [creditCode, setCreditCode] = useState('1010'); // default Cash
   const [isSmartMatched, setIsSmartMatched] = useState(false);
@@ -100,6 +105,8 @@ export function Transactions(): React.ReactElement {
   const [merchandiseItem, setMerchandiseItem] = useState('');
   const [merchandiseOtherTitle, setMerchandiseOtherTitle] = useState('');
   const [merchandiseQuantity, setMerchandiseQuantity] = useState('');
+  const [merchandiseBatch, setMerchandiseBatch] = useState('');
+  const [merchandisePrepaymentEntryId, setMerchandisePrepaymentEntryId] = useState('');
   const [merchandisePaymentMethod, setMerchandisePaymentMethod] = useState<MerchandisePaymentMethod>('organization-funds');
   const [merchandiseOrganizationPayments, setMerchandiseOrganizationPayments] = useState<DatedAmountInputRow[]>([{ id: 'org-payment-1', date, amount: '' }]);
   const [merchandiseOfficerPayments, setMerchandiseOfficerPayments] = useState<DatedAmountInputRow[]>([{ id: 'officer-payment-1', date, amount: '' }]);
@@ -163,7 +170,6 @@ export function Transactions(): React.ReactElement {
 
   // active accounts
   const activeAccounts = accounts.filter(a => a.isActive);
-  const realPrograms = projects.filter(p => p.name !== GENERAL_FUND_PROJECT);
 
   // Deduped, alphabetized list of known transaction types (two rules —
   // 'award'/'prize' — share the description "Awards & Prizes Expense",
@@ -194,7 +200,7 @@ export function Transactions(): React.ReactElement {
   // still a cash account — once it points at a revenue, loan, or accounts
   // payable account, "whose money paid for it?" no longer applies.
   const isMerchandiseAcquisition = selectedCategory === 'merchandise' && debitCode === '1700';
-  const showFundingSource = !!classificationPreview && CASH_ACCOUNT_CODES.includes(creditCode) && !isMerchandiseAcquisition;
+  const isMerchandisePrepayment = selectedCategory === 'merchandise' && debitCode === '1270';
 
   // Only a cash contribution matched to Contributions Revenue - Unrestricted
   // can raise the restriction question — a release-from-restriction entry
@@ -241,6 +247,8 @@ export function Transactions(): React.ReactElement {
       setMerchandiseItem('');
       setMerchandiseOtherTitle('');
       setMerchandiseQuantity('');
+      setMerchandiseBatch('');
+      setMerchandisePrepaymentEntryId('');
       setMerchandisePaymentMethod('organization-funds');
       setMerchandiseOrganizationPayments([{ id: `org-payment-${Date.now()}`, date, amount: '' }]);
       setMerchandiseOfficerPayments([{ id: `officer-payment-${Date.now()}`, date, amount: '' }]);
@@ -286,6 +294,8 @@ export function Transactions(): React.ReactElement {
       setMerchandiseItem('');
       setMerchandiseOtherTitle('');
       setMerchandiseQuantity('');
+      setMerchandiseBatch('');
+      setMerchandisePrepaymentEntryId('');
       setMerchandisePaymentMethod('organization-funds');
       setMerchandiseOrganizationPayments([{ id: `org-payment-${Date.now()}`, date, amount: '' }]);
       setMerchandiseOfficerPayments([{ id: `officer-payment-${Date.now()}`, date, amount: '' }]);
@@ -300,20 +310,6 @@ export function Transactions(): React.ReactElement {
       setMerchandiseCollectionOfficer('');
     }
   }, [txName]);
-
-  // When the funding source is changed by hand, apply it to the credit
-  // account immediately — same "user override" behavior as changing the
-  // Credit Account select manually.
-  const handleFundingSourceChange = (id: string) => {
-    setFundingSourceId(id);
-    const option = FUNDING_SOURCE_OPTIONS.find(o => o.id === id);
-    if (option) {
-      setCreditCode(option.creditAccountCode);
-      setIsSmartMatched(false);
-      setRestrictionAnswer('');
-      setSamePeriodAnswer('');
-    }
-  };
 
   // When the purpose is changed by hand, apply its description. It never
   // touches the debit/credit accounts — the keyword match already fixed
@@ -346,6 +342,16 @@ export function Transactions(): React.ReactElement {
   const isMerchandiseSale = effectiveCreditCode === '4070';
   const merchandiseInventoryBalance = accountBalances[MERCHANDISE_INVENTORY_CODE] || 0;
   const merchandiseBatches = useMemo(() => buildMerchandiseBatchBalances(journalEntries), [journalEntries]);
+  const availableMerchandisePrepayments = useMemo(() => {
+    const used = new Set(journalEntries.map(entry => entry.transactionDetails?.merchandisePrepaymentEntryId).filter(Boolean));
+    return journalEntries.filter(entry => !entry.reversalOfEntryId && !entry.reversedByEntryId && !used.has(entry.id))
+      .map(entry => ({
+        entry,
+        amount: entry.lines.filter(line => line.accountCode === '1270').reduce((sum, line) => sum + line.debit - line.credit, 0),
+      }))
+      .filter(candidate => candidate.amount > 0);
+  }, [journalEntries]);
+  const selectedMerchandisePrepayment = availableMerchandisePrepayments.find(candidate => candidate.entry.id === merchandisePrepaymentEntryId);
   const selectedMerchandiseBatch = merchandiseBatches.find(batch => batch.entryId === merchandiseSaleBatchId);
   const merchandiseSaleTotal = Math.round((Number(merchandiseQuantitySold) || 0) * (Number(merchandiseSellingPrice) || 0) * 100) / 100;
   const merchandiseCollectionTotal = sumDatedAmounts(merchandiseCollections);
@@ -394,6 +400,7 @@ export function Transactions(): React.ReactElement {
           reimbursement: merchandiseReimbursementTotal,
           reimbursements: merchandiseReimbursements.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })),
           availableAdvance: advancesOutstanding,
+          prepaymentAmount: selectedMerchandisePrepayment?.amount || 0,
           cashAccountCode: '1010',
         }),
         error: '',
@@ -401,7 +408,7 @@ export function Transactions(): React.ReactElement {
     } catch (error) {
       return { posting: null, error: error instanceof Error ? error.message : 'The acquisition amounts are invalid.' };
     }
-  }, [isMerchandiseAcquisition, amount, merchandisePaymentMethod, date, merchandiseOrganizationPaymentTotal, merchandiseOrganizationPayments, merchandiseOfficerPaymentTotal, merchandiseOfficerPayments, merchandiseAdvancePaymentTotal, merchandiseAdvancePayments, merchandiseReimbursementTotal, merchandiseReimbursements, advancesOutstanding]);
+  }, [isMerchandiseAcquisition, amount, merchandisePaymentMethod, date, merchandiseOrganizationPaymentTotal, merchandiseOrganizationPayments, merchandiseOfficerPaymentTotal, merchandiseOfficerPayments, merchandiseAdvancePaymentTotal, merchandiseAdvancePayments, merchandiseReimbursementTotal, merchandiseReimbursements, advancesOutstanding, selectedMerchandisePrepayment]);
 
   useEffect(() => {
     if (isMerchandiseSale) setAmount(merchandiseSaleTotal);
@@ -489,6 +496,21 @@ export function Transactions(): React.ReactElement {
       setErrorMessage('Please select a transaction type from the list so its accounts can be determined automatically.');
       return;
     }
+    if (!date) {
+      setErrorMessage('Please enter the transaction date.');
+      return;
+    }
+    if (!semester || !reportingPeriod) {
+      setErrorMessage('Please select the semester and reporting period.');
+      return;
+    }
+    let parsedReportingYear: number;
+    try {
+      parsedReportingYear = parseReportingYear(reportingYear);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Please enter a valid reporting year.');
+      return;
+    }
     if (isMerchandiseSale) {
       if (!selectedMerchandiseBatch) {
         setErrorMessage('Please select a merchandise purchase batch with units still available.');
@@ -515,8 +537,12 @@ export function Transactions(): React.ReactElement {
       setErrorMessage('Please enter a valid amount greater than zero.');
       return;
     }
-    if (isMerchandiseAcquisition && !merchandiseItemLabel) {
+    if ((isMerchandiseAcquisition || isMerchandisePrepayment) && !merchandiseItemLabel) {
       setErrorMessage('Please select the merchandise purchased and enter a title when choosing Others.');
+      return;
+    }
+    if ((isMerchandiseAcquisition || isMerchandisePrepayment) && !merchandiseBatch.trim()) {
+      setErrorMessage('Please enter the merchandise batch or pre-order reference.');
       return;
     }
     if (isMerchandiseAcquisition && (!Number.isInteger(Number(merchandiseQuantity)) || Number(merchandiseQuantity) <= 0)) {
@@ -589,7 +615,9 @@ export function Transactions(): React.ReactElement {
         : '';
 
       const entryDescription = isMerchandiseAcquisition
-        ? (customName.trim() || `${description || txName} - ${merchandiseItemLabel}`)
+        ? (customName.trim() || `${description || txName} - ${merchandiseItemLabel} - ${merchandiseBatch.trim()}`)
+        : isMerchandisePrepayment
+          ? (customName.trim() || `${description || txName} - ${merchandiseItemLabel} - ${merchandiseBatch.trim()}`)
         : isMerchandiseSale
           ? (customName.trim() || `Sale of Merchandise - ${selectedMerchandiseBatch?.item || 'Merchandise'}`)
         : (customName.trim() || description || txName) + usePeriodNote;
@@ -597,9 +625,9 @@ export function Transactions(): React.ReactElement {
       const je = addJournalEntry(
         date,
         entryDescription,
-        isProgramSpecific ? selectedProject : GENERAL_FUND_PROJECT,
+        GENERAL_FUND_PROJECT,
         lines,
-        isProgramSpecific ? selectedProject : undefined,
+        undefined,
         undefined,
         {
           transactionType: txName,
@@ -607,12 +635,15 @@ export function Transactions(): React.ReactElement {
           details: {
             memo: description.trim() || undefined,
             purpose: classificationPreview.purposeOptions?.[purposeIndex]?.label,
-            fundingSourceId: showFundingSource ? fundingSourceId : undefined,
+            semester,
+            reportingPeriod,
+            reportingYear: parsedReportingYear,
+            fundingSourceId: undefined,
             sponsorshipKind: classificationPreview.sponsorshipKind,
             counterpartyName: isMerchandiseSale && merchandiseCollectionMethod === 'officer-to-remit'
               ? merchandiseCollectionOfficer.trim()
               : counterpartyName.trim() || undefined,
-            eventRelated: isProgramSpecific,
+            eventRelated: false,
             donorRestriction: showRestrictionQuestion
               ? restrictionAnswer === 'no'
                 ? 'none'
@@ -631,6 +662,10 @@ export function Transactions(): React.ReactElement {
             expectedUsePeriod: deferredAmount > 0 ? expectedUsePeriod : undefined,
             inventoryCost: isMerchandiseSale ? Number(merchandiseCost) : undefined,
             merchandiseQuantity: isMerchandiseAcquisition ? Number(merchandiseQuantity) : undefined,
+            merchandiseBatch: (isMerchandiseAcquisition || isMerchandisePrepayment) ? merchandiseBatch.trim() : undefined,
+            merchandisePurchaseDate: isMerchandiseAcquisition ? date : undefined,
+            merchandisePrepaymentEntryId: isMerchandiseAcquisition ? merchandisePrepaymentEntryId || undefined : undefined,
+            merchandisePrepaymentAmount: isMerchandiseAcquisition ? selectedMerchandisePrepayment?.amount : undefined,
             merchandisePaymentMethod: isMerchandiseAcquisition ? merchandisePaymentMethod : undefined,
             merchandiseOrganizationPayment: isMerchandiseAcquisition ? merchandiseOrganizationPaymentTotal : undefined,
             merchandiseOrganizationPayments: isMerchandiseAcquisition ? merchandiseOrganizationPayments.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })) : undefined,
@@ -641,7 +676,7 @@ export function Transactions(): React.ReactElement {
             merchandiseReimbursement: isMerchandiseAcquisition ? merchandiseReimbursementTotal : undefined,
             merchandiseReimbursements: isMerchandiseAcquisition ? merchandiseReimbursements.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })) : undefined,
             merchandisePayableAmount: isMerchandiseAcquisition ? merchandiseAcquisitionResult.posting?.merchandisePayable : undefined,
-            merchandiseItem: isMerchandiseSale ? selectedMerchandiseBatch?.item : isMerchandiseAcquisition ? merchandiseItemLabel : undefined,
+            merchandiseItem: isMerchandiseSale ? selectedMerchandiseBatch?.item : (isMerchandiseAcquisition || isMerchandisePrepayment) ? merchandiseItemLabel : undefined,
             merchandiseBatchEntryId: isMerchandiseSale ? merchandiseSaleBatchId : undefined,
             merchandiseQuantitySold: isMerchandiseSale ? Number(merchandiseQuantitySold) : undefined,
             merchandiseSellingPrice: isMerchandiseSale ? Number(merchandiseSellingPrice) : undefined,
@@ -684,6 +719,8 @@ export function Transactions(): React.ReactElement {
       setMerchandiseItem('');
       setMerchandiseOtherTitle('');
       setMerchandiseQuantity('');
+      setMerchandiseBatch('');
+      setMerchandisePrepaymentEntryId('');
       setMerchandisePaymentMethod('organization-funds');
       setMerchandiseOrganizationPayments([{ id: `org-payment-${Date.now()}`, date, amount: '' }]);
       setMerchandiseOfficerPayments([{ id: `officer-payment-${Date.now()}`, date, amount: '' }]);
@@ -696,8 +733,10 @@ export function Transactions(): React.ReactElement {
       setMerchandiseCollections([{ id: `collection-${Date.now()}`, date, amount: '' }]);
       setMerchandiseRemittances([{ id: `remittance-${Date.now()}`, date, amount: '' }]);
       setMerchandiseCollectionOfficer('');
-      setIsProgramSpecific(false);
-      setSelectedProject(GENERAL_FUND_PROJECT);
+      setDate('');
+      setSemester('');
+      setReportingPeriod('');
+      setReportingYear('');
       setPendingReceipts([]);
       setReceiptMessage('');
 
@@ -830,6 +869,13 @@ export function Transactions(): React.ReactElement {
                 onChange={(e) => { setTxName(e.target.value); setShowTxDropdown(true); }}
                 onFocus={() => setShowTxDropdown(true)}
                 onBlur={() => setTimeout(() => setShowTxDropdown(false), 150)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && showTxDropdown && filteredTxTypeOptions.length > 0) {
+                    e.preventDefault();
+                    setTxName(filteredTxTypeOptions[0]);
+                    setShowTxDropdown(false);
+                  }
+                }}
                 placeholder="Search a transaction type..."
                 autoComplete="off"
                 className="w-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-blue-900 focus:ring-blue-900/10 rounded-xl text-xs font-semibold p-3 outline-none transition-colors dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/20"
@@ -859,6 +905,7 @@ export function Transactions(): React.ReactElement {
               )}
 
               <p className="text-[10px] text-slate-500 mt-1 font-medium dark:text-slate-400">Select a known type. Its accounting rule determines the accounts automatically.</p>
+              <div className="mt-2"><ReviewLaterNote /></div>
 
               {isSmartMatched && (
                 <div className="mt-2 text-xs font-semibold text-emerald-600">
@@ -885,40 +932,25 @@ export function Transactions(): React.ReactElement {
               <p className="text-[10px] text-slate-500 mt-1 font-medium dark:text-slate-400">This label identifies the transaction; it does not change its accounting rule.</p>
             </div>
 
-            <div className="sm:col-span-2">
-              <label className={`flex items-center gap-2 select-none ${realPrograms.length === 0 ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>
-                <input
-                  type="checkbox"
-                  checked={isProgramSpecific}
-                  disabled={realPrograms.length === 0}
-                  onChange={(e) => {
-                    const checked = e.target.checked;
-                    setIsProgramSpecific(checked);
-                    setSelectedProject(checked ? realPrograms[0].name : GENERAL_FUND_PROJECT);
-                  }}
-                  className="w-3.5 h-3.5 rounded border-slate-300 text-blue-700 focus:ring-blue-500 dark:border-slate-600"
-                />
-                <span className="text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider">This is for a specific Program / Event</span>
-              </label>
-              {realPrograms.length === 0 && (
-                <p className="text-[10px] text-slate-500 mt-1 font-medium dark:text-slate-400">Create a program on Activities &amp; Programs first.</p>
-              )}
-
-              {isProgramSpecific && (
-                <div className="mt-2">
-                  <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Program / Project Allocation</label>
-                  <select
-                    value={selectedProject}
-                    onChange={(e) => setSelectedProject(e.target.value)}
-                    className="w-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-blue-900 focus:ring-blue-900/10 rounded-xl text-xs font-semibold p-2.5 outline-none transition-colors dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/20"
-                  >
-                    {realPrograms.map((proj) => (
-                      <option key={proj.id} value={proj.name}>{proj.name}</option>
-                    ))}
+            <div className="sm:col-span-2 rounded-xl border border-violet-200 bg-violet-50 p-3.5 dark:border-violet-500/20 dark:bg-violet-500/10">
+              <p className="mb-3 text-[10px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Reporting Period</p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <label className="text-[10px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Semester
+                  <select value={semester} onChange={event => { const value = event.target.value as Semester | ''; setSemester(value); setReportingPeriod(value ? periodForSemester(value) : ''); }} className="mt-1.5 w-full rounded-lg border border-violet-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-violet-500/30 dark:bg-slate-800 dark:text-slate-100" required>
+                    <option value="" disabled>Select semester…</option>
+                    {SEMESTER_OPTIONS.map(option => <option key={option} value={option}>{option}</option>)}
                   </select>
-                  <p className="text-[10px] text-slate-500 mt-1 font-medium dark:text-slate-400">Which budget this counts against — shows as Event-Related on the Statement of Activities.</p>
-                </div>
-              )}
+                </label>
+                <label className="text-[10px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Period
+                  <select value={reportingPeriod} onChange={event => { const value = event.target.value as ReportingPeriodRange | ''; setReportingPeriod(value); setSemester(value ? semesterForPeriod(value) : ''); }} className="mt-1.5 w-full rounded-lg border border-violet-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-violet-500/30 dark:bg-slate-800 dark:text-slate-100" required>
+                    <option value="" disabled>Select period…</option>
+                    {REPORTING_PERIOD_OPTIONS.map(option => <option key={option} value={option}>{option}</option>)}
+                  </select>
+                </label>
+                <label className="text-[10px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Year
+                  <input type="text" inputMode="numeric" maxLength={4} value={reportingYear} onChange={event => setReportingYear(event.target.value.replace(/\D/g, '').slice(0, 4))} placeholder="Example: 2021" className="mt-1.5 w-full rounded-lg border border-violet-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-violet-500/30 dark:bg-slate-800 dark:text-slate-100" required />
+                </label>
+              </div>
             </div>
 
             {classificationPreview?.purposeOptions && classificationPreview.purposeOptions.length > 0 && (
@@ -937,11 +969,35 @@ export function Transactions(): React.ReactElement {
               </div>
             )}
 
+            {isMerchandisePrepayment && (
+              <div className="sm:col-span-2 space-y-4 rounded-xl border border-violet-200 bg-violet-50 p-4 dark:border-violet-500/20 dark:bg-violet-500/10">
+                <div>
+                  <h4 className="flex items-center gap-2 text-xs font-black text-violet-700 dark:text-violet-300">Pre-ordered merchandise details <NewFeatureBadge /></h4>
+                  <p className="mt-1 text-[10px] font-medium text-violet-700 dark:text-violet-300">Record this downpayment separately before recording the acquisition. You can link it when the goods are received.</p>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Merchandise pre-ordered</label>
+                    <select value={merchandiseItem} onChange={event => { setMerchandiseItem(event.target.value); if (event.target.value !== 'Others') setMerchandiseOtherTitle(''); }} className="mt-1.5 w-full rounded-lg border border-violet-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-violet-500/30 dark:bg-slate-800 dark:text-slate-100" required>
+                      <option value="" disabled>Select merchandise…</option>
+                      {MERCHANDISE_ITEM_OPTIONS.map(item => <option key={item} value={item}>{item}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Batch / pre-order reference</label>
+                    <input type="text" value={merchandiseBatch} onChange={event => setMerchandiseBatch(event.target.value)} placeholder="Example: Lanyard Batch 1" className="mt-1.5 w-full rounded-lg border border-violet-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-violet-500/30 dark:bg-slate-800 dark:text-slate-100" required />
+                  </div>
+                </div>
+                {merchandiseItem === 'Others' && <div><label className="block text-[10px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Other merchandise title</label><input type="text" value={merchandiseOtherTitle} onChange={event => setMerchandiseOtherTitle(event.target.value)} placeholder="Enter the merchandise name" className="mt-1.5 w-full rounded-lg border border-violet-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-violet-500/30 dark:bg-slate-800 dark:text-slate-100" required /></div>}
+              </div>
+            )}
+
             {isMerchandiseAcquisition && (
               <div className="sm:col-span-2 space-y-4 rounded-xl border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-500/20 dark:bg-indigo-500/10">
                 <div>
                   <h4 className="flex items-center gap-2 text-xs font-black text-violet-700 dark:text-violet-300">Merchandise batch information <NewFeatureBadge /></h4>
                   <p className="mt-1 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Record each purchase batch separately so its item, quantity, cost, and settlement remain traceable.</p>
+                  <p className="mt-1 text-[10px] font-semibold text-indigo-800 dark:text-indigo-200"><strong>Date of Purchase:</strong> use the date when the organization actually received the purchased goods.</p>
                 </div>
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -966,6 +1022,20 @@ export function Transactions(): React.ReactElement {
                 )}
 
                 <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Batch</label>
+                  <input type="text" value={merchandiseBatch} onChange={event => setMerchandiseBatch(event.target.value)} placeholder="Example: Lanyard Batch 1" className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Previously recorded downpayment (if applicable)</label>
+                  <select value={merchandisePrepaymentEntryId} onChange={event => setMerchandisePrepaymentEntryId(event.target.value)} className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100">
+                    <option value="">No linked downpayment</option>
+                    {availableMerchandisePrepayments.map(candidate => <option key={candidate.entry.id} value={candidate.entry.id}>{candidate.entry.reference} — {candidate.entry.transactionDetails?.merchandiseItem || candidate.entry.description} — {formatCurrency(candidate.amount)}</option>)}
+                  </select>
+                  <p className="mt-1 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Only downpayments recorded separately under Merchandise Transactions appear here.</p>
+                </div>
+
+                <div>
                   <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Total cost of this batch</label>
                   <div className="relative mt-1.5">
                     <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-indigo-500">{settings.currencySymbol}</span>
@@ -979,13 +1049,12 @@ export function Transactions(): React.ReactElement {
                     <option value="organization-funds">Paid directly from organization funds</option>
                     <option value="officer-personal">Paid by an officer using personal money</option>
                     <option value="organization-advance">Paid using an organization advance</option>
-                    <option value="advance-and-personal">Combination of advance and officer personal money</option>
                     <option value="not-yet-paid">Not yet paid</option>
                   </select>
                 </div>
 
                 {merchandisePaymentMethod === 'organization-funds' && (
-                  <DatedAmountRows label="How much was paid by the organization to the supplier?" rows={merchandiseOrganizationPayments} onChange={setMerchandiseOrganizationPayments} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={amount} addLabel="Add payment" />
+                  <DatedAmountRows label="How much was paid by the organization to the supplier?" rows={merchandiseOrganizationPayments} onChange={setMerchandiseOrganizationPayments} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={Math.max(0, amount - (selectedMerchandisePrepayment?.amount || 0))} addLabel="Add payment" />
                 )}
 
                 {(merchandisePaymentMethod === 'organization-advance' || merchandisePaymentMethod === 'advance-and-personal') && (
@@ -1004,22 +1073,6 @@ export function Transactions(): React.ReactElement {
 
                 {merchandisePaymentMethod === 'not-yet-paid' && <p className="rounded-lg bg-white/80 p-3 text-[10px] font-semibold text-indigo-800 dark:bg-slate-900/60 dark:text-indigo-200">The full batch cost will remain in Merchandise Payable and appear in Review until settled.</p>}
                 {merchandiseAcquisitionResult.error && amount > 0 && <p className="text-[10px] font-bold text-rose-700 dark:text-rose-300">{merchandiseAcquisitionResult.error}</p>}
-              </div>
-            )}
-
-            {showFundingSource && (
-              <div className="sm:col-span-2">
-                <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Whose Money Paid For This?</label>
-                <select
-                  value={fundingSourceId}
-                  onChange={(e) => handleFundingSourceChange(e.target.value)}
-                  className="w-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-blue-900 focus:ring-blue-900/10 rounded-xl text-xs font-semibold p-2.5 outline-none transition-colors dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/20"
-                >
-                  {FUNDING_SOURCE_OPTIONS.map((opt) => (
-                    <option key={opt.id} value={opt.id}>{opt.label}</option>
-                  ))}
-                </select>
-                <p className="text-[10px] text-slate-500 mt-1 font-medium dark:text-slate-400">Determines which account this transaction is credited against.</p>
               </div>
             )}
 
@@ -1267,7 +1320,7 @@ export function Transactions(): React.ReactElement {
             )}
 
             {!isMerchandiseAcquisition && !isMerchandiseSale && !requiresAccrualCompletion && !isPriorMembershipCollection && <div>
-              <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Amount</label>
+              <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">{isMerchandisePrepayment ? 'Payment' : 'Amount'}</label>
               <div className="relative">
                 <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 dark:text-slate-400">{settings.currencySymbol}</span>
                 <input

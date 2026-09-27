@@ -18,7 +18,7 @@ export const TRANSACTION_CATEGORIES: TransactionCategory[] = [
   { id: 'merchandise', label: 'Merchandise Transactions', description: 'Buy inventory or record merchandise sales.' },
   { id: 'membership-fees', label: 'Membership Fees', description: 'Current and prior-period member collections.' },
   { id: 'purchases', label: 'Purchases', description: 'Supplies, equipment, services, and operating expenses.' },
-  { id: 'other', label: 'Other Transactions', description: 'Income, sponsorships, loans, adjustments, and other entries.' },
+  { id: 'other', label: 'Miscellaneous Transactions', description: 'Cash advances, other income, sponsorships, loans, and adjustments.' },
 ];
 
 const PURCHASE_ASSET_CODES = new Set(['1500', '1650']);

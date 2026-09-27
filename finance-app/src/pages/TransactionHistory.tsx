@@ -14,7 +14,7 @@ export function TransactionHistory(): React.ReactElement {
     () => selectedAccount ? buildAccountTransactionHistory(selectedAccount, journalEntries) : [],
     [selectedAccount, journalEntries]
   );
-  const visibleHistory = history.filter(line => `${line.reference} ${line.description} ${line.project}`.toLowerCase().includes(search.toLowerCase()));
+  const visibleHistory = history.filter(line => `${line.reference} ${line.description} ${line.project} ${line.eventName || ''} ${line.merchandiseDetail || ''}`.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <div className="space-y-6 bg-slate-50 dark:bg-slate-950">
@@ -44,10 +44,10 @@ export function TransactionHistory(): React.ReactElement {
 
         <div className="mt-3 overflow-x-auto">
           <table className="w-full min-w-[760px] text-left text-xs">
-            <thead><tr className="border-b border-slate-200 text-[9px] font-bold uppercase text-slate-500 dark:border-slate-800"><th className="px-3 py-2">Date</th><th className="px-3 py-2">Reference</th><th className="px-3 py-2">Description</th><th className="px-3 py-2">Program</th><th className="px-3 py-2 text-right">Debit</th><th className="px-3 py-2 text-right">Credit</th><th className="px-3 py-2 text-right">Running balance</th></tr></thead>
+            <thead><tr className="border-b border-slate-200 text-[9px] font-bold uppercase text-slate-500 dark:border-slate-800"><th className="px-3 py-2">Date</th><th className="px-3 py-2">Reference</th><th className="px-3 py-2">Description</th><th className="px-3 py-2">Merchandise / Batch</th><th className="px-3 py-2">Event / Program</th><th className="px-3 py-2 text-right">Debit</th><th className="px-3 py-2 text-right">Credit</th><th className="px-3 py-2 text-right">Running balance</th></tr></thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {visibleHistory.map(line => <tr key={`${line.entryId}-${line.debit}-${line.credit}`}><td className="px-3 py-2">{line.date}</td><td className="px-3 py-2 font-bold text-blue-800 dark:text-blue-200">{line.reference}</td><td className="px-3 py-2">{line.description}</td><td className="px-3 py-2">{line.project}</td><td className="px-3 py-2 text-right">{line.debit ? formatCurrency(line.debit) : '—'}</td><td className="px-3 py-2 text-right">{line.credit ? formatCurrency(line.credit) : '—'}</td><td className="px-3 py-2 text-right font-black">{formatCurrency(line.runningBalance)}</td></tr>)}
-              {visibleHistory.length === 0 && <tr><td colSpan={7} className="px-3 py-8 text-center text-xs font-medium text-slate-500">No matching transactions for this account.</td></tr>}
+              {visibleHistory.map(line => <tr key={`${line.entryId}-${line.date}-${line.debit}-${line.credit}`}><td className="px-3 py-2">{line.date}</td><td className="px-3 py-2 font-bold text-blue-800 dark:text-blue-200">{line.reference}</td><td className="px-3 py-2">{line.description}</td><td className="px-3 py-2">{line.merchandiseDetail || '—'}</td><td className="px-3 py-2">{line.eventName || line.project}</td><td className="px-3 py-2 text-right">{line.debit ? formatCurrency(line.debit) : '—'}</td><td className="px-3 py-2 text-right">{line.credit ? formatCurrency(line.credit) : '—'}</td><td className="px-3 py-2 text-right font-black">{formatCurrency(line.runningBalance)}</td></tr>)}
+              {visibleHistory.length === 0 && <tr><td colSpan={8} className="px-3 py-8 text-center text-xs font-medium text-slate-500">No matching transactions for this account.</td></tr>}
             </tbody>
           </table>
         </div>
