@@ -70,6 +70,7 @@ export function Transactions(): React.ReactElement {
     reverseJournalEntry,
     suggestTransactionClassification,
     classificationRules,
+    isRuleAvailable,
     accountBalances,
     formatCurrency,
     settings
@@ -166,6 +167,7 @@ export function Transactions(): React.ReactElement {
     requiresAccrualCompletion?: boolean;
     mayDeferPortion?: boolean;
     sponsorshipKind?: 'cash' | 'food' | 'supplies';
+    accrualAudience?: 'all' | 'new';
   } | null>(null);
 
   // active accounts
@@ -178,10 +180,10 @@ export function Transactions(): React.ReactElement {
     if (!selectedCategory || selectedCategory === 'activity-fees') return [];
     return Array.from(new Set(
       classificationRules
-        .filter(rule => categorizeTransactionRule(rule) === selectedCategory)
+        .filter(rule => categorizeTransactionRule(rule) === selectedCategory && isRuleAvailable(rule))
         .map(rule => rule.description)
     )).sort();
-  }, [classificationRules, selectedCategory]);
+  }, [classificationRules, selectedCategory, isRuleAvailable]);
   const filteredTxTypeOptions = txName.trim()
     ? transactionTypeOptions.filter(d => d.toLowerCase().includes(txName.trim().toLowerCase()))
     : transactionTypeOptions;
@@ -223,6 +225,10 @@ export function Transactions(): React.ReactElement {
   // Prior-period collections clear an existing receivable instead.
   const requiresAccrualCompletion = !!classificationPreview?.requiresAccrualCompletion;
   const isPriorMembershipCollection = !!classificationPreview && debitCode === '1010' && creditCode === MEMBERSHIP_DUES_RECEIVABLE_CODE;
+  // Same accrual mechanics either way — only the question's wording
+  // differs, for whichever pool of members this particular type is
+  // billing (see accrualAudience's doc comment in FinanceContext.tsx).
+  const isNewMembersAccrual = classificationPreview?.accrualAudience === 'new';
 
   // The general "not yet used" question — see mayDeferPortion's doc
   // comment in FinanceContext.tsx. officer-cash-advance is excluded: that
@@ -1148,13 +1154,13 @@ export function Transactions(): React.ReactElement {
 
             {requiresAccrualCompletion && (
               <div className="sm:col-span-2 space-y-4 p-3.5 bg-amber-50 border border-amber-100 rounded-xl dark:bg-amber-500/10 dark:border-amber-500/20">
-                <h4 className="flex items-center gap-2 text-xs font-black text-violet-700 dark:text-violet-300">Membership Fees collection schedule <NewFeatureBadge /></h4>
+                <h4 className="flex items-center gap-2 text-xs font-black text-violet-700 dark:text-violet-300">{isNewMembersAccrual ? 'New/Additional Members fees collection schedule' : 'Membership Fees collection schedule'} <NewFeatureBadge /></h4>
                 <div>
                   <label className="block text-[11px] font-bold text-amber-900 dark:text-amber-300 mb-1.5">When did the membership period start? (Date 1) <span className="text-amber-600">*required</span></label>
                   <input type="date" value={date} onChange={event => setDate(event.target.value)} className="w-full rounded-lg border border-amber-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-amber-500/30 dark:bg-slate-800 dark:text-slate-100" required />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-bold text-amber-900 dark:text-amber-300 mb-1.5">Total membership fees collectible from all members <span className="text-amber-600">*required</span></label>
+                  <label className="block text-[11px] font-bold text-amber-900 dark:text-amber-300 mb-1.5">{isNewMembersAccrual ? 'How much is total fees collectible from new/additional members of the org?' : 'Total membership fees collectible from all members'} <span className="text-amber-600">*required</span></label>
                   <div className="relative">
                     <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-amber-500">{settings.currencySymbol}</span>
                     <input type="number" step="0.01" min="0.01" value={amount || ''} onChange={event => setAmount(Number(event.target.value))} placeholder="0.00" className="w-full bg-white border border-amber-200 text-slate-900 rounded-lg text-xs font-bold p-2.5 pl-8 outline-none dark:bg-slate-800 dark:border-amber-500/30 dark:text-slate-100" required />

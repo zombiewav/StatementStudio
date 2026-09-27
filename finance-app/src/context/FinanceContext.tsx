@@ -516,8 +516,15 @@ const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   // is only half the story — requiresAccrualCompletion drives the second
   // mandatory question on the Transactions form ("how much remains
   // unpaid?"), which posts the other half to Membership Dues Receivable so
-  // full-period revenue is never understated.
-  { keyword: 'current school year', debitAccountCode: '1010', creditAccountCode: '4040', description: 'Cash Collection of Current School Year Membership Fees', requiresAccrualCompletion: true },
+  // full-period revenue is never understated. This is the whole year's
+  // membership billing, done once at the start of the school year — 1st
+  // Semester only; anyone who joins later in the year uses the
+  // new/additional-members type below instead.
+  { keyword: 'current school year', debitAccountCode: '1010', creditAccountCode: '4040', description: 'Collection and Accrual of Membership Fees (Current School Year)', requiresAccrualCompletion: true, accrualAudience: 'all', availableInSemester: '1st Semester' },
+  // Same accrual mechanics as the type above (Repeat Process, per the
+  // client's own note) for whoever joins mid-year instead of at the start
+  // — 2nd Semester only, the mirror restriction of the type above.
+  { keyword: 'new additional members', debitAccountCode: '1010', creditAccountCode: '4040', description: 'Membership Fees From New/Additional Members - 2nd Semester', requiresAccrualCompletion: true, accrualAudience: 'new', availableInSemester: '2nd Semester' },
   // "Cash prizes received" contains 'prize' as a substring, which would
   // otherwise be shadowed by the Awards & Prizes EXPENSE rule below (money
   // the org gives out, not receives) — checked here, ahead of it, for that
@@ -664,7 +671,13 @@ interface FinanceContextType {
     requiresAccrualCompletion?: boolean;
     mayDeferPortion?: boolean;
     sponsorshipKind?: 'cash' | 'food' | 'supplies';
+    accrualAudience?: 'all' | 'new';
   } | null;
+  // Whether a rule's availableInSemester (if any) matches the org's
+  // currently active semester — the single check both the searchable
+  // dropdown and suggestTransactionClassification use, so a restricted
+  // type can't be reached either way once it's the wrong semester.
+  isRuleAvailable: (rule: ClassificationRuleWithWorkflow) => boolean;
   
   accountBalances: Record<string, number>;
   totals: Record<string, number>; // Assets, Liabilities, etc.
@@ -803,6 +816,15 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     setAuditLogs(prev => [newLog, ...prev].slice(0, 100)); // Cap at 100 logs
   };
 
+  // A rule with no availableInSemester applies year-round. One that has it
+  // only matches while settings.semester equals it — including when
+  // settings.semester is still unset (a fresh org that hasn't used the
+  // Navbar's fiscal year picker yet), which fails safe by hiding every
+  // semester-restricted type rather than guessing which one applies.
+  const isRuleAvailable = (rule: ClassificationRuleWithWorkflow): boolean => (
+    !rule.availableInSemester || rule.availableInSemester === settings.semester
+  );
+
   // Rule Based Classifier
   //
   // Looks up the first rule whose keyword appears in the transaction name and
@@ -820,7 +842,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     // Purchase" — while the keyword only has to be distinctive), so
     // without this, selecting a dropdown entry could fall through to the
     // substring search below and match nothing.
-    const exactDescMatch = classificationRules.find(rule => rule.description.toLowerCase() === lowerName);
+    const exactDescMatch = classificationRules.find(rule => rule.description.toLowerCase() === lowerName && isRuleAvailable(rule));
     if (exactDescMatch) {
       return {
         debitAccountCode: exactDescMatch.debitAccountCode,
@@ -829,12 +851,13 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         purposeOptions: exactDescMatch.purposeOptions,
         requiresAccrualCompletion: exactDescMatch.requiresAccrualCompletion,
         mayDeferPortion: exactDescMatch.mayDeferPortion,
-        sponsorshipKind: exactDescMatch.sponsorshipKind
+        sponsorshipKind: exactDescMatch.sponsorshipKind,
+        accrualAudience: exactDescMatch.accrualAudience
       };
     }
 
     for (const rule of classificationRules) {
-      if (lowerName.includes(rule.keyword)) {
+      if (lowerName.includes(rule.keyword) && isRuleAvailable(rule)) {
         return {
           debitAccountCode: rule.debitAccountCode,
           creditAccountCode: rule.creditAccountCode,
@@ -842,7 +865,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
           purposeOptions: rule.purposeOptions,
           requiresAccrualCompletion: rule.requiresAccrualCompletion,
           mayDeferPortion: rule.mayDeferPortion,
-          sponsorshipKind: rule.sponsorshipKind
+          sponsorshipKind: rule.sponsorshipKind,
+          accrualAudience: rule.accrualAudience
         };
       }
     }
@@ -1318,6 +1342,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       updateSettings,
       formatCurrency,
       suggestTransactionClassification,
+      isRuleAvailable,
       accountBalances,
       totals,
       netIncome,
