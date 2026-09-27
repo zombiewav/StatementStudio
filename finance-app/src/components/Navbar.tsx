@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Search, Bell, Calendar, Building2, Check, CheckCircle, ChevronDown, LogOut } from "lucide-react";
+import { Search, Bell, Calendar, Building2, CheckCircle, ChevronDown, LogOut } from "lucide-react";
 import { useNavigate } from 'react-router';
 import { useFinance } from '../context/FinanceContext';
+import { Semester, SEMESTER_OPTIONS, periodForSemester, parseReportingYear } from '../lib/reportingPeriod';
 import { ThemeToggle } from './ThemeToggle';
 
 interface NavbarProps {
@@ -46,7 +47,27 @@ export function Navbar({ onMenuToggle, searchTerm, setSearchTerm }: NavbarProps)
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false);
   const [showFiscalYearDropdown, setShowFiscalYearDropdown] = useState(false);
   const fiscalYearDropdownRef = useRef<HTMLDivElement>(null);
-  const fiscalYears = ['FY 2025', 'FY 2026', 'FY 2027'];
+  // Same Semester/Period/Year structure already used per-transaction (see
+  // reportingPeriod.ts) — Period is always derived from Semester, never
+  // entered directly, so the two can't disagree. The school year spans two
+  // calendar years (1st Semester Aug-Dec of the entered year, 2nd Semester
+  // Jan-May of the year after), hence the "2021-2022" range in the label,
+  // regardless of which semester is currently selected.
+  const [fySemester, setFySemester] = useState<Semester | ''>('');
+  const [fyYear, setFyYear] = useState('');
+  const [fyError, setFyError] = useState('');
+
+  const applyFiscalYear = () => {
+    setFyError('');
+    if (!fySemester) { setFyError('Select a semester.'); return; }
+    try {
+      const year = parseReportingYear(fyYear);
+      updateSettings({ fiscalYear: `FY ${year}-${year + 1} • ${fySemester}` });
+      setShowFiscalYearDropdown(false);
+    } catch (err) {
+      setFyError(err instanceof Error ? err.message : 'Enter a valid year.');
+    }
+  };
 
   useEffect(() => {
     const closeFiscalYearDropdown = (event: MouseEvent) => {
@@ -119,33 +140,54 @@ export function Navbar({ onMenuToggle, searchTerm, setSearchTerm }: NavbarProps)
 
           {showFiscalYearDropdown && (
             <div
-              role="listbox"
               aria-label="Fiscal year"
-              className="absolute right-0 top-full z-50 mt-2 min-w-32 overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-900"
+              className="absolute right-0 top-full z-50 mt-2 w-64 rounded-xl border border-slate-200 bg-white p-3 shadow-xl dark:border-slate-700 dark:bg-slate-900"
             >
-              {fiscalYears.map(year => {
-                const isSelected = year === settings.fiscalYear;
-                return (
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Semester</p>
+              <div className="mb-3 flex gap-2">
+                {SEMESTER_OPTIONS.map(option => (
                   <button
-                    key={year}
+                    key={option}
                     type="button"
-                    role="option"
-                    aria-selected={isSelected}
-                    onClick={() => {
-                      updateSettings({ fiscalYear: year });
-                      setShowFiscalYearDropdown(false);
-                    }}
-                    className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-xs font-semibold transition-colors ${
-                      isSelected
-                        ? 'bg-blue-100 text-blue-900 dark:bg-blue-500/20 dark:text-blue-200'
-                        : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
+                    onClick={() => { setFySemester(option); setFyError(''); }}
+                    className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-bold transition-colors ${
+                      fySemester === option
+                        ? 'bg-blue-700 text-white'
+                        : 'border border-slate-300 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'
                     }`}
                   >
-                    <span>{year}</span>
-                    {isSelected && <Check className="h-3.5 w-3.5" />}
+                    {option}
                   </button>
-                );
-              })}
+                ))}
+              </div>
+
+              <label className="mb-3 block text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Year
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={4}
+                  value={fyYear}
+                  onChange={event => { setFyYear(event.target.value.replace(/\D/g, '').slice(0, 4)); setFyError(''); }}
+                  placeholder="Example: 2021"
+                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-2 text-xs font-semibold text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                />
+              </label>
+
+              <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Period</p>
+              <p className="mb-3 rounded-lg bg-slate-100 px-2.5 py-2 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                {fySemester ? periodForSemester(fySemester) : 'Automatic once a semester is selected'}
+              </p>
+
+              {fyError && <p className="mb-2 text-[10px] font-bold text-rose-600 dark:text-rose-400">{fyError}</p>}
+
+              <button
+                type="button"
+                onClick={applyFiscalYear}
+                className="w-full rounded-lg bg-blue-700 py-2 text-[11px] font-bold text-white hover:bg-blue-800"
+              >
+                Apply
+              </button>
             </div>
           )}
         </div>
