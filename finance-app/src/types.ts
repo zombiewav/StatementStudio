@@ -152,6 +152,11 @@ export interface AppSettings {
   // Drives which semester-restricted classification rules are selectable
   // (see availableInSemester on ClassificationRuleWithWorkflow).
   semester?: '1st Semester' | '2nd Semester' | '';
+  // The starting calendar year set alongside semester (e.g. 2021 for
+  // "FY 2021-2022"). Both are set once, together, via the Navbar's fiscal
+  // year picker, and every transaction now inherits them automatically
+  // instead of asking again per-transaction.
+  reportingYear?: number;
 }
 
 export interface ClassificationRule {

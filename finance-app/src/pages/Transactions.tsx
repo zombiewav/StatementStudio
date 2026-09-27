@@ -42,15 +42,7 @@ import {
   buildCurrentMembershipFeePosting,
   buildPriorMembershipCollectionPosting,
 } from '../lib/membershipFees';
-import {
-  parseReportingYear,
-  periodForSemester,
-  REPORTING_PERIOD_OPTIONS,
-  ReportingPeriodRange,
-  semesterForPeriod,
-  SEMESTER_OPTIONS,
-  Semester,
-} from '../lib/reportingPeriod';
+import { periodForSemester } from '../lib/reportingPeriod';
 
 const GENERAL_FUND_PROJECT = 'General Fund Operations';
 // Working paper's Situation 5.1/5.2/5.3 branch: a donor-restricted
@@ -90,9 +82,11 @@ export function Transactions(): React.ReactElement {
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState<number>(0);
   const [date, setDate] = useState('');
-  const [semester, setSemester] = useState<Semester | ''>('');
-  const [reportingPeriod, setReportingPeriod] = useState<ReportingPeriodRange | ''>('');
-  const [reportingYear, setReportingYear] = useState('');
+  // Semester/Period/Year are no longer asked per-transaction — every entry
+  // inherits the org's currently active values (set once, org-wide, via
+  // the Navbar's fiscal year picker) instead.
+  const semester = settings.semester || '';
+  const reportingPeriod = semester ? periodForSemester(semester) : '';
   const [debitCode, setDebitCode] = useState('5030'); // default Utilities
   const [creditCode, setCreditCode] = useState('1010'); // default Cash
   const [isSmartMatched, setIsSmartMatched] = useState(false);
@@ -519,17 +513,11 @@ export function Transactions(): React.ReactElement {
       setErrorMessage('Please enter the transaction date.');
       return;
     }
-    if (!semester || !reportingPeriod) {
-      setErrorMessage('Please select the semester and reporting period.');
+    if (!semester || !reportingPeriod || !settings.reportingYear) {
+      setErrorMessage('Set your organization\'s Semester and Year first — top right, next to the org name.');
       return;
     }
-    let parsedReportingYear: number;
-    try {
-      parsedReportingYear = parseReportingYear(reportingYear);
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Please enter a valid reporting year.');
-      return;
-    }
+    const parsedReportingYear = settings.reportingYear;
     if (isMerchandiseSale) {
       if (!selectedMerchandiseBatch) {
         setErrorMessage('Please select a merchandise purchase batch with units still available.');
@@ -753,9 +741,6 @@ export function Transactions(): React.ReactElement {
       setMerchandiseRemittances([{ id: `remittance-${Date.now()}`, date, amount: '' }]);
       setMerchandiseCollectionOfficer('');
       setDate('');
-      setSemester('');
-      setReportingPeriod('');
-      setReportingYear('');
       setPendingReceipts([]);
       setReceiptMessage('');
 
@@ -954,24 +939,17 @@ export function Transactions(): React.ReactElement {
             )}
 
             <div className="sm:col-span-2 rounded-xl border border-violet-200 bg-violet-50 p-3.5 dark:border-violet-500/20 dark:bg-violet-500/10">
-              <p className="mb-3 text-[10px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Reporting Period</p>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <label className="text-[10px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Semester
-                  <select value={semester} onChange={event => { const value = event.target.value as Semester | ''; setSemester(value); setReportingPeriod(value ? periodForSemester(value) : ''); }} className="mt-1.5 w-full rounded-lg border border-violet-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-violet-500/30 dark:bg-slate-800 dark:text-slate-100" required>
-                    <option value="" disabled>Select semester…</option>
-                    {SEMESTER_OPTIONS.map(option => <option key={option} value={option}>{option}</option>)}
-                  </select>
-                </label>
-                <label className="text-[10px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Period
-                  <select value={reportingPeriod} onChange={event => { const value = event.target.value as ReportingPeriodRange | ''; setReportingPeriod(value); setSemester(value ? semesterForPeriod(value) : ''); }} className="mt-1.5 w-full rounded-lg border border-violet-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-violet-500/30 dark:bg-slate-800 dark:text-slate-100" required>
-                    <option value="" disabled>Select period…</option>
-                    {REPORTING_PERIOD_OPTIONS.map(option => <option key={option} value={option}>{option}</option>)}
-                  </select>
-                </label>
-                <label className="text-[10px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Year
-                  <input type="text" inputMode="numeric" maxLength={4} value={reportingYear} onChange={event => setReportingYear(event.target.value.replace(/\D/g, '').slice(0, 4))} placeholder="Example: 2021" className="mt-1.5 w-full rounded-lg border border-violet-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-violet-500/30 dark:bg-slate-800 dark:text-slate-100" required />
-                </label>
-              </div>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Reporting Period</p>
+              {semester && reportingPeriod && settings.reportingYear ? (
+                <p className="mt-1 text-xs font-semibold text-violet-800 dark:text-violet-200">
+                  FY {settings.reportingYear}-{settings.reportingYear + 1} • {semester} ({reportingPeriod})
+                </p>
+              ) : (
+                <p className="mt-1 text-xs font-semibold text-rose-600 dark:text-rose-400">
+                  Not set — set it top right, next to the org name, before posting.
+                </p>
+              )}
+              <p className="mt-1 text-[10px] text-violet-700 dark:text-violet-300">Set once for the whole organization; every transaction uses it automatically.</p>
             </div>
 
             {classificationPreview?.purposeOptions && classificationPreview.purposeOptions.length > 0 && (

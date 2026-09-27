@@ -62,7 +62,7 @@ export function Navbar({ onMenuToggle, searchTerm, setSearchTerm }: NavbarProps)
     if (!fySemester) { setFyError('Select a semester.'); return; }
     try {
       const year = parseReportingYear(fyYear);
-      updateSettings({ fiscalYear: `FY ${year}-${year + 1} • ${fySemester}`, semester: fySemester });
+      updateSettings({ fiscalYear: `FY ${year}-${year + 1} • ${fySemester}`, semester: fySemester, reportingYear: year });
       setShowFiscalYearDropdown(false);
     } catch (err) {
       setFyError(err instanceof Error ? err.message : 'Enter a valid year.');
@@ -186,8 +186,9 @@ export function Navbar({ onMenuToggle, searchTerm, setSearchTerm }: NavbarProps)
                 onClick={applyFiscalYear}
                 className="w-full rounded-lg bg-blue-700 py-2 text-[11px] font-bold text-white hover:bg-blue-800"
               >
-                Apply
+                Apply to All
               </button>
+              <p className="mt-2 text-[9px] font-medium text-slate-500 dark:text-slate-400">Every new transaction uses this automatically — no need to set it again per-transaction.</p>
             </div>
           )}
         </div>
