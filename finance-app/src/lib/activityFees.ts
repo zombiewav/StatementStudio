@@ -77,6 +77,11 @@ function sum(collections: DatedAmountRecord[]): number {
   return collections.reduce((total, collection) => total + collection.amount, 0);
 }
 
+function assertUniqueDates(collections: DatedAmountRecord[], label: string): void {
+  const dates = collections.map(collection => collection.date);
+  if (new Set(dates).size !== dates.length) throw new Error(`${label} cannot contain duplicate dates. Combine collections received on the same date into one amount.`);
+}
+
 function collectionPosting(collection: DatedAmountRecord, creditAccountCode: string, action: ActivityFeeJournalPosting['action'], description: string): ActivityFeeJournalPosting {
   return {
     date: collection.date,
@@ -99,6 +104,8 @@ function buildRecognitionSchedule(existingUnearned: number, totalExpected: numbe
   const early = dated.filter(collection => collection.date < eventDate);
   const sameDay = dated.filter(collection => collection.date === eventDate);
   const after = dated.filter(collection => collection.date > eventDate);
+  assertUniqueDates(early, 'Collections before the event');
+  assertUniqueDates([...sameDay, ...after], 'Collections on or after the event');
   const earlyTotal = sum(early);
   const sameDayTotal = sum(sameDay);
   const unearnedReleased = existingUnearned + earlyTotal;

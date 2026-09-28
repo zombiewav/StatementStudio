@@ -652,6 +652,7 @@ interface FinanceContextType {
 
   addJournalEntry: (date: string, description: string, project: string, lines: JournalLine[], eventName?: string, settlesEntryId?: string, transactionMeta?: TransactionMetadata) => JournalEntry;
   reverseJournalEntry: (id: string) => void;
+  deleteJournalEntry: (id: string) => void;
   closeFiscalYear: (fiscalYear: string, closingDate: string) => void;
   attachReceiptsToEntry: (entryId: string, receipts: ReceiptAttachmentDraft[]) => void;
   addCustomClassificationRule: (description: string, debitAccountCode: string, creditAccountCode: string) => void;
@@ -1031,6 +1032,26 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       reversalEntry,
     ]);
     logAudit('Reverse Journal Entry', `Reversed ${entry.reference}: ${entry.description} (via new entry ${reference})`);
+  };
+
+  const deleteJournalEntry = (id: string) => {
+    const entry = journalEntries.find(candidate => candidate.id === id);
+    if (!entry || entry.description.startsWith('Closing Entries')) return;
+
+    // Deleting an original also removes its linked reversal; deleting only a
+    // reversal reactivates the original by clearing reversedByEntryId.
+    const idsToDelete = new Set<string>([id]);
+    if (entry.reversedByEntryId) idsToDelete.add(entry.reversedByEntryId);
+    setJournalEntries(previous => previous
+      .filter(candidate => !idsToDelete.has(candidate.id))
+      .map(candidate => candidate.reversedByEntryId === id ? { ...candidate, reversedByEntryId: undefined } : candidate));
+    setReceiptAttachments(previous => previous.filter(receipt => !idsToDelete.has(receipt.entryId)));
+    setActivityFeeRecords(previous => previous.map(record => ({
+      ...record,
+      history: record.history.filter(item => !item.journalEntryId || !idsToDelete.has(item.journalEntryId)),
+      updatedAt: new Date().toISOString(),
+    })));
+    logAudit('Delete Posted Transaction', `Permanently deleted ${entry.reference}${idsToDelete.size > 1 ? ' and its linked reversal' : ''}: ${entry.description}.`);
   };
 
   const commitActivityFeeSchedule = (schedule: ActivityFeeSchedule, eventName: string, reportingPeriod: string) => {
@@ -1499,6 +1520,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       reportingPeriodWorkspaces,
       addJournalEntry,
       reverseJournalEntry,
+      deleteJournalEntry,
       closeFiscalYear,
       attachReceiptsToEntry,
       addCustomClassificationRule,

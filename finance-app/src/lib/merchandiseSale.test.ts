@@ -101,6 +101,6 @@ describe('merchandise batch balances', () => {
   };
 
   it('keeps purchase batches available until all units are sold', () => {
-    expect(buildMerchandiseBatchBalances([purchase, sale])).toEqual([expect.objectContaining({ item: 'Lanyard', purchasedQuantity: 100, soldQuantity: 20, remainingQuantity: 80, referenceUnitCost: 10 })]);
+    expect(buildMerchandiseBatchBalances([purchase, sale])).toEqual([expect.objectContaining({ item: 'Lanyard', purchasedQuantity: 100, soldQuantity: 20, remainingQuantity: 80, referenceUnitCost: 10, costOfSales: 200, netInventoryBalance: 800 })]);
   });
 });

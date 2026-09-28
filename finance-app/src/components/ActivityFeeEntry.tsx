@@ -12,6 +12,12 @@ import { ReviewLaterNote } from './ReviewLaterNote';
 import { FinancialPreviewPanels } from './FinancialPreviewPanels';
 
 const firstRow = (): DatedAmountInputRow[] => [{ id: `activity-fee-${Date.now()}`, date: '', amount: '' }];
+const previousDate = (date: string): string => {
+  if (!date) return '';
+  const value = new Date(`${date}T00:00:00Z`);
+  value.setUTCDate(value.getUTCDate() - 1);
+  return value.toISOString().slice(0, 10);
+};
 
 interface ActivityFeeEntryProps {
   defaultOpen?: boolean;
@@ -30,6 +36,8 @@ export function ActivityFeeEntry({ defaultOpen = false, draftToResume = null, on
   const [eventOccursThisPeriod, setEventOccursThisPeriod] = useState<'yes' | 'no'>('yes');
   const [eventDate, setEventDate] = useState('');
   const [collections, setCollections] = useState<DatedAmountInputRow[]>(firstRow);
+  const [priorEventCollections, setPriorEventCollections] = useState<DatedAmountInputRow[]>(firstRow);
+  const [onOrAfterEventCollections, setOnOrAfterEventCollections] = useState<DatedAmountInputRow[]>(firstRow);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [selectedReceivableId, setSelectedReceivableId] = useState('');
@@ -57,8 +65,20 @@ export function ActivityFeeEntry({ defaultOpen = false, draftToResume = null, on
     setTotalExpected(typeof snapshot.totalExpected === 'string' ? snapshot.totalExpected : '');
     setPriorPeriodCollected(typeof snapshot.priorPeriodCollected === 'string' ? snapshot.priorPeriodCollected : '');
     setEventOccursThisPeriod(snapshot.eventOccursThisPeriod === 'no' ? 'no' : 'yes');
-    setEventDate(typeof snapshot.eventDate === 'string' ? snapshot.eventDate : '');
-    setCollections(Array.isArray(snapshot.collections) && snapshot.collections.length ? snapshot.collections as DatedAmountInputRow[] : firstRow());
+    const savedEventDate = typeof snapshot.eventDate === 'string' ? snapshot.eventDate : '';
+    const savedCollections = Array.isArray(snapshot.collections) ? snapshot.collections as DatedAmountInputRow[] : [];
+    setEventDate(savedEventDate);
+    setCollections(savedCollections.length ? savedCollections : firstRow());
+    setPriorEventCollections(Array.isArray(snapshot.priorEventCollections) && snapshot.priorEventCollections.length
+      ? snapshot.priorEventCollections as DatedAmountInputRow[]
+      : savedCollections.filter(row => row.date && row.date < savedEventDate).length
+        ? savedCollections.filter(row => row.date && row.date < savedEventDate)
+        : firstRow());
+    setOnOrAfterEventCollections(Array.isArray(snapshot.onOrAfterEventCollections) && snapshot.onOrAfterEventCollections.length
+      ? snapshot.onOrAfterEventCollections as DatedAmountInputRow[]
+      : savedCollections.filter(row => !row.date || row.date >= savedEventDate).length
+        ? savedCollections.filter(row => !row.date || row.date >= savedEventDate)
+        : firstRow());
     setSelectedReceivableId(typeof snapshot.selectedReceivableId === 'string' ? snapshot.selectedReceivableId : '');
     setReceivableCollection(Array.isArray(snapshot.receivableCollection) && snapshot.receivableCollection.length ? snapshot.receivableCollection as DatedAmountInputRow[] : firstRow());
     setSelectedExcessId(typeof snapshot.selectedExcessId === 'string' ? snapshot.selectedExcessId : '');
@@ -68,7 +88,16 @@ export function ActivityFeeEntry({ defaultOpen = false, draftToResume = null, on
     setError(''); setMessage('');
     onDraftResumed?.();
   }, [draftToResume, onDraftResumed]);
-  const collectionTotal = useMemo(() => collections.reduce((sum, row) => sum + (Number(row.amount) || 0), 0), [collections]);
+  const activeCollections = useMemo(() => eventOccursThisPeriod === 'yes' ? [...priorEventCollections, ...onOrAfterEventCollections] : collections, [eventOccursThisPeriod, priorEventCollections, onOrAfterEventCollections, collections]);
+  const collectionTotal = useMemo(() => activeCollections.reduce((sum, row) => sum + (Number(row.amount) || 0), 0), [activeCollections]);
+  const periodBounds = useMemo(() => settings.semester && settings.reportingYear ? reportingPeriodBounds(settings.semester, settings.reportingYear) : null, [settings.semester, settings.reportingYear]);
+  const dayBeforeEvent = previousDate(eventDate);
+
+  useEffect(() => {
+    if (!eventDate || eventOccursThisPeriod !== 'yes') return;
+    setPriorEventCollections(rows => rows.map(row => !row.date && !row.amount ? { ...row, date: dayBeforeEvent } : row));
+    setOnOrAfterEventCollections(rows => rows.map(row => !row.date && !row.amount ? { ...row, date: eventDate } : row));
+  }, [eventDate, eventOccursThisPeriod, dayBeforeEvent]);
   // Prior-period precollections are limited to the Unearned Activity Fees
   // balance carried into the selected semester. This is the same beginning
   // balance displayed by the General Ledger and excludes current-semester
@@ -98,12 +127,12 @@ export function ActivityFeeEntry({ defaultOpen = false, draftToResume = null, on
         eventDate: eventOccursThisPeriod === 'yes' ? eventDate : undefined,
         totalExpected: eventOccursThisPeriod === 'yes' ? Number(totalExpected) : undefined,
         priorPeriodCollected: eventOccursThisPeriod === 'yes' ? Number(priorPeriodCollected || 0) : undefined,
-        collections: collections.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })),
+        collections: activeCollections.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })),
       });
     } catch {
       return null;
     }
-  }, [eventOccursThisPeriod, eventDate, totalExpected, priorPeriodCollected, collections]);
+  }, [eventOccursThisPeriod, eventDate, totalExpected, priorPeriodCollected, activeCollections]);
   const accountLabel = (code: string) => { const account = accounts.find(candidate => candidate.code === code); return account ? `${account.code} - ${account.name}` : code; };
   const accountBalances = useMemo(() => computeAccountBalances(journalEntries, accounts), [journalEntries, accounts]);
   const previewLines = useMemo<JournalLine[]>(() => {
@@ -132,15 +161,19 @@ export function ActivityFeeEntry({ defaultOpen = false, draftToResume = null, on
       return;
     }
     try {
+      if (eventOccursThisPeriod === 'yes') {
+        if (priorEventCollections.some(row => Number(row.amount) > 0 && (!row.date || row.date >= eventDate))) throw new Error('Every collection in “Before the event” must have a date earlier than the event date.');
+        if (onOrAfterEventCollections.some(row => Number(row.amount) > 0 && (!row.date || row.date < eventDate))) throw new Error('Every collection in “On or after the event” must have a date on or after the event date.');
+      }
       const record = createActivityFeeRecord({
         eventName,
         eventOccursThisPeriod: eventOccursThisPeriod === 'yes',
         ...(eventOccursThisPeriod === 'yes' ? { eventDate, totalExpected: Number(totalExpected), priorPeriodCollected: Number(priorPeriodCollected || 0) } : {}),
-        collections: collections.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })),
+        collections: activeCollections.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })),
         reportingPeriod: settings.fiscalYear,
       });
       setMessage(`${record.reference} created for ${record.eventName}. ${record.status === 'complete' ? 'Complete.' : 'Follow-up is available in Review.'}`);
-      setEventName(''); setTotalExpected(''); setPriorPeriodCollected(''); setCollections(firstRow());
+      setEventName(''); setTotalExpected(''); setPriorPeriodCollected(''); setCollections(firstRow()); setPriorEventCollections(firstRow()); setOnOrAfterEventCollections(firstRow());
       if (editingDraftId) { deleteDraftTransaction(editingDraftId); setEditingDraftId(null); }
     } catch (caught) { setError(caught instanceof Error ? caught.message : 'Could not record activity fees.'); }
   };
@@ -211,6 +244,8 @@ export function ActivityFeeEntry({ defaultOpen = false, draftToResume = null, on
         eventOccursThisPeriod,
         eventDate,
         collections,
+        priorEventCollections,
+        onOrAfterEventCollections,
         selectedReceivableId,
         receivableCollection,
         selectedExcessId,
@@ -254,11 +289,23 @@ export function ActivityFeeEntry({ defaultOpen = false, draftToResume = null, on
           {eventOccursThisPeriod === 'yes' && <label className="text-[10px] font-bold uppercase text-slate-500">Date of Event<input type="date" value={eventDate} onChange={event => setEventDate(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" required /></label>}
           {eventOccursThisPeriod === 'yes' && <>
             <label className="text-[10px] font-bold uppercase text-slate-500">What is the total amount of activity fees for this event?<input type="number" min="0.01" step="0.01" value={totalExpected} onChange={event => setTotalExpected(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" required /><span className="mt-1 block normal-case font-medium">Note: Enter the full amount expected to be collected from all participants.</span></label>
-            <label className="text-[10px] font-bold uppercase text-slate-500">Advance Collection of Activity Fees from the Previous Reporting Period/Semester (If applicable)<input type="number" min="0" step="0.01" max={priorPeriodCollectedMax} value={priorPeriodCollected} onChange={event => setPriorPeriodCollected(event.target.value)} placeholder="Precollection" className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-xs text-slate-900 placeholder:italic placeholder:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500" /><span className="mt-1 block normal-case font-medium">Note: Check the previous reporting period's ledger.</span></label>
+            <label className="text-[10px] font-bold uppercase text-slate-500">Advance Collection of Activity Fees from the Previous Reporting Period/Semester (If applicable)<input type="number" min="0" step="0.01" max={priorPeriodCollectedMax} value={priorPeriodCollected} onChange={event => setPriorPeriodCollected(event.target.value)} placeholder="Precollection" className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-xs text-slate-900 placeholder:italic placeholder:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500" /><span className="mt-1 block normal-case font-medium">Enter only the amount collected in advance for this event during a previous semester. It cannot exceed the {formatCurrency(priorPeriodCollectedMax)} beginning balance of Unearned Activity Fees.</span></label>
           </>}
-          <div className="sm:col-span-2 rounded-xl border border-indigo-200 bg-white/70 p-3 dark:border-indigo-500/30 dark:bg-slate-900/40">
-            <DatedAmountRows label="How much of the activity fee was collected during the current reporting period?" rows={collections} onChange={setCollections} currencySymbol={settings.currencySymbol} defaultDate={eventDate} addLabel="Add collection" allowEmptyAmounts allowBlankDates={eventOccursThisPeriod === 'yes'} blankDateHelp={eventOccursThisPeriod === 'yes' ? `A blank collection date uses the event date (${eventDate || 'once entered'}).` : undefined} />
-            <p className="mt-2 rounded-lg bg-indigo-50 p-2.5 text-[10px] font-semibold text-indigo-800 dark:bg-indigo-500/10 dark:text-indigo-200">Note: Include all activity fees collected during the current semester, including amounts collected before the event date.</p>
+          <div className="sm:col-span-2 space-y-3 rounded-xl border border-indigo-200 bg-white/70 p-3 dark:border-indigo-500/30 dark:bg-slate-900/40">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Collections during the current reporting period / semester</p>
+              <p className="mt-1 rounded-lg bg-indigo-50 p-2.5 text-[10px] font-semibold text-indigo-800 dark:bg-indigo-500/10 dark:text-indigo-200">Include all current-semester activity-fee collections, including amounts received before the event. Do not include advance collections already reported in a previous semester.</p>
+            </div>
+            {eventOccursThisPeriod === 'yes' ? <>
+              <div className="rounded-lg border border-indigo-100 p-3 dark:border-indigo-500/20">
+                <DatedAmountRows label="Collections before the event" rows={priorEventCollections} onChange={setPriorEventCollections} currencySymbol={settings.currencySymbol} defaultDate={dayBeforeEvent} minDate={periodBounds?.startDate} maxDate={dayBeforeEvent || undefined} addLabel="Add collection before event" allowEmptyAmounts />
+                <p className="mt-2 text-[9px] font-medium text-indigo-700 dark:text-indigo-300">Dates must be earlier than the event date. Collections received on the same date must be combined into one amount.</p>
+              </div>
+              <div className="rounded-lg border border-indigo-100 p-3 dark:border-indigo-500/20">
+                <DatedAmountRows label="Collections on or after the event" rows={onOrAfterEventCollections} onChange={setOnOrAfterEventCollections} currencySymbol={settings.currencySymbol} defaultDate={eventDate} minDate={eventDate || periodBounds?.startDate} maxDate={periodBounds?.endDate} addLabel="Add collection on/after event" allowEmptyAmounts />
+                <p className="mt-2 text-[9px] font-medium text-indigo-700 dark:text-indigo-300">Dates cannot be earlier than the event date. Collections received on the same date must be combined into one amount.</p>
+              </div>
+            </> : <DatedAmountRows label="Collections received for the future event" rows={collections} onChange={setCollections} currencySymbol={settings.currencySymbol} defaultDate="" minDate={periodBounds?.startDate} maxDate={periodBounds?.endDate} addLabel="Add collection" allowEmptyAmounts />}
           </div>
           {excessCollection > 0 && <p className="sm:col-span-2 rounded-lg bg-amber-100 p-2 text-[10px] font-bold text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">Caution: Collections exceed the required activity fees by {formatCurrency(excessCollection)}. The excess will be recorded as Refund Liability - Activity Fees.</p>}
           {showUnearnedBalanceWarning && <p className="sm:col-span-2 rounded-lg bg-rose-100 p-2 text-[10px] font-bold text-rose-700">Previous-period collections cannot exceed the {formatCurrency(unearnedActivityFeesBalance)} currently on the books as Unearned Activity Fees.</p>}

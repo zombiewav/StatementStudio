@@ -28,7 +28,7 @@ import { DatedAmountInputRow, DatedAmountRows } from '../components/DatedAmountR
 import { NewFeatureBadge } from '../components/NewFeatureBadge';
 import { ReviewLaterNote } from '../components/ReviewLaterNote';
 import { categorizeTransactionRule, TRANSACTION_CATEGORIES, TransactionCategoryId } from '../lib/transactionCategories';
-import { merchandiseSaleCostError, MERCHANDISE_INVENTORY_CODE } from '../lib/transactionHistory';
+import { merchandiseSaleCostError } from '../lib/transactionHistory';
 import {
   buildMerchandiseAcquisitionPosting,
   MerchandisePaymentMethod,
@@ -82,6 +82,7 @@ interface TransactionFormSnapshot {
   merchandiseOfficerPayments: DatedAmountInputRow[];
   merchandiseAdvancePayments: DatedAmountInputRow[];
   merchandiseReimbursements: DatedAmountInputRow[];
+  merchandiseSaleItem: string;
   merchandiseSaleBatchId: string;
   merchandiseQuantitySold: string;
   merchandiseSellingPrice: string;
@@ -154,6 +155,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   const [merchandiseOfficerPayments, setMerchandiseOfficerPayments] = useState<DatedAmountInputRow[]>([{ id: 'officer-payment-1', date, amount: '' }]);
   const [merchandiseAdvancePayments, setMerchandiseAdvancePayments] = useState<DatedAmountInputRow[]>([{ id: 'advance-payment-1', date, amount: '' }]);
   const [merchandiseReimbursements, setMerchandiseReimbursements] = useState<DatedAmountInputRow[]>([{ id: 'reimbursement-1', date, amount: '' }]);
+  const [merchandiseSaleItem, setMerchandiseSaleItem] = useState('');
   const [merchandiseSaleBatchId, setMerchandiseSaleBatchId] = useState('');
   const [merchandiseQuantitySold, setMerchandiseQuantitySold] = useState('');
   const [merchandiseSellingPrice, setMerchandiseSellingPrice] = useState('');
@@ -324,6 +326,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       setMerchandiseOfficerPayments([{ id: `officer-payment-${Date.now()}`, date, amount: '' }]);
       setMerchandiseAdvancePayments([{ id: `advance-payment-${Date.now()}`, date, amount: '' }]);
       setMerchandiseReimbursements([{ id: `reimbursement-${Date.now()}`, date, amount: '' }]);
+      setMerchandiseSaleItem('');
       setMerchandiseSaleBatchId('');
       setMerchandiseQuantitySold('');
       setMerchandiseSellingPrice('');
@@ -373,6 +376,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       setMerchandiseOfficerPayments([{ id: `officer-payment-${Date.now()}`, date, amount: '' }]);
       setMerchandiseAdvancePayments([{ id: `advance-payment-${Date.now()}`, date, amount: '' }]);
       setMerchandiseReimbursements([{ id: `reimbursement-${Date.now()}`, date, amount: '' }]);
+      setMerchandiseSaleItem('');
       setMerchandiseSaleBatchId('');
       setMerchandiseQuantitySold('');
       setMerchandiseSellingPrice('');
@@ -426,6 +430,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     setMerchandiseOfficerPayments(snapshot.merchandiseOfficerPayments?.length ? snapshot.merchandiseOfficerPayments : [{ id: `officer-payment-${Date.now()}`, date: fallbackDate, amount: '' }]);
     setMerchandiseAdvancePayments(snapshot.merchandiseAdvancePayments?.length ? snapshot.merchandiseAdvancePayments : [{ id: `advance-payment-${Date.now()}`, date: fallbackDate, amount: '' }]);
     setMerchandiseReimbursements(snapshot.merchandiseReimbursements?.length ? snapshot.merchandiseReimbursements : [{ id: `reimbursement-${Date.now()}`, date: fallbackDate, amount: '' }]);
+    setMerchandiseSaleItem(snapshot.merchandiseSaleItem || '');
     setMerchandiseSaleBatchId(snapshot.merchandiseSaleBatchId || '');
     setMerchandiseQuantitySold(snapshot.merchandiseQuantitySold || '');
     setMerchandiseSellingPrice(snapshot.merchandiseSellingPrice || '');
@@ -482,7 +487,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   const membershipCollectionTotal = sumDatedAmounts(membershipCollections);
   const showMembershipReceivableWarning = isPriorMembershipCollection && membershipCollectionTotal > membershipReceivableOutstanding;
   const isMerchandiseSale = effectiveCreditCode === '4070';
-  const merchandiseInventoryBalance = accountBalances[MERCHANDISE_INVENTORY_CODE] || 0;
   const merchandiseBatches = useMemo(() => buildMerchandiseBatchBalances(journalEntries), [journalEntries]);
   const availableMerchandisePrepayments = useMemo(() => {
     const used = new Set(journalEntries.map(entry => entry.transactionDetails?.merchandisePrepaymentEntryId).filter(Boolean));
@@ -495,6 +499,9 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   }, [journalEntries]);
   const selectedMerchandisePrepayment = availableMerchandisePrepayments.find(candidate => candidate.entry.id === merchandisePrepaymentEntryId);
   const selectedMerchandiseBatch = merchandiseBatches.find(batch => batch.entryId === merchandiseSaleBatchId);
+  const merchandiseSaleItems = useMemo(() => [...new Set(merchandiseBatches.map(batch => batch.item))].sort((a, b) => a.localeCompare(b)), [merchandiseBatches]);
+  const effectiveMerchandiseSaleItem = merchandiseSaleItem || selectedMerchandiseBatch?.item || '';
+  const merchandiseBatchesForSelectedItem = useMemo(() => merchandiseBatches.filter(batch => batch.item === effectiveMerchandiseSaleItem), [merchandiseBatches, effectiveMerchandiseSaleItem]);
   const merchandiseSaleTotal = Math.round((Number(merchandiseQuantitySold) || 0) * (Number(merchandiseSellingPrice) || 0) * 100) / 100;
   const merchandiseCollectionTotal = sumDatedAmounts(merchandiseCollections);
   const merchandiseRemittanceTotal = sumDatedAmounts(merchandiseRemittances);
@@ -654,6 +661,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     merchandiseOfficerPayments,
     merchandiseAdvancePayments,
     merchandiseReimbursements,
+    merchandiseSaleItem,
     merchandiseSaleBatchId,
     merchandiseQuantitySold,
     merchandiseSellingPrice,
@@ -790,7 +798,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       return;
     }
     if (isMerchandiseSale) {
-      const merchandiseError = merchandiseSaleCostError(Number(merchandiseCost), merchandiseInventoryBalance);
+      const merchandiseError = merchandiseSaleCostError(Number(merchandiseCost), selectedMerchandiseBatch?.netInventoryBalance || 0);
       if (merchandiseError) {
         setErrorMessage(merchandiseError);
         return;
@@ -934,6 +942,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       setMerchandiseOfficerPayments([{ id: `officer-payment-${Date.now()}`, date, amount: '' }]);
       setMerchandiseAdvancePayments([{ id: `advance-payment-${Date.now()}`, date, amount: '' }]);
       setMerchandiseReimbursements([{ id: `reimbursement-${Date.now()}`, date, amount: '' }]);
+      setMerchandiseSaleItem('');
       setMerchandiseSaleBatchId('');
       setMerchandiseQuantitySold('');
       setMerchandiseSellingPrice('');
@@ -1452,13 +1461,22 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                 {merchandiseBatches.length === 0 ? (
                   <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[10px] font-bold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">No purchase batch with available units was found. Record an Acquisition of Merchandise first.</p>
                 ) : (
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Merchandise / purchase batch</label>
-                    <select value={merchandiseSaleBatchId} onChange={event => { setMerchandiseSaleBatchId(event.target.value); setMerchandiseQuantitySold(''); }} className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required>
-                      <option value="" disabled>Select an available batch…</option>
-                      {merchandiseBatches.map(batch => <option key={batch.entryId} value={batch.entryId}>{batch.item} — {batch.reference} — {batch.remainingQuantity} units available</option>)}
-                    </select>
-                    {selectedMerchandiseBatch && <p className="mt-1 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Purchased {selectedMerchandiseBatch.purchasedQuantity} units for {formatCurrency(selectedMerchandiseBatch.acquisitionCost)} · reference unit cost {formatCurrency(selectedMerchandiseBatch.referenceUnitCost)}.</p>}
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Name of item</label>
+                      <select value={effectiveMerchandiseSaleItem} onChange={event => { setMerchandiseSaleItem(event.target.value); setMerchandiseSaleBatchId(''); setMerchandiseQuantitySold(''); setMerchandiseCost(''); }} className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required>
+                        <option value="" disabled>Select an inventory item…</option>
+                        {merchandiseSaleItems.map(item => <option key={item} value={item}>{item}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Batch no.</label>
+                      <select value={merchandiseSaleBatchId} onChange={event => { setMerchandiseSaleBatchId(event.target.value); setMerchandiseQuantitySold(''); setMerchandiseCost(''); }} disabled={!effectiveMerchandiseSaleItem} className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none disabled:cursor-not-allowed disabled:bg-slate-100 dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100 dark:disabled:bg-slate-800/60" required>
+                        <option value="" disabled>{effectiveMerchandiseSaleItem ? 'Select an available batch…' : 'Choose an item first'}</option>
+                        {merchandiseBatchesForSelectedItem.map(batch => <option key={batch.entryId} value={batch.entryId}>{batch.batch} — {batch.remainingQuantity} units available</option>)}
+                      </select>
+                    </div>
+                    {selectedMerchandiseBatch && <p className="sm:col-span-2 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Purchased {selectedMerchandiseBatch.purchasedQuantity} units for {formatCurrency(selectedMerchandiseBatch.acquisitionCost)}. {selectedMerchandiseBatch.remainingQuantity} units and {formatCurrency(selectedMerchandiseBatch.netInventoryBalance)} in cost remain in this batch.</p>}
                   </div>
                 )}
 
@@ -1480,9 +1498,9 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                 </div>
 
                 <div>
-                  <label className="flex items-center gap-1.5 text-[10px] font-bold text-indigo-900 dark:text-indigo-200">Cost of all items sold <span title="Cost of sales is the total cost of the items sold. It may include the purchase price and other costs directly related to preparing or producing them, such as materials, design fees, or labor." className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-indigo-300 text-[9px] font-black">?</span></label>
-                  <div className="relative mt-1.5"><span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-indigo-500">{settings.currencySymbol}</span><input type="number" step="0.01" min="0.01" max={merchandiseInventoryBalance || undefined} value={merchandiseCost} onChange={event => setMerchandiseCost(event.target.value)} placeholder="Unit cost × units sold, including eligible direct costs" className="w-full rounded-lg border border-indigo-200 bg-white p-2.5 pl-8 text-xs font-bold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required /></div>
-                  <p className="mt-1.5 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Available inventory value: {formatCurrency(merchandiseInventoryBalance)}. This automatically debits Cost of Sales and credits Merchandise Inventory.</p>
+                  <label className="flex items-center gap-1.5 text-[10px] font-bold text-indigo-900 dark:text-indigo-200">Cost of all items sold <span title="Cost of sales is the total cost of the items sold. It includes the purchase price and any costs directly attributable to preparing or producing the merchandise, such as materials, design fees, printing, or labor." className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-indigo-300 text-[9px] font-black">?</span></label>
+                  <div className="relative mt-1.5"><span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-indigo-500">{settings.currencySymbol}</span><input type="number" step="0.01" min="0.01" max={selectedMerchandiseBatch?.netInventoryBalance || undefined} value={merchandiseCost} onChange={event => setMerchandiseCost(event.target.value)} placeholder="Enter the total cost of the items sold" className="w-full rounded-lg border border-indigo-200 bg-white p-2.5 pl-8 text-xs font-bold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required /></div>
+                  <p className="mt-1.5 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Include all costs attributable to the merchandise being sold, including purchase, materials, design, printing, and labor costs. The amount cannot exceed the {formatCurrency(selectedMerchandiseBatch?.netInventoryBalance || 0)} remaining for the selected batch. This automatically debits Cost of Sales and credits Merchandise Inventory.</p>
                 </div>
 
                 <div>

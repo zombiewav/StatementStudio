@@ -34,9 +34,9 @@ export interface AccountPeriodHistory {
   lines: AccountHistoryLine[];
 }
 
-export function merchandiseSaleCostError(cost: number, inventoryBalance: number): string | null {
+export function merchandiseSaleCostError(cost: number, availableBatchCost: number): string | null {
   if (!Number.isFinite(cost) || cost <= 0) return 'Enter the cost of the merchandise sold so inventory and Cost of Sales are updated.';
-  if (cost > inventoryBalance) return 'The merchandise cost sold cannot exceed the current inventory balance.';
+  if (cost > availableBatchCost + 0.00001) return 'The merchandise cost sold cannot exceed the remaining inventory cost for the selected batch.';
   return null;
 }
 

@@ -19,11 +19,13 @@ interface DatedAmountRowsProps {
   allowEmptyAmounts?: boolean;
   blankDateHelp?: string;
   allowMultiple?: boolean;
+  minDate?: string;
+  maxDate?: string;
 }
 
 const makeId = (): string => `amount-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-export function DatedAmountRows({ label, rows, onChange, currencySymbol, defaultDate, maxTotal, addLabel = 'Add another payment', allowBlankDates = false, allowEmptyAmounts = false, blankDateHelp, allowMultiple = true }: DatedAmountRowsProps): React.ReactElement {
+export function DatedAmountRows({ label, rows, onChange, currencySymbol, defaultDate, maxTotal, addLabel = 'Add another payment', allowBlankDates = false, allowEmptyAmounts = false, blankDateHelp, allowMultiple = true, minDate, maxDate }: DatedAmountRowsProps): React.ReactElement {
   const total = useMemo(() => rows.reduce((sum, row) => sum + (Number(row.amount) || 0), 0), [rows]);
   const updateRow = (id: string, patch: Partial<DatedAmountInputRow>) => onChange(rows.map(row => row.id === id ? { ...row, ...patch } : row));
 
@@ -35,7 +37,7 @@ export function DatedAmountRows({ label, rows, onChange, currencySymbol, default
       </div>
       {rows.map((row, index) => (
         <div key={row.id} className={`grid gap-2 ${allowMultiple ? 'grid-cols-[1fr_1fr_auto]' : 'grid-cols-2'}`}>
-          <input type="date" value={row.date} onChange={event => updateRow(row.id, { date: event.target.value })} aria-label={`${label} date ${index + 1}`} className="min-w-0 rounded-lg border border-indigo-200 bg-white p-2.5 text-[10px] font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required={!allowBlankDates} />
+          <input type="date" min={minDate} max={maxDate} value={row.date} onChange={event => updateRow(row.id, { date: event.target.value })} aria-label={`${label} date ${index + 1}`} className="min-w-0 rounded-lg border border-indigo-200 bg-white p-2.5 text-[10px] font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required={!allowBlankDates} />
           <div className="relative min-w-0"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-indigo-500">{currencySymbol}</span><input type="number" min="0" step="0.01" value={row.amount} onChange={event => updateRow(row.id, { amount: event.target.value })} aria-label={`${label} amount ${index + 1}`} placeholder="0.00" className="w-full rounded-lg border border-indigo-200 bg-white p-2.5 pl-7 text-[10px] font-bold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required={!allowEmptyAmounts} /></div>
           {allowMultiple && <button type="button" aria-label={`Remove ${label} row ${index + 1}`} disabled={rows.length === 1} onClick={() => onChange(rows.filter(candidate => candidate.id !== row.id))} className="rounded-lg border border-indigo-200 px-2 text-indigo-500 disabled:cursor-not-allowed disabled:opacity-30 dark:border-indigo-500/30"><Trash2 className="h-3.5 w-3.5" /></button>}
         </div>

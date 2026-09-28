@@ -103,8 +103,8 @@ export interface JournalEntry {
   // recorded before this field existed.
   eventName?: string;
   // Set on a reversing entry: the id of the original entry it reverses.
-  // Posted entries are never hard-deleted, only reversed, so both sides of
-  // a correction stay in the permanent record.
+  // Reversals preserve both sides by default. Review also offers an explicit
+  // confirmed permanent-delete action for test or correction workflows.
   reversalOfEntryId?: string;
   // Set on an original entry once it has been reversed: the id of the
   // reversing entry. Prevents reversing the same entry twice.

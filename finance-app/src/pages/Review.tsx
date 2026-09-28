@@ -434,7 +434,7 @@ interface ReviewProps {
 }
 
 export function Review({ onContinueDraft }: ReviewProps): React.ReactElement {
-  const { journalEntries, accounts, activityFeeRecords, draftTransactions, deleteDraftTransaction, reverseJournalEntry, addJournalEntry, formatCurrency } = useFinance();
+  const { journalEntries, accounts, activityFeeRecords, draftTransactions, deleteDraftTransaction, deleteJournalEntry, reverseJournalEntry, addJournalEntry, formatCurrency } = useFinance();
   const pendingObligations = useMemo(() => computePendingObligations(journalEntries, accounts), [journalEntries, accounts]);
   const reviewStates = useMemo(() => computeTransactionReviewStates(journalEntries, accounts), [journalEntries, accounts]);
   const [statusFilter, setStatusFilter] = useState<'all' | ReviewStatus>('all');
@@ -474,9 +474,10 @@ export function Review({ onContinueDraft }: ReviewProps): React.ReactElement {
   };
 
   const handleDeletePostedTransaction = (entry: JournalEntry) => {
-    if (!window.confirm(`Delete ${entry.reference}? Posted transactions cannot be erased from an accounting record. StatementStudio will create a reversing entry and retain both records in the audit history.`)) return;
-    reverseJournalEntry(entry.id);
-    setSettlementMessage(`${entry.reference} was deleted from the active books through a reversing entry.`);
+    const pairWarning = entry.reversedByEntryId ? ' Its linked reversing entry will also be deleted.' : entry.reversalOfEntryId ? ' The original transaction will become active again.' : '';
+    if (!window.confirm(`Permanently delete ${entry.reference}?${pairWarning} This removes it from the journal and ledger, but the deletion remains in the audit log.`)) return;
+    deleteJournalEntry(entry.id);
+    setSettlementMessage(`${entry.reference} was permanently deleted.`);
     setLastPostedSettlement(null);
   };
 
@@ -615,12 +616,12 @@ export function Review({ onContinueDraft }: ReviewProps): React.ReactElement {
                       Event occurred — release {formatCurrency(state.restrictedRemaining)}
                     </button>
                   )}
-                  {state.status !== 'reversed' && !state.entry.reversalOfEntryId && !state.entry.description.startsWith('Closing Entries') && (
+                  {!state.entry.description.startsWith('Closing Entries') && (
                     <button
                       type="button"
                       onClick={() => handleDeletePostedTransaction(state.entry)}
                       className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-[10px] font-bold text-rose-700 transition-colors hover:bg-rose-50 dark:border-rose-500/30 dark:bg-slate-900 dark:text-rose-300 dark:hover:bg-rose-500/10"
-                      title="Remove this transaction from active balances by posting a reversing entry"
+                      title="Permanently delete this posted transaction"
                     >
                       <Trash2 className="h-3 w-3" /> Delete
                     </button>

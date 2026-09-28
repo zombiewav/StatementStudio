@@ -46,6 +46,43 @@ describe('final activity fee workflow', () => {
     schedule.postings.forEach(posting => balanced(posting.lines));
   });
 
+  it('matches the client illustration by clearing receivable first and treating only the excess as refundable', () => {
+    const schedule = buildInitialActivityFeeSchedule({
+      eventOccursThisPeriod: true,
+      eventDate: '2026-01-05',
+      totalExpected: 5000,
+      priorPeriodCollected: 1000,
+      collections: [
+        { date: '2026-01-04', amount: 1000 },
+        { date: '2026-01-05', amount: 2500 },
+        { date: '2026-01-06', amount: 2000 },
+      ],
+    });
+    const eventPosting = schedule.postings.find(posting => posting.date === '2026-01-05');
+    const laterPosting = schedule.postings.find(posting => posting.date === '2026-01-06');
+    expect(eventPosting?.lines).toEqual(expect.arrayContaining([
+      { accountCode: '2110', debit: 2000, credit: 0, date: '2026-01-05' },
+      { accountCode: '1010', debit: 2500, credit: 0, date: '2026-01-05' },
+      { accountCode: '1310', debit: 500, credit: 0, date: '2026-01-05' },
+      { accountCode: '4090', debit: 0, credit: 5000, date: '2026-01-05' },
+    ]));
+    expect(laterPosting?.lines).toEqual(expect.arrayContaining([
+      { accountCode: '1010', debit: 2000, credit: 0, date: '2026-01-06' },
+      { accountCode: '1310', debit: 0, credit: 500, date: '2026-01-06' },
+      { accountCode: '2120', debit: 0, credit: 1500, date: '2026-01-06' },
+    ]));
+    expect(schedule.next).toMatchObject({ receivableBalance: 0, refundLiabilityBalance: 1500, status: 'refund-due' });
+  });
+
+  it('handles collections as of the event date that are equal to or greater than total fees', () => {
+    const equal = buildInitialActivityFeeSchedule({ eventOccursThisPeriod: true, eventDate: '2026-01-05', totalExpected: 5000, priorPeriodCollected: 1000, collections: [{ date: '2026-01-04', amount: 1000 }, { date: '2026-01-05', amount: 3000 }] });
+    expect(equal.next).toMatchObject({ receivableBalance: 0, refundLiabilityBalance: 0, status: 'complete' });
+
+    const greater = buildInitialActivityFeeSchedule({ eventOccursThisPeriod: true, eventDate: '2026-01-05', totalExpected: 5000, priorPeriodCollected: 1000, collections: [{ date: '2026-01-04', amount: 1000 }, { date: '2026-01-05', amount: 3500 }, { date: '2026-01-06', amount: 200 }] });
+    expect(greater.next).toMatchObject({ receivableBalance: 0, refundLiabilityBalance: 700, status: 'refund-due' });
+    expect(greater.postings.find(posting => posting.date === '2026-01-06')?.lines).toContainEqual({ accountCode: '2120', debit: 0, credit: 200, date: '2026-01-06' });
+  });
+
   it('defaults a blank collection date to the event date for a same-day collection', () => {
     const schedule = buildInitialActivityFeeSchedule({
       eventOccursThisPeriod: true,
@@ -58,6 +95,21 @@ describe('final activity fee workflow', () => {
     const lines = schedule.postings[0].lines;
     expect(lines).toContainEqual(expect.objectContaining({ accountCode: '1010', debit: 300, date: '2026-09-15' }));
     balanced(lines);
+  });
+
+  it('requires same-category collections received on the same date to be combined', () => {
+    expect(() => buildInitialActivityFeeSchedule({
+      eventOccursThisPeriod: true,
+      eventDate: '2026-09-15',
+      totalExpected: 1000,
+      collections: [{ date: '2026-09-01', amount: 100 }, { date: '2026-09-01', amount: 200 }],
+    })).toThrow(/duplicate dates/i);
+    expect(() => buildInitialActivityFeeSchedule({
+      eventOccursThisPeriod: true,
+      eventDate: '2026-09-15',
+      totalExpected: 1000,
+      collections: [{ date: '2026-09-15', amount: 100 }, { date: '2026-09-15', amount: 200 }],
+    })).toThrow(/duplicate dates/i);
   });
 
   it('still requires a date for a future-event collection, with no event date yet to default to', () => {

@@ -117,7 +117,9 @@ export function buildMerchandiseBatchBalances(entries: JournalEntry[], includeDe
         .reduce((sum, sale) => sum + (sale.transactionDetails?.merchandiseQuantitySold || 0), 0);
       const costOfSales = cents(entries
         .filter(sale => !sale.reversalOfEntryId && !sale.reversedByEntryId && sale.transactionDetails?.merchandiseBatchEntryId === entry.id)
-        .reduce((sum, sale) => sum + (sale.transactionDetails?.inventoryCost || 0), 0));
+        .reduce((sum, sale) => sum + (sale.transactionDetails?.inventoryCost
+          || sale.lines.find(line => line.accountCode === COST_OF_SALES_ACCOUNT_CODE)?.debit
+          || 0), 0));
       const acquisitionCost = entry.lines.find(line => line.accountCode === MERCHANDISE_INVENTORY_ACCOUNT_CODE)?.debit || 0;
       return {
         entryId: entry.id,
