@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { ClipboardCheck, CheckCircle2, AlertCircle, Undo2 } from 'lucide-react';
+import { ClipboardCheck, CheckCircle2, AlertCircle, Trash2, Undo2 } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import { JournalEntry } from '../types';
 import { ReceiptAttachments } from '../components/ReceiptAttachments';
@@ -466,6 +466,20 @@ export function Review({ onContinueDraft }: ReviewProps): React.ReactElement {
     handleSettlementPosted(posted);
   };
 
+  const handleDeleteDraft = (id: string, label: string) => {
+    if (!window.confirm(`Delete the draft "${label}"? This draft has not affected the ledger.`)) return;
+    deleteDraftTransaction(id);
+    setSettlementMessage(`Draft "${label}" was deleted.`);
+    setLastPostedSettlement(null);
+  };
+
+  const handleDeletePostedTransaction = (entry: JournalEntry) => {
+    if (!window.confirm(`Delete ${entry.reference}? Posted transactions cannot be erased from an accounting record. StatementStudio will create a reversing entry and retain both records in the audit history.`)) return;
+    reverseJournalEntry(entry.id);
+    setSettlementMessage(`${entry.reference} was deleted from the active books through a reversing entry.`);
+    setLastPostedSettlement(null);
+  };
+
   const visibleStates = statusFilter === 'all'
     ? reviewStates
     : reviewStates.filter(state => state.status === statusFilter);
@@ -531,10 +545,10 @@ export function Review({ onContinueDraft }: ReviewProps): React.ReactElement {
                   </button>
                   <button
                     type="button"
-                    onClick={() => deleteDraftTransaction(draft.id)}
-                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-bold text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+                    onClick={() => handleDeleteDraft(draft.id, draft.label)}
+                    className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-[10px] font-bold text-rose-700 transition-colors hover:bg-rose-50 dark:border-rose-500/30 dark:bg-slate-900 dark:text-rose-300 dark:hover:bg-rose-500/10"
                   >
-                    Discard
+                    <Trash2 className="h-3 w-3" /> Delete
                   </button>
                 </div>
               </div>
@@ -599,6 +613,16 @@ export function Review({ onContinueDraft }: ReviewProps): React.ReactElement {
                       className="rounded-lg bg-rose-700 px-3 py-1.5 text-[10px] font-bold text-white transition-colors hover:bg-rose-800 dark:bg-rose-600 dark:hover:bg-rose-500"
                     >
                       Event occurred — release {formatCurrency(state.restrictedRemaining)}
+                    </button>
+                  )}
+                  {state.status !== 'reversed' && !state.entry.reversalOfEntryId && !state.entry.description.startsWith('Closing Entries') && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeletePostedTransaction(state.entry)}
+                      className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-[10px] font-bold text-rose-700 transition-colors hover:bg-rose-50 dark:border-rose-500/30 dark:bg-slate-900 dark:text-rose-300 dark:hover:bg-rose-500/10"
+                      title="Remove this transaction from active balances by posting a reversing entry"
+                    >
+                      <Trash2 className="h-3 w-3" /> Delete
                     </button>
                   )}
                 </div>

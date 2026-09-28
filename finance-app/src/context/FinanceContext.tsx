@@ -7,6 +7,8 @@ import {
   AppSettings,
   ClassificationRule,
   BackupPayload,
+  FinancialStatementHistoryRecord,
+  ReportingPeriodWorkspace,
   ClosingRecord,
   TransactionMetadata,
   ReceiptAttachment,
@@ -645,6 +647,8 @@ interface FinanceContextType {
   receiptAttachments: ReceiptAttachment[];
   activityFeeRecords: ActivityFeeRecord[];
   draftTransactions: TransactionDraft[];
+  financialStatementHistory: FinancialStatementHistoryRecord[];
+  reportingPeriodWorkspaces: ReportingPeriodWorkspace[];
 
   addJournalEntry: (date: string, description: string, project: string, lines: JournalLine[], eventName?: string, settlesEntryId?: string, transactionMeta?: TransactionMetadata) => JournalEntry;
   reverseJournalEntry: (id: string) => void;
@@ -662,6 +666,8 @@ interface FinanceContextType {
   // same draft on subsequent saves instead of creating duplicates.
   saveDraftTransaction: (draft: { id?: string; category: string | null; label: string; formState: Record<string, unknown> }) => string;
   deleteDraftTransaction: (id: string) => void;
+  recordFinancialStatementHistory: (record: Omit<FinancialStatementHistoryRecord, 'id' | 'generatedAt'>) => FinancialStatementHistoryRecord;
+  switchReportingPeriod: (schoolYear: string, semester: '1st Semester' | '2nd Semester', reportingYear: number) => void;
 
   addAccount: (account: Account) => void;
   updateAccount: (code: string, updated: Partial<Account>) => void;
@@ -745,8 +751,18 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
 
   const [settings, setSettings] = useState<AppSettings>(() => {
     const local = localStorage.getItem('ss_settings');
-    return local ? JSON.parse(local) : {
-      fiscalYear: 'FY 2026',
+    if (local) {
+      const saved = JSON.parse(local) as AppSettings;
+      if (saved.fiscalYear.startsWith('FY ')) {
+        const existingRange = saved.fiscalYear.match(/FY\s+(\d{4})-(\d{4})(.*)/);
+        const singleYear = saved.fiscalYear.match(/^FY\s+(\d{4})$/);
+        if (existingRange) saved.fiscalYear = `SY ${existingRange[1]}-${existingRange[2]}${existingRange[3]}`;
+        else if (singleYear) saved.fiscalYear = `SY ${singleYear[1]}-${Number(singleYear[1]) + 1}`;
+      }
+      return saved;
+    }
+    return {
+      fiscalYear: 'SY 2026-2027',
       organizationName: 'Bicol University',
       currencySymbol: '₱',
       currencyCode: 'PHP',
@@ -779,6 +795,16 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
 
   const [draftTransactions, setDraftTransactions] = useState<TransactionDraft[]>(() => {
     const local = localStorage.getItem('ss_drafts');
+    return local ? JSON.parse(local) : [];
+  });
+
+  const [financialStatementHistory, setFinancialStatementHistory] = useState<FinancialStatementHistoryRecord[]>(() => {
+    const local = localStorage.getItem('ss_fs_history');
+    return local ? JSON.parse(local) : [];
+  });
+
+  const [reportingPeriodWorkspaces, setReportingPeriodWorkspaces] = useState<ReportingPeriodWorkspace[]>(() => {
+    const local = localStorage.getItem('ss_period_workspaces');
     return local ? JSON.parse(local) : [];
   });
 
@@ -822,6 +848,44 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     localStorage.setItem('ss_drafts', JSON.stringify(draftTransactions));
   }, [draftTransactions]);
+
+  useEffect(() => {
+    localStorage.setItem('ss_fs_history', JSON.stringify(financialStatementHistory));
+  }, [financialStatementHistory]);
+
+  useEffect(() => {
+    localStorage.setItem('ss_period_workspaces', JSON.stringify(reportingPeriodWorkspaces));
+  }, [reportingPeriodWorkspaces]);
+
+  // Keep the active semester's complete editable books mirrored in the
+  // workspace archive. Switching semesters therefore behaves like opening
+  // another workbook instead of filtering one lifetime ledger.
+  useEffect(() => {
+    if (!settings.semester || !settings.reportingYear) return;
+    const schoolYear = `${settings.reportingYear}-${settings.reportingYear + 1}`;
+    const key = `${schoolYear}::${settings.semester}`;
+    const now = new Date().toISOString();
+    setReportingPeriodWorkspaces(previous => {
+      const existing = previous.find(workspace => workspace.key === key);
+      const snapshot: ReportingPeriodWorkspace = {
+        key,
+        schoolYear,
+        semester: settings.semester as '1st Semester' | '2nd Semester',
+        reportingYear: settings.reportingYear as number,
+        createdAt: existing?.createdAt || now,
+        updatedAt: now,
+        journalEntries,
+        projects,
+        closedFiscalYears,
+        receiptAttachments,
+        activityFeeRecords,
+        draftTransactions,
+      };
+      return existing
+        ? previous.map(workspace => workspace.key === key ? snapshot : workspace)
+        : [snapshot, ...previous];
+    });
+  }, [settings.semester, settings.reportingYear, journalEntries, projects, closedFiscalYears, receiptAttachments, activityFeeRecords, draftTransactions]);
 
   const logAudit = (action: string, details: string) => {
     const newLog: AuditLog = {
@@ -1227,6 +1291,57 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
+  const recordFinancialStatementHistory = (record: Omit<FinancialStatementHistoryRecord, 'id' | 'generatedAt'>): FinancialStatementHistoryRecord => {
+    const saved: FinancialStatementHistoryRecord = {
+      ...record,
+      id: `fs-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      generatedAt: new Date().toISOString(),
+    };
+    setFinancialStatementHistory(previous => [saved, ...previous]);
+    logAudit('Save Financial Statement Snapshot', `Saved ${record.semester} ${record.schoolYear} final ledger balances and financial statements.`);
+    return saved;
+  };
+
+  const switchReportingPeriod = (schoolYear: string, semester: '1st Semester' | '2nd Semester', reportingYear: number) => {
+    const targetKey = `${schoolYear}::${semester}`;
+    const current = settings.semester && settings.reportingYear
+      ? `${settings.reportingYear}-${settings.reportingYear + 1}::${settings.semester}`
+      : null;
+    if (current === targetKey) return;
+
+    const target = reportingPeriodWorkspaces.find(workspace => workspace.key === targetKey);
+    const now = new Date().toISOString();
+    if (current) {
+      setReportingPeriodWorkspaces(previous => {
+        const existing = previous.find(workspace => workspace.key === current);
+        const currentSnapshot: ReportingPeriodWorkspace = {
+          key: current,
+          schoolYear: `${settings.reportingYear}-${(settings.reportingYear as number) + 1}`,
+          semester: settings.semester as '1st Semester' | '2nd Semester',
+          reportingYear: settings.reportingYear as number,
+          createdAt: existing?.createdAt || now,
+          updatedAt: now,
+          journalEntries,
+          projects,
+          closedFiscalYears,
+          receiptAttachments,
+          activityFeeRecords,
+          draftTransactions,
+        };
+        return existing ? previous.map(workspace => workspace.key === current ? currentSnapshot : workspace) : [currentSnapshot, ...previous];
+      });
+    }
+
+    setJournalEntries(target?.journalEntries || []);
+    setProjects(target?.projects || DEFAULT_PROJECTS.map(project => ({ ...project })));
+    setClosedFiscalYears(target?.closedFiscalYears || []);
+    setReceiptAttachments(target?.receiptAttachments || []);
+    setActivityFeeRecords(target?.activityFeeRecords || []);
+    setDraftTransactions(target?.draftTransactions || []);
+    setSettings(previous => ({ ...previous, fiscalYear: `SY ${schoolYear} • ${semester}`, semester, reportingYear }));
+    logAudit(target ? 'Open Semester Workspace' : 'Add Semester Workspace', `${target ? 'Opened' : 'Created'} ${semester} ${schoolYear}.`);
+  };
+
   const formatCurrency = (val: number): string => {
     const formatted = new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -1269,6 +1384,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     setCustomClassificationRules([]);
     setActivityFeeRecords([]);
     setDraftTransactions([]);
+    setFinancialStatementHistory([]);
     setAuditLogs([resetLogEntry]);
   };
 
@@ -1279,6 +1395,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     setReceiptAttachments([]);
     setActivityFeeRecords([]);
     setDraftTransactions([]);
+    setFinancialStatementHistory([]);
     logAudit('Load Sample Data', 'Reset database to original sample data.');
   };
 
@@ -1299,6 +1416,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     customClassificationRules,
     activityFeeRecords,
     draftTransactions,
+    financialStatementHistory,
+    reportingPeriodWorkspaces,
   });
 
   // Replaces the entire workspace with a previously exported backup. The
@@ -1332,6 +1451,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     setCustomClassificationRules(Array.isArray(payload.customClassificationRules) ? payload.customClassificationRules : []);
     setActivityFeeRecords(Array.isArray(payload.activityFeeRecords) ? payload.activityFeeRecords : []);
     setDraftTransactions(Array.isArray(payload.draftTransactions) ? payload.draftTransactions : []);
+    setFinancialStatementHistory(Array.isArray(payload.financialStatementHistory) ? payload.financialStatementHistory : []);
+    setReportingPeriodWorkspaces(Array.isArray(payload.reportingPeriodWorkspaces) ? payload.reportingPeriodWorkspaces : []);
   };
 
   // Computations
@@ -1374,6 +1495,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       receiptAttachments,
       activityFeeRecords,
       draftTransactions,
+      financialStatementHistory,
+      reportingPeriodWorkspaces,
       addJournalEntry,
       reverseJournalEntry,
       closeFiscalYear,
@@ -1386,6 +1509,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       updateActivityFeeRecord,
       saveDraftTransaction,
       deleteDraftTransaction,
+      recordFinancialStatementHistory,
+      switchReportingPeriod,
       addAccount,
       updateAccount,
       addProject,

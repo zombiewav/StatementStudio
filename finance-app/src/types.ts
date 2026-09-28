@@ -235,6 +235,52 @@ export interface ActivityFeeRecord {
   history: ActivityFeeHistoryItem[];
 }
 
+export interface FinancialStatementHistoryRecord {
+  id: string;
+  generatedAt: string;
+  schoolYear: string;
+  semester: '1st Semester' | '2nd Semester';
+  period: 'August to December' | 'January to May';
+  startDate: string;
+  endDate: string;
+  action: 'Print' | 'Export PDF' | 'Export Excel';
+  statements: string[];
+  ledgerBalances: Array<{
+    accountCode: string;
+    accountName: string;
+    accountType: AccountType;
+    normalBalance: NormalBalanceType;
+    balance: number;
+  }>;
+  statementTotals: {
+    totalAssets: number;
+    totalLiabilities: number;
+    totalFundBalance: number;
+    totalRevenue: number;
+    totalExpenses: number;
+    netSurplus: number;
+    beginningCash: number;
+    endingCash: number;
+    beginningFundBalance: number;
+    endingFundBalance: number;
+  };
+}
+
+export interface ReportingPeriodWorkspace {
+  key: string;
+  schoolYear: string;
+  semester: '1st Semester' | '2nd Semester';
+  reportingYear: number;
+  createdAt: string;
+  updatedAt: string;
+  journalEntries: JournalEntry[];
+  projects: Project[];
+  closedFiscalYears: ClosingRecord[];
+  receiptAttachments: ReceiptAttachment[];
+  activityFeeRecords: ActivityFeeRecord[];
+  draftTransactions: TransactionDraft[];
+}
+
 // Full export of everything StatementStudio persists to localStorage
 // (accounts, journalEntries, projects, auditLogs, settings), so a user can
 // back up and later restore their entire workspace. `schemaVersion` exists
@@ -260,4 +306,6 @@ export interface BackupPayload {
   // Optional for compatibility with backups created before draft
   // transactions existed.
   draftTransactions?: TransactionDraft[];
+  financialStatementHistory?: FinancialStatementHistoryRecord[];
+  reportingPeriodWorkspaces?: ReportingPeriodWorkspace[];
 }

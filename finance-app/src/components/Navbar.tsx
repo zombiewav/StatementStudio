@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Search, Bell, Calendar, Building2, CheckCircle, ChevronDown, LogOut } from "lucide-react";
 import { useNavigate } from 'react-router';
 import { useFinance } from '../context/FinanceContext';
-import { Semester, SEMESTER_OPTIONS, periodForSemester, parseReportingYear } from '../lib/reportingPeriod';
+import { Semester, SEMESTER_OPTIONS, periodForSemester, parseSchoolYear } from '../lib/reportingPeriod';
 import { ThemeToggle } from './ThemeToggle';
 
 interface NavbarProps {
@@ -43,7 +43,7 @@ function NavActionButton({
 
 export function Navbar({ onMenuToggle, searchTerm, setSearchTerm }: NavbarProps): React.ReactElement {
   const navigate = useNavigate();
-  const { settings, updateSettings, auditLogs } = useFinance();
+  const { settings, auditLogs, reportingPeriodWorkspaces, switchReportingPeriod } = useFinance();
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false);
   const [showFiscalYearDropdown, setShowFiscalYearDropdown] = useState(false);
   const fiscalYearDropdownRef = useRef<HTMLDivElement>(null);
@@ -61,8 +61,8 @@ export function Navbar({ onMenuToggle, searchTerm, setSearchTerm }: NavbarProps)
     setFyError('');
     if (!fySemester) { setFyError('Select a semester.'); return; }
     try {
-      const year = parseReportingYear(fyYear);
-      updateSettings({ fiscalYear: `FY ${year}-${year + 1} • ${fySemester}`, semester: fySemester, reportingYear: year });
+      const schoolYear = parseSchoolYear(fyYear);
+      switchReportingPeriod(schoolYear.label, fySemester, schoolYear.startYear);
       setShowFiscalYearDropdown(false);
     } catch (err) {
       setFyError(err instanceof Error ? err.message : 'Enter a valid year.');
@@ -124,7 +124,7 @@ export function Navbar({ onMenuToggle, searchTerm, setSearchTerm }: NavbarProps)
           </span>
         </div>
 
-        {/* Fiscal Year Selector */}
+        {/* School Year Selector */}
         <div ref={fiscalYearDropdownRef} className="app-filter relative hidden md:flex items-center gap-2 rounded-xl px-3 py-1.5">
           <Calendar className="w-3.5 h-3.5 text-orange-500" />
           <button
@@ -140,10 +140,10 @@ export function Navbar({ onMenuToggle, searchTerm, setSearchTerm }: NavbarProps)
 
           {showFiscalYearDropdown && (
             <div
-              aria-label="Fiscal year"
+              aria-label="School year"
               className="absolute right-0 top-full z-50 mt-2 w-64 rounded-xl border border-slate-200 bg-white p-3 shadow-xl dark:border-slate-700 dark:bg-slate-900"
             >
-              <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Semester</p>
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Add or open semester</p>
               <div className="mb-3 flex gap-2">
                 {SEMESTER_OPTIONS.map(option => (
                   <button
@@ -162,14 +162,14 @@ export function Navbar({ onMenuToggle, searchTerm, setSearchTerm }: NavbarProps)
               </div>
 
               <label className="mb-3 block text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Year
+                School Year
                 <input
                   type="text"
                   inputMode="numeric"
-                  maxLength={4}
+                  maxLength={9}
                   value={fyYear}
-                  onChange={event => { setFyYear(event.target.value.replace(/\D/g, '').slice(0, 4)); setFyError(''); }}
-                  placeholder="Example: 2021"
+                  onChange={event => { setFyYear(event.target.value.replace(/[^\d-]/g, '').slice(0, 9)); setFyError(''); }}
+                  placeholder="Example: 2021-2022"
                   className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-2 text-xs font-semibold text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                 />
               </label>
@@ -189,6 +189,18 @@ export function Navbar({ onMenuToggle, searchTerm, setSearchTerm }: NavbarProps)
                 Apply to All
               </button>
               <p className="mt-2 text-[9px] font-medium text-slate-500 dark:text-slate-400">Every new transaction uses this automatically — no need to set it again per-transaction.</p>
+              {reportingPeriodWorkspaces.length > 0 && (
+                <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-700">
+                  <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Saved semesters</p>
+                  <div className="max-h-28 space-y-1 overflow-y-auto">
+                    {reportingPeriodWorkspaces.map(workspace => (
+                      <button key={workspace.key} type="button" onClick={() => { switchReportingPeriod(workspace.schoolYear, workspace.semester, workspace.reportingYear); setShowFiscalYearDropdown(false); }} className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-left text-[10px] font-bold text-slate-700 hover:border-blue-300 hover:bg-blue-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">
+                        {workspace.semester} {workspace.schoolYear}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

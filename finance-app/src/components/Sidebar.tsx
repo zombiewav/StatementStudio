@@ -50,7 +50,7 @@ export function Sidebar({
   const menuItems: MenuItem[] = [
     { id: 'dashboard', icon: LayoutDashboard, label: "Dashboard" },
     { id: 'transactions', icon: ArrowRightLeft, label: "Transactions" },
-    { id: 'transaction-history', icon: History, label: "Transaction History", isNew: true },
+    { id: 'transaction-history', icon: History, label: "FS History", isNew: true },
     { id: 'review', icon: ClipboardCheck, label: "Review" },
     { id: 'journals', icon: BookOpen, label: "Journal Entries" },
     { id: 'ledger', icon: Layers, label: "General Ledger" },

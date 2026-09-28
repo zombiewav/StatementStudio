@@ -137,9 +137,9 @@ export function Dashboard(): React.ReactElement {
         </div>
 
         <div className="app-surface p-5 rounded-2xl">
-          <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold mb-2">Fiscal Year</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold mb-2">School Year</p>
           <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-            {settings?.fiscalYear || 'FY 2026'}
+            {settings?.fiscalYear || 'SY 2026-2027'}
           </h3>
         </div>
       </div>

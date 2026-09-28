@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseReportingYear, periodForSemester, reportingPeriodBounds, semesterForPeriod } from './reportingPeriod';
+import { parseReportingYear, parseSchoolYear, periodForSemester, reportingPeriodBounds, semesterForPeriod } from './reportingPeriod';
 
 describe('reporting period fields', () => {
   it('keeps semester and period choices consistent', () => {
@@ -13,6 +13,12 @@ describe('reporting period fields', () => {
     expect(parseReportingYear('2021')).toBe(2021);
     expect(() => parseReportingYear('21')).toThrow('four digits');
     expect(() => parseReportingYear('')).toThrow('four digits');
+  });
+
+  it('accepts only a consecutive school-year range', () => {
+    expect(parseSchoolYear('2021-2022')).toEqual({ startYear: 2021, endYear: 2022, label: '2021-2022' });
+    expect(() => parseSchoolYear('2021')).toThrow('YYYY-YYYY');
+    expect(() => parseSchoolYear('2021-2023')).toThrow('immediately follow');
   });
 
   it('computes the exact semester boundaries for a school year', () => {

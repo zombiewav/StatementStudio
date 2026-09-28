@@ -15,6 +15,7 @@ import { computeTransactionReviewStates } from '../lib/reviewEngine';
 import { computeCashFlowDetails } from '../lib/cashFlow';
 import { excludeClosingEntries } from '../lib/closingEntries';
 import { isActivityFeeIncomplete } from '../lib/activityFees';
+import { periodForSemester } from '../lib/reportingPeriod';
 
 type ActiveStatementTab = 'position' | 'activities' | 'cashflow' | 'changes';
 
@@ -32,7 +33,8 @@ export function FinancialStatements(): React.ReactElement {
     closedFiscalYears,
     activityFeeRecords,
     formatCurrency, 
-    settings 
+    settings,
+    recordFinancialStatementHistory,
   } = useFinance();
 
   const [activeTab, setActiveTab] = useState<ActiveStatementTab>('position');
@@ -149,8 +151,42 @@ export function FinancialStatements(): React.ReactElement {
     [performanceEntries, accounts]
   );
 
+  const saveFinalSnapshot = (action: 'Print' | 'Export PDF' | 'Export Excel') => {
+    if (!settings.semester || !settings.reportingYear) return;
+    const schoolYear = `${settings.reportingYear}-${settings.reportingYear + 1}`;
+    recordFinancialStatementHistory({
+      schoolYear,
+      semester: settings.semester,
+      period: periodForSemester(settings.semester),
+      startDate,
+      endDate,
+      action,
+      statements: STATEMENT_OPTIONS.filter(option => selectedStatements[option.id]).map(option => option.label),
+      ledgerBalances: accounts.map(account => ({
+        accountCode: account.code,
+        accountName: account.name,
+        accountType: account.type,
+        normalBalance: account.normalBalance,
+        balance: cumulativeToEndBalances[account.code] || 0,
+      })),
+      statementTotals: {
+        totalAssets: cumulativeToEndTotals.Assets,
+        totalLiabilities: cumulativeToEndTotals.Liabilities,
+        totalFundBalance: fEndingFundBalance,
+        totalRevenue: filteredTotals.Revenue,
+        totalExpenses: filteredTotals.Expenses,
+        netSurplus: fNetIncome,
+        beginningCash: cashFlowDetails.beginningCash,
+        endingCash: cashFlowDetails.endingCash,
+        beginningFundBalance,
+        endingFundBalance: fEndingFundBalance,
+      },
+    });
+  };
+
   // Print function
   const handlePrint = () => {
+    saveFinalSnapshot('Print');
     window.print();
   };
 
@@ -162,7 +198,8 @@ export function FinancialStatements(): React.ReactElement {
     if (type === 'PDF') {
       setTimeout(() => {
         setIsExporting(false);
-        handlePrint();
+        saveFinalSnapshot('Export PDF');
+        window.print();
         setExportSuccess('PDF Print dialog opened.');
         setTimeout(() => setExportSuccess(''), 6000);
       }, 500);
@@ -254,6 +291,7 @@ export function FinancialStatements(): React.ReactElement {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      saveFinalSnapshot('Export Excel');
 
       setIsExporting(false);
       setExportSuccess(`Successfully downloaded ${filename}`);

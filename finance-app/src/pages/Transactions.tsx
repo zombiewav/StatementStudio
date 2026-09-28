@@ -1141,7 +1141,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               <p className="text-[10px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Reporting Period</p>
               {semester && reportingPeriod && settings.reportingYear ? (
                 <p className="mt-1 text-xs font-semibold text-violet-800 dark:text-violet-200">
-                  FY {settings.reportingYear}-{settings.reportingYear + 1} • {semester} ({reportingPeriod})
+                  SY {settings.reportingYear}-{settings.reportingYear + 1} • {semester} ({reportingPeriod})
                 </p>
               ) : (
                 <p className="mt-1 text-xs font-semibold text-rose-600 dark:text-rose-400">

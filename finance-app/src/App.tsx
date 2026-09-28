@@ -44,7 +44,7 @@ function DashboardLayout() {
           />
         );
       case 'transaction-history':
-        return <TransactionHistory />;
+        return <TransactionHistory onNavigate={setActivePage} />;
       case 'review':
         return <Review onContinueDraft={(draftId) => { setResumeDraftId(draftId); setActivePage('transactions'); }} />;
       case 'journals':

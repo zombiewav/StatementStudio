@@ -18,6 +18,16 @@ export function parseReportingYear(value: string): number {
   return Number(trimmed);
 }
 
+export function parseSchoolYear(value: string): { startYear: number; endYear: number; label: string } {
+  const trimmed = value.trim();
+  const match = /^(\d{4})-(\d{4})$/.exec(trimmed);
+  if (!match) throw new Error('Enter the school year as YYYY-YYYY, such as 2021-2022.');
+  const startYear = Number(match[1]);
+  const endYear = Number(match[2]);
+  if (endYear !== startYear + 1) throw new Error('The second school year must immediately follow the first, such as 2021-2022.');
+  return { startYear, endYear, label: `${startYear}-${endYear}` };
+}
+
 export function reportingPeriodBounds(semester: Semester, reportingYear: number): { startDate: string; endDate: string } {
   return semester === '1st Semester'
     ? { startDate: `${reportingYear}-08-01`, endDate: `${reportingYear}-12-31` }
