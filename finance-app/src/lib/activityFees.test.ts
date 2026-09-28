@@ -1,11 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { buildActivityFeeReceivableCollections, buildInitialActivityFeeSchedule, buildScheduledActivityFeeRecognition } from './activityFees';
+import { buildActivityFeeFollowUp, buildActivityFeeReceivableCollections, buildInitialActivityFeeSchedule, buildScheduledActivityFeeRecognition } from './activityFees';
 import { ActivityFeeRecord } from '../types';
 
 const record = (overrides: Partial<ActivityFeeRecord> = {}): ActivityFeeRecord => ({ id: 'af-1', reference: 'AF-0001', eventName: 'Event', totalExpected: 0, totalCollected: 400, totalRefunded: 0, receivableBalance: 0, deferredBalance: 400, status: 'scheduled', createdAt: '', updatedAt: '', history: [], ...overrides });
 const balanced = (lines: { debit: number; credit: number }[]) => expect(lines.reduce((sum, line) => sum + line.debit - line.credit, 0)).toBe(0);
 
 describe('final activity fee workflow', () => {
+  it('records collections above the required fee as a refund liability', () => {
+    const schedule = buildInitialActivityFeeSchedule({ eventOccursThisPeriod: true, eventDate: '2026-09-15', totalExpected: 15000, priorPeriodCollected: 8000, collections: [{ date: '2026-09-15', amount: 8000 }] });
+    expect(schedule.next).toMatchObject({ totalCollected: 16000, refundLiabilityBalance: 1000, status: 'refund-due' });
+    expect(schedule.postings.flatMap(item => item.lines)).toContainEqual(expect.objectContaining({ accountCode: '2120', credit: 1000 }));
+    schedule.postings.forEach(posting => balanced(posting.lines));
+  });
+
+  it('refunds or recognizes an excess activity-fee liability', () => {
+    const excess = record({ totalExpected: 15000, totalCollected: 16000, deferredBalance: 0, refundLiabilityBalance: 1000, status: 'refund-due' });
+    expect(buildActivityFeeFollowUp(excess, { type: 'refund-excess', amount: 600 })).toMatchObject({ next: { refundLiabilityBalance: 400, status: 'refund-due' }, action: 'excess-refund' });
+    expect(buildActivityFeeFollowUp(excess, { type: 'recognize-excess', amount: 1000 })).toMatchObject({ next: { refundLiabilityBalance: 0, status: 'complete' }, action: 'excess-nonrefundable' });
+  });
   it('posts each future-event collection separately to unearned activity fees', () => {
     const schedule = buildInitialActivityFeeSchedule({ eventOccursThisPeriod: false, collections: [{ date: '2026-08-01', amount: 100 }, { date: '2026-08-10', amount: 200 }] });
     expect(schedule.postings).toHaveLength(2);

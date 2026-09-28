@@ -123,6 +123,25 @@ describe('merchandise acquisition posting', () => {
     expect(posting.prepaymentApplied).toBe(200);
   });
 
+  it('combines payments with the same date into one line per account', () => {
+    expect(buildMerchandiseAcquisitionPosting({
+      totalCost: 2000,
+      paymentMethod: 'organization-funds',
+      transactionDate: '2026-09-28',
+      organizationPayments: [
+        { date: '2026-09-28', amount: 500 },
+        { date: '2026-09-28', amount: 500 },
+        { date: '2026-09-29', amount: 200 },
+      ],
+    }).lines).toEqual([
+      { accountCode: '1700', debit: 2000, credit: 0, date: '2026-09-28' },
+      { accountCode: '1010', debit: 0, credit: 1000, date: '2026-09-28' },
+      { accountCode: '2020', debit: 200, credit: 0, date: '2026-09-29' },
+      { accountCode: '1010', debit: 0, credit: 200, date: '2026-09-29' },
+      { accountCode: '2020', debit: 0, credit: 1000, date: '2026-09-28' },
+    ]);
+  });
+
   it('does not allow a supplier payment date before the goods were received', () => {
     expect(() => buildMerchandiseAcquisitionPosting({
       totalCost: 100,

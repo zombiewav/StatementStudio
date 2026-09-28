@@ -152,10 +152,17 @@ login flag. This is still local-browser authentication, not secure multi-device 
   period event may be saved without a known total, remains incomplete in Review, and is recognized
   there once its total and event date are known. Ledger and Transaction History rows show the
   specific event name. Incomplete activity-fee records block Financial Statements and closing.
+  The Activity Fees category also has a separate **Collection of Activity Fees Receivable** dropdown
+  choice. It selects an event with an outstanding receivable and accepts one Date/Collection pair
+  per submission, posting Dr Cash / Cr Activity Fees Receivable; the same follow-up remains available
+  in Review. The main collection list reminds users to include every collection from the reporting
+  period, including collections received before the event. Both Activity Fees choices can be saved
+  as drafts and resumed from Review.
 - **Transaction categories**: Transactions first presents Activity Fees, Merchandise Transactions,
   Membership Fees, Purchases, and Miscellaneous Transactions. Choosing a category opens the existing form
-  with its searchable type list filtered to that category; account selection remains automatic and
-  custom transaction names remain labels only. `transactionCategories.ts` owns the tested grouping.
+  with its searchable type list filtered to that category; account selection remains automatic.
+  The optional Custom Transaction Name field was removed from the entry form at the client's request.
+  `transactionCategories.ts` owns the tested grouping.
   Cash advances and non-membership income from the latest client note belong to Miscellaneous.
   Every category shows the general reminder that incomplete information can be updated later in Review.
 - **Transaction History / inventory summary**: The sidebar Transaction History page selects one

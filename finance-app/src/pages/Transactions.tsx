@@ -54,14 +54,11 @@ const MERCHANDISE_ITEM_OPTIONS = ['Lanyard', 'Pins', 'Tote Bag', 'Mugs', 'Shirt'
 const sumDatedAmounts = (rows: DatedAmountInputRow[]): number => rows.reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
 
 // The generic bag saved as a draft's TransactionDraft.formState — mirrors
-// every field of this form that's worth resuming later, except Activity
-// Fees (that category's fields live entirely inside the separate
-// ActivityFeeEntry component and aren't lifted up here, so drafts aren't
-// offered for it yet).
+// every field of the general transaction form that's worth resuming later.
+// ActivityFeeEntry owns and restores its own draft snapshot separately.
 interface TransactionFormSnapshot {
   txName: string;
   selectedCategory: TransactionCategoryId | null;
-  customName: string;
   description: string;
   amount: number;
   date: string;
@@ -123,13 +120,11 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   // Form State
   const [txName, setTxName] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<TransactionCategoryId | null>(null);
-  const [customName, setCustomName] = useState('');
   // Transaction Name search dropdown: open while the field has focus,
   // filtered live as you type. Selecting an option fills txName with its
   // description and applies that exact rule (see the exact-description
   // match in suggestTransactionClassification). Known types keep their
-  // accounts automatic. A separate optional customName lets the user label
-  // a known type without bypassing its accounting rule.
+  // accounts automatic.
   const [showTxDropdown, setShowTxDropdown] = useState(false);
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState<number>(0);
@@ -250,7 +245,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   const selectCategory = (category: TransactionCategoryId) => {
     setSelectedCategory(category);
     setTxName('');
-    setCustomName('');
     setShowTxDropdown(false);
     setErrorMessage('');
   };
@@ -308,11 +302,9 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       setCreditCode(match.creditAccountCode);
       setIsSmartMatched(true);
       setClassificationPreview(match);
-      // The Custom Transaction Name and Receipt fields are hidden for these
-      // types (see their render conditions below), so leftover values from
+      // Receipt fields are hidden for these types, so leftover values from
       // a previously selected type must not silently carry into this entry.
       if (match.requiresAccrualCompletion || (match.debitAccountCode === '1010' && match.creditAccountCode === MEMBERSHIP_DUES_RECEIVABLE_CODE)) {
-        setCustomName('');
         setPendingReceipts([]);
       }
       setRestrictionAnswer('');
@@ -398,6 +390,11 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   // reflected correctly; every other field is restored as saved.
   useEffect(() => {
     if (!draftToResume || appliedDraftIdRef.current === draftToResume.id) return;
+    if (draftToResume.category === 'activity-fees') {
+      appliedDraftIdRef.current = draftToResume.id;
+      setSelectedCategory('activity-fees');
+      return;
+    }
     appliedDraftIdRef.current = draftToResume.id;
     justHydratedDraftRef.current = true;
 
@@ -406,7 +403,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     setEditingDraftId(draftToResume.id);
     setSelectedCategory((draftToResume.category as TransactionCategoryId) || null);
     setTxName(snapshot.txName || '');
-    setCustomName(snapshot.customName || '');
     setDescription(snapshot.description || '');
     setAmount(snapshot.amount || 0);
     setDate(fallbackDate);
@@ -635,7 +631,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   const buildFormSnapshot = (): TransactionFormSnapshot => ({
     txName,
     selectedCategory,
-    customName,
     description,
     amount,
     date,
@@ -683,7 +678,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       setErrorMessage('Enter at least a transaction type or an amount before saving as a draft.');
       return;
     }
-    const label = customName.trim() || txName.trim() || description.trim() || 'Untitled draft';
+    const label = txName.trim() || description.trim() || 'Untitled draft';
     const id = saveDraftTransaction({
       id: editingDraftId || undefined,
       category: selectedCategory,
@@ -824,12 +819,12 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
         : '';
 
       const entryDescription = isMerchandiseAcquisition
-        ? (customName.trim() || `${description || txName} - ${merchandiseItemLabel} - ${merchandiseBatch.trim()}`)
+        ? `${description || txName} - ${merchandiseItemLabel} - ${merchandiseBatch.trim()}`
         : isMerchandisePrepayment
-          ? (customName.trim() || `${description || txName} - ${merchandiseItemLabel} - ${merchandiseBatch.trim()}`)
+          ? `${description || txName} - ${merchandiseItemLabel} - ${merchandiseBatch.trim()}`
         : isMerchandiseSale
-          ? (customName.trim() || `Sale of Merchandise - ${selectedMerchandiseBatch?.item || 'Merchandise'}`)
-        : (customName.trim() || description || txName) + usePeriodNote;
+          ? `Sale of Merchandise - ${selectedMerchandiseBatch?.item || 'Merchandise'}`
+        : (description || txName) + usePeriodNote;
 
       const je = addJournalEntry(
         date,
@@ -840,7 +835,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
         undefined,
         {
           transactionType: txName,
-          ...(customName.trim() ? { customName: customName.trim() } : {}),
           details: {
             memo: description.trim() || undefined,
             purpose: classificationPreview.purposeOptions?.[purposeIndex]?.label,
@@ -919,7 +913,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       setSuccessMessage(`Successfully posted ${je.reference}!`);
       setLastPostedEntry({ id: je.id, reference: je.reference });
       setTxName('');
-      setCustomName('');
       setDescription('');
       setAmount(0);
       setIsSmartMatched(false);
@@ -1036,7 +1029,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
         </div>
       )}
 
-      {selectedCategory === 'activity-fees' && <ActivityFeeEntry defaultOpen />}
+      {selectedCategory === 'activity-fees' && <ActivityFeeEntry defaultOpen draftToResume={draftToResume} onDraftResumed={onDraftResumed} onDraftSaved={onDraftSaved} />}
 
       {selectedCategory === 'merchandise' && <InventorySummaryCard compact />}
 
@@ -1143,21 +1136,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                 </div>
               )}
             </div>
-
-            {!requiresAccrualCompletion && !isPriorMembershipCollection && (
-              <div className="sm:col-span-2">
-                <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Custom Transaction Name <span className="normal-case text-slate-400">(optional)</span></label>
-                <input
-                  type="text"
-                  value={customName}
-                  onChange={(e) => setCustomName(e.target.value)}
-                  placeholder={classificationPreview ? `Example: September ${classificationPreview.defaultDesc}` : 'Select a transaction type first'}
-                  disabled={!classificationPreview}
-                  className="w-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 disabled:bg-slate-100 disabled:text-slate-400 focus:border-blue-900 focus:ring-blue-900/10 rounded-xl text-xs font-semibold p-3 outline-none transition-colors dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500 dark:focus:border-blue-500"
-                />
-                <p className="text-[10px] text-slate-500 mt-1 font-medium dark:text-slate-400">This label identifies the transaction; it does not change its accounting rule.</p>
-              </div>
-            )}
 
             <div className="sm:col-span-2 rounded-xl border border-violet-200 bg-violet-50 p-3.5 dark:border-violet-500/20 dark:bg-violet-500/10">
               <p className="text-[10px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Reporting Period</p>

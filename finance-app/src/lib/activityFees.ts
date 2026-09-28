@@ -4,6 +4,7 @@ export const ACTIVITY_FEE_RECEIVABLE_CODE = '1310';
 export const UNEARNED_ACTIVITY_FEE_CODE = '2110';
 export const DEFERRED_ACTIVITY_FEE_CODE = UNEARNED_ACTIVITY_FEE_CODE;
 export const ACTIVITY_FEE_REVENUE_CODE = '4090';
+export const ACTIVITY_FEE_REFUND_LIABILITY_CODE = '2120';
 export const CASH_CODE = '1010';
 
 export type ActivityFeeFollowUp =
@@ -12,7 +13,10 @@ export type ActivityFeeFollowUp =
   | { type: 'postpone'; amount: number }
   | { type: 'cancel-refundable'; amount: number }
   | { type: 'cancel-nonrefundable' }
-  | { type: 'refund'; amount: number };
+  | { type: 'refund'; amount: number }
+  | { type: 'refund-excess'; amount: number }
+  | { type: 'defer-excess-refund' }
+  | { type: 'recognize-excess'; amount: number };
 
 export interface ActivityFeeJournalPosting {
   date: string;
@@ -24,7 +28,7 @@ export interface ActivityFeeJournalPosting {
 
 export interface ActivityFeeSchedule {
   postings: ActivityFeeJournalPosting[];
-  next: Pick<ActivityFeeRecord, 'totalExpected' | 'totalCollected' | 'totalRefunded' | 'receivableBalance' | 'deferredBalance' | 'status'>;
+  next: Pick<ActivityFeeRecord, 'totalExpected' | 'totalCollected' | 'totalRefunded' | 'receivableBalance' | 'deferredBalance' | 'refundLiabilityBalance' | 'status'>;
 }
 
 export interface InitialActivityFeeInput {
@@ -37,7 +41,7 @@ export interface InitialActivityFeeInput {
 
 export interface ActivityFeePosting {
   lines: JournalLine[];
-  next: Pick<ActivityFeeRecord, 'totalCollected' | 'totalRefunded' | 'receivableBalance' | 'deferredBalance' | 'status'>;
+  next: Pick<ActivityFeeRecord, 'totalCollected' | 'totalRefunded' | 'receivableBalance' | 'deferredBalance' | 'refundLiabilityBalance' | 'status'>;
   action: ActivityFeeRecord['history'][number]['action'];
   amount: number;
   description: string;
@@ -92,16 +96,16 @@ function buildRecognitionSchedule(existingUnearned: number, totalExpected: numbe
   if (!eventDate) throw new Error('Event date is required.');
   const dated = validateCollections(collections, eventDate);
   const currentCollected = sum(dated);
-  if (existingUnearned + currentCollected > totalExpected) throw new Error('Previous and current collections cannot exceed the total activity fees for the event.');
-
   const early = dated.filter(collection => collection.date < eventDate);
   const sameDay = dated.filter(collection => collection.date === eventDate);
   const after = dated.filter(collection => collection.date > eventDate);
   const earlyTotal = sum(early);
   const sameDayTotal = sum(sameDay);
   const unearnedReleased = existingUnearned + earlyTotal;
-  const receivableAtEvent = totalExpected - unearnedReleased - sameDayTotal;
-  const finalReceivable = receivableAtEvent - sum(after);
+  const collectedAtEvent = unearnedReleased + sameDayTotal;
+  const receivableAtEvent = Math.max(0, totalExpected - collectedAtEvent);
+  let remainingReceivable = receivableAtEvent;
+  let refundLiability = Math.max(0, collectedAtEvent - totalExpected);
   const postings: ActivityFeeJournalPosting[] = [
     ...early.map(collection => collectionPosting(collection, UNEARNED_ACTIVITY_FEE_CODE, 'initial', 'Activity fees collected before the event')),
     {
@@ -111,17 +115,35 @@ function buildRecognitionSchedule(existingUnearned: number, totalExpected: numbe
         { accountCode: CASH_CODE, debit: sameDayTotal, credit: 0, date: eventDate },
         { accountCode: ACTIVITY_FEE_RECEIVABLE_CODE, debit: receivableAtEvent, credit: 0, date: eventDate },
         { accountCode: ACTIVITY_FEE_REVENUE_CODE, debit: 0, credit: totalExpected, date: eventDate },
+        { accountCode: ACTIVITY_FEE_REFUND_LIABILITY_CODE, debit: 0, credit: refundLiability, date: eventDate },
       ]),
       action: 'held',
       amount: totalExpected,
       description: 'Event held; activity fees recognized',
     },
-    ...after.map(collection => collectionPosting(collection, ACTIVITY_FEE_RECEIVABLE_CODE, 'collection', 'Collection of activity fees after the event')),
   ];
+
+  after.forEach(collection => {
+    const receivablePortion = Math.min(remainingReceivable, collection.amount);
+    const excessPortion = collection.amount - receivablePortion;
+    postings.push({
+      date: collection.date,
+      lines: clean([
+        { accountCode: CASH_CODE, debit: collection.amount, credit: 0, date: collection.date },
+        { accountCode: ACTIVITY_FEE_RECEIVABLE_CODE, debit: 0, credit: receivablePortion, date: collection.date },
+        { accountCode: ACTIVITY_FEE_REFUND_LIABILITY_CODE, debit: 0, credit: excessPortion, date: collection.date },
+      ]),
+      action: 'collection',
+      amount: collection.amount,
+      description: excessPortion > 0 ? 'Activity fee collection with excess refund liability' : 'Collection of activity fees after the event',
+    });
+    remainingReceivable -= receivablePortion;
+    refundLiability += excessPortion;
+  });
 
   return {
     postings,
-    next: { totalExpected, totalCollected: existingUnearned + currentCollected, totalRefunded: 0, receivableBalance: finalReceivable, deferredBalance: 0, status: finalReceivable === 0 ? 'complete' : 'receivable' },
+    next: { totalExpected, totalCollected: existingUnearned + currentCollected, totalRefunded: 0, receivableBalance: remainingReceivable, deferredBalance: 0, refundLiabilityBalance: refundLiability, status: refundLiability > 0 ? 'refund-due' : remainingReceivable === 0 ? 'complete' : 'receivable' },
   };
 }
 
@@ -132,7 +154,7 @@ export function buildInitialActivityFeeSchedule(input: InitialActivityFeeInput):
     const totalCollected = sum(collections);
     return {
       postings: collections.map(collection => collectionPosting(collection, UNEARNED_ACTIVITY_FEE_CODE, 'initial', 'Activity fees collected before a future event')),
-      next: { totalExpected: 0, totalCollected, totalRefunded: 0, receivableBalance: 0, deferredBalance: totalCollected, status: 'scheduled' },
+      next: { totalExpected: 0, totalCollected, totalRefunded: 0, receivableBalance: 0, deferredBalance: totalCollected, refundLiabilityBalance: 0, status: 'scheduled' },
     };
   }
   // buildRecognitionSchedule re-validates with input.eventDate as the
@@ -155,7 +177,7 @@ export function buildActivityFeeReceivableCollections(record: ActivityFeeRecord,
   const receivableBalance = record.receivableBalance - collected;
   return {
     postings: dated.map(collection => collectionPosting(collection, ACTIVITY_FEE_RECEIVABLE_CODE, 'collection', 'Collection of outstanding activity fees')),
-    next: { totalExpected: record.totalExpected, totalCollected: record.totalCollected + collected, totalRefunded: record.totalRefunded, receivableBalance, deferredBalance: 0, status: receivableBalance === 0 ? 'complete' : 'receivable' },
+    next: { totalExpected: record.totalExpected, totalCollected: record.totalCollected + collected, totalRefunded: record.totalRefunded, receivableBalance, deferredBalance: 0, refundLiabilityBalance: record.refundLiabilityBalance || 0, status: receivableBalance === 0 ? 'complete' : 'receivable' },
   };
 }
 
@@ -171,6 +193,24 @@ export function buildInitialActivityFeePosting(totalExpected: number, collected:
 export function buildActivityFeeFollowUp(record: ActivityFeeRecord, followUp: ActivityFeeFollowUp): ActivityFeePosting {
   const remainingCollectionCapacity = record.totalExpected - record.totalCollected;
   if ('amount' in followUp) positive(followUp.amount, followUp.type === 'refund' || followUp.type === 'cancel-refundable' ? 'Refund amount' : 'Collection amount', true);
+  if (followUp.type === 'defer-excess-refund') {
+    return { lines: [], next: { totalCollected: record.totalCollected, totalRefunded: record.totalRefunded, receivableBalance: record.receivableBalance, deferredBalance: record.deferredBalance, refundLiabilityBalance: record.refundLiabilityBalance || 0, status: 'refund-due' }, action: 'excess-refund-deferred', amount: record.refundLiabilityBalance || 0, description: 'Excess activity fees will be refunded in the next reporting period' };
+  }
+  if (followUp.type === 'refund-excess' || followUp.type === 'recognize-excess') {
+    const balance = record.refundLiabilityBalance || 0;
+    if (balance <= 0) throw new Error('This event has no excess activity-fee refund liability.');
+    if (followUp.amount <= 0 || followUp.amount > balance) throw new Error('Amount cannot exceed the remaining refund liability.');
+    const remaining = balance - followUp.amount;
+    return {
+      lines: followUp.type === 'refund-excess'
+        ? [{ accountCode: ACTIVITY_FEE_REFUND_LIABILITY_CODE, debit: followUp.amount, credit: 0 }, { accountCode: CASH_CODE, debit: 0, credit: followUp.amount }]
+        : [{ accountCode: ACTIVITY_FEE_REFUND_LIABILITY_CODE, debit: followUp.amount, credit: 0 }, { accountCode: ACTIVITY_FEE_REVENUE_CODE, debit: 0, credit: followUp.amount }],
+      next: { totalCollected: record.totalCollected, totalRefunded: record.totalRefunded + (followUp.type === 'refund-excess' ? followUp.amount : 0), receivableBalance: record.receivableBalance, deferredBalance: record.deferredBalance, refundLiabilityBalance: remaining, status: remaining === 0 ? 'complete' : 'refund-due' },
+      action: followUp.type === 'refund-excess' ? 'excess-refund' : 'excess-nonrefundable',
+      amount: followUp.amount,
+      description: followUp.type === 'refund-excess' ? 'Refund of excess activity fees' : 'Non-refundable excess activity fees recognized as revenue',
+    };
+  }
   if (followUp.type === 'refund' && record.status !== 'refund-due') throw new Error('This event has no outstanding activity-fee refund to record.');
   if (followUp.type === 'collect-receivable') {
     if (record.status !== 'receivable') throw new Error('This event has no activity-fee receivable to collect.');

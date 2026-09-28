@@ -146,6 +146,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
   { code: '2020', name: 'Merchandise Payable', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid cost of merchandise acquired for resale', isActive: true },
   { code: '2050', name: 'Due to Officers', type: 'Liabilities', normalBalance: 'Credit', description: 'Amounts owed to officers who paid organization expenses out of their own money, pending reimbursement', isActive: true },
   { code: '2110', name: 'Unearned Activity Fees', type: 'Liabilities', normalBalance: 'Credit', description: 'Activity or event fees collected before the event date', isActive: true },
+  { code: '2120', name: 'Refund Liability - Activity Fees', type: 'Liabilities', normalBalance: 'Credit', description: 'Activity fee collections received in excess of the required amount and still refundable', isActive: true },
   { code: '2200', name: 'Loans & Financial Obligations', type: 'Liabilities', normalBalance: 'Credit', description: 'Loans and other financial obligations payable within a year', isActive: true },
   { code: '2300', name: 'Accrued Liabilities', type: 'Liabilities', normalBalance: 'Credit', description: 'Accrued unpaid expenses such as taxes or interest', isActive: true },
   

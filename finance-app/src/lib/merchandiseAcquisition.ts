@@ -61,7 +61,19 @@ function total(records: DatedAmountRecord[]): number {
 function addLine(lines: JournalLine[], accountCode: string, debit: number, credit: number, date?: string): void {
   const amount = debit || credit;
   if (amount <= 0) return;
-  lines.push({ accountCode, debit: cents(debit), credit: cents(credit), ...(date ? { date } : {}) });
+  const normalizedDebit = cents(debit);
+  const normalizedCredit = cents(credit);
+  const matchingLine = lines.find(line =>
+    line.accountCode === accountCode
+    && (line.date || '') === (date || '')
+    && (normalizedDebit > 0 ? line.debit > 0 && line.credit === 0 : line.credit > 0 && line.debit === 0)
+  );
+  if (matchingLine) {
+    matchingLine.debit = cents(matchingLine.debit + normalizedDebit);
+    matchingLine.credit = cents(matchingLine.credit + normalizedCredit);
+    return;
+  }
+  lines.push({ accountCode, debit: normalizedDebit, credit: normalizedCredit, ...(date ? { date } : {}) });
 }
 
 /**

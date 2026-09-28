@@ -195,7 +195,7 @@ export interface ActivityFeeHistoryItem {
   id: string;
   date: string;
   reportingPeriod: string;
-  action: 'initial' | 'collection' | 'held' | 'postponed' | 'cancelled-refundable' | 'cancelled-nonrefundable' | 'refund';
+  action: 'initial' | 'collection' | 'held' | 'postponed' | 'cancelled-refundable' | 'cancelled-nonrefundable' | 'refund' | 'excess-refund' | 'excess-nonrefundable' | 'excess-refund-deferred';
   amount: number;
   journalEntryId?: string;
 }
@@ -225,6 +225,7 @@ export interface ActivityFeeRecord {
   totalRefunded: number;
   receivableBalance: number;
   deferredBalance: number;
+  refundLiabilityBalance?: number;
   status: ActivityFeeStatus;
   eventDate?: string;
   priorPeriodCollected?: number;
