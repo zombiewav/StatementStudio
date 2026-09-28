@@ -3,6 +3,8 @@ import { CalendarDays, ChevronDown, ChevronUp } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import { computeAccountBalances } from '../lib/accountTotals';
 import { ACTIVITY_FEE_RECEIVABLE_CODE, ACTIVITY_FEE_REFUND_LIABILITY_CODE, ACTIVITY_FEE_REVENUE_CODE, buildInitialActivityFeeSchedule, CASH_CODE, UNEARNED_ACTIVITY_FEE_CODE } from '../lib/activityFees';
+import { reportingPeriodBounds } from '../lib/reportingPeriod';
+import { buildAccountPeriodHistory } from '../lib/transactionHistory';
 import { JournalLine, TransactionDraft } from '../types';
 import { DatedAmountInputRow, DatedAmountRows } from './DatedAmountRows';
 import { NewFeatureBadge } from './NewFeatureBadge';
@@ -19,7 +21,7 @@ interface ActivityFeeEntryProps {
 }
 
 export function ActivityFeeEntry({ defaultOpen = false, draftToResume = null, onDraftResumed, onDraftSaved }: ActivityFeeEntryProps): React.ReactElement {
-  const { createActivityFeeRecord, collectActivityFeeReceivable, updateActivityFeeRecord, activityFeeRecords, saveDraftTransaction, deleteDraftTransaction, settings, formatCurrency, accounts, journalEntries, closedFiscalYears } = useFinance();
+  const { createActivityFeeRecord, collectActivityFeeReceivable, updateActivityFeeRecord, activityFeeRecords, saveDraftTransaction, deleteDraftTransaction, settings, formatCurrency, accounts, journalEntries } = useFinance();
   const [open, setOpen] = useState(defaultOpen);
   const [transactionType, setTransactionType] = useState<'activity-fees' | 'receivable' | 'excess-refund'>('activity-fees');
   const [eventName, setEventName] = useState('');
@@ -67,24 +69,19 @@ export function ActivityFeeEntry({ defaultOpen = false, draftToResume = null, on
     onDraftResumed?.();
   }, [draftToResume, onDraftResumed]);
   const collectionTotal = useMemo(() => collections.reduce((sum, row) => sum + (Number(row.amount) || 0), 0), [collections]);
-  // What's declared here can't exceed the TRUE beginning-of-period balance
-  // of Unearned Activity Fees — its ending balance as of the last fiscal
-  // year close, carried forward (closing entries never touch liability
-  // accounts, so this is just "as of the most recent close", not today's
-  // running total, which could already include activity posted THIS
-  // period that isn't "previous period" money). No close yet on record
-  // means the whole ledger to date is still "the beginning", so this
-  // naturally falls back to today's full balance in that case.
+  // Prior-period precollections are limited to the Unearned Activity Fees
+  // balance carried into the selected semester. This is the same beginning
+  // balance displayed by the General Ledger and excludes current-semester
+  // collections even when no fiscal-year close has been posted yet.
   const unearnedActivityFeesBalance = useMemo(() => {
-    const lastClosingDate = closedFiscalYears.reduce<string | null>(
-      (latest, record) => (!latest || record.closingDate > latest ? record.closingDate : latest),
-      null
-    );
-    const entriesAsOfLastClose = lastClosingDate
-      ? journalEntries.filter(entry => entry.date <= lastClosingDate)
-      : journalEntries;
-    return computeAccountBalances(entriesAsOfLastClose, accounts)[UNEARNED_ACTIVITY_FEE_CODE] || 0;
-  }, [journalEntries, accounts, closedFiscalYears]);
+    const account = accounts.find(candidate => candidate.code === UNEARNED_ACTIVITY_FEE_CODE);
+    if (!account) return 0;
+    if (!settings.semester || !settings.reportingYear) {
+      return computeAccountBalances(journalEntries, accounts)[UNEARNED_ACTIVITY_FEE_CODE] || 0;
+    }
+    const { startDate, endDate } = reportingPeriodBounds(settings.semester, settings.reportingYear);
+    return buildAccountPeriodHistory(account, journalEntries, startDate, endDate).beginningBalance;
+  }, [journalEntries, accounts, settings.semester, settings.reportingYear]);
   const priorPeriodCollectedMax = Math.max(0, unearnedActivityFeesBalance);
   const showUnearnedBalanceWarning = eventOccursThisPeriod === 'yes' && Number(priorPeriodCollected || 0) > unearnedActivityFeesBalance;
   const excessCollection = Math.max(0, Number(priorPeriodCollected || 0) + collectionTotal - Number(totalExpected || 0));

@@ -29,6 +29,11 @@ export interface InventorySummary {
   movements: InventoryMovement[];
 }
 
+export interface AccountPeriodHistory {
+  beginningBalance: number;
+  lines: AccountHistoryLine[];
+}
+
 export function merchandiseSaleCostError(cost: number, inventoryBalance: number): string | null {
   if (!Number.isFinite(cost) || cost <= 0) return 'Enter the cost of the merchandise sold so inventory and Cost of Sales are updated.';
   if (cost > inventoryBalance) return 'The merchandise cost sold cannot exceed the current inventory balance.';
@@ -71,6 +76,15 @@ export function buildAccountTransactionHistory(account: Account, entries: Journa
         runningBalance,
       };
     });
+}
+
+export function buildAccountPeriodHistory(account: Account, entries: JournalEntry[], startDate: string, endDate: string): AccountPeriodHistory {
+  const lifetime = buildAccountTransactionHistory(account, entries);
+  const priorLines = lifetime.filter(line => line.date < startDate);
+  return {
+    beginningBalance: priorLines[priorLines.length - 1]?.runningBalance || 0,
+    lines: lifetime.filter(line => line.date >= startDate && line.date <= endDate),
+  };
 }
 
 export function buildInventorySummary(entries: JournalEntry[]): InventorySummary {

@@ -17,3 +17,9 @@ export function parseReportingYear(value: string): number {
   if (!/^\d{4}$/.test(trimmed)) throw new Error('Please enter the reporting year using four digits, such as 2021.');
   return Number(trimmed);
 }
+
+export function reportingPeriodBounds(semester: Semester, reportingYear: number): { startDate: string; endDate: string } {
+  return semester === '1st Semester'
+    ? { startDate: `${reportingYear}-08-01`, endDate: `${reportingYear}-12-31` }
+    : { startDate: `${reportingYear + 1}-01-01`, endDate: `${reportingYear + 1}-05-31` };
+}

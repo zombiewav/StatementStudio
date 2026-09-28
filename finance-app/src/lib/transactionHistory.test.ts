@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Account, JournalEntry } from '../types';
-import { buildAccountTransactionHistory, buildInventorySummary, buildMerchandiseSaleLines, merchandiseSaleCostError } from './transactionHistory';
+import { buildAccountPeriodHistory, buildAccountTransactionHistory, buildInventorySummary, buildMerchandiseSaleLines, merchandiseSaleCostError } from './transactionHistory';
 
 const inventory: Account = { code: '1700', name: 'Inventory', type: 'Assets', normalBalance: 'Debit', description: '', isActive: true };
 const entries: JournalEntry[] = [
@@ -29,6 +29,13 @@ describe('transaction history', () => {
     const history = buildAccountTransactionHistory(cash, datedEntries);
     expect(history.map(line => line.date)).toEqual(['2026-01-01', '2026-01-10', '2026-01-20']);
     expect(history.map(line => line.runningBalance)).toEqual([50, 150, 350]);
+  });
+
+  it('carries the prior-period balance into the selected reporting period', () => {
+    expect(buildAccountPeriodHistory(inventory, entries, '2030-01-01', '2030-12-31')).toEqual({
+      beginningBalance: 1000,
+      lines: [expect.objectContaining({ reference: 'JE-0002', runningBalance: 700 })],
+    });
   });
 
   it('keeps inventory history across years after the balance reaches zero', () => {

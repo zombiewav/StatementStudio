@@ -1,23 +1,29 @@
 import React, { useState, useMemo } from 'react';
 import { Search, ListFilter, ArrowLeftRight } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
-import { AccountHistoryLine, buildAccountTransactionHistory } from '../lib/transactionHistory';
+import { reportingPeriodBounds } from '../lib/reportingPeriod';
+import { AccountHistoryLine, buildAccountPeriodHistory, buildAccountTransactionHistory } from '../lib/transactionHistory';
 
 export function GeneralLedger(): React.ReactElement {
-  const { accounts, journalEntries, accountBalances, formatCurrency } = useFinance();
+  const { accounts, journalEntries, accountBalances, formatCurrency, settings } = useFinance();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedType, setSelectedType] = useState<'All' | 'Assets' | 'Liabilities' | 'Fund Balance' | 'Revenue' | 'Expenses'>('All');
 
   // Compute the transaction history with running balances for each account
+  const reportingBounds = settings.semester && settings.reportingYear
+    ? reportingPeriodBounds(settings.semester, settings.reportingYear)
+    : null;
   const ledgerData = useMemo(() => {
-    const data: Record<string, AccountHistoryLine[]> = {};
+    const data: Record<string, { beginningBalance: number; lines: AccountHistoryLine[] }> = {};
 
     accounts.forEach(acc => {
-      data[acc.code] = buildAccountTransactionHistory(acc, journalEntries);
+      data[acc.code] = reportingBounds
+        ? buildAccountPeriodHistory(acc, journalEntries, reportingBounds.startDate, reportingBounds.endDate)
+        : { beginningBalance: 0, lines: buildAccountTransactionHistory(acc, journalEntries) };
     });
 
     return data;
-  }, [journalEntries, accounts]);
+  }, [journalEntries, accounts, reportingBounds?.startDate, reportingBounds?.endDate]);
 
   // Filter accounts based on Search and Type selectors
   const filteredAccounts = useMemo(() => {
@@ -78,8 +84,11 @@ export function GeneralLedger(): React.ReactElement {
 
       <div className="space-y-6">
         {filteredAccounts.map(acc => {
-          const lines = ledgerData[acc.code] || [];
-          const currentBal = accountBalances[acc.code] || 0;
+          const accountHistory = ledgerData[acc.code] || { beginningBalance: 0, lines: [] };
+          const lines = accountHistory.lines;
+          const currentBal = reportingBounds
+            ? lines[lines.length - 1]?.runningBalance ?? accountHistory.beginningBalance
+            : accountBalances[acc.code] || 0;
 
           return (
             <div key={acc.code} className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
@@ -120,6 +129,18 @@ export function GeneralLedger(): React.ReactElement {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50/50 dark:divide-slate-800/60">
+                    {reportingBounds && (
+                      <tr className="bg-indigo-50/60 font-semibold dark:bg-indigo-500/10">
+                        <td className="py-2 px-6 text-slate-900 dark:text-slate-100">{new Date(`${reportingBounds.startDate}T00:00:00`).toLocaleDateString()}</td>
+                        <td className="py-2 px-4 font-bold text-indigo-800 dark:text-indigo-200">B/F</td>
+                        <td className="py-2 px-4 text-slate-900 dark:text-slate-100">Beginning Balance (carried forward)</td>
+                        <td className="py-2 px-4 text-slate-500">—</td>
+                        <td className="py-2 px-4 text-slate-500">—</td>
+                        <td className="py-2 px-4 text-right"></td>
+                        <td className="py-2 px-4 text-right"></td>
+                        <td className="py-2 px-6 text-right font-black text-indigo-900 dark:text-indigo-100">{formatCurrency(accountHistory.beginningBalance)}</td>
+                      </tr>
+                    )}
                     {lines.map((line, idx) => (
                       <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
                         <td className="py-2 px-6 text-slate-900 dark:text-slate-100">{new Date(line.date).toLocaleDateString()}</td>
@@ -142,7 +163,7 @@ export function GeneralLedger(): React.ReactElement {
                         </td>
                       </tr>
                     ))}
-                    {lines.length === 0 && (
+                    {lines.length === 0 && !reportingBounds && (
                       <tr>
                         <td colSpan={8} className="py-6 px-6 text-center text-slate-500 dark:text-slate-400 font-medium">
                           No transactions recorded for this account in the current period.
