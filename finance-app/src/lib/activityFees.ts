@@ -244,4 +244,13 @@ export function buildActivityFeeFollowUp(record: ActivityFeeRecord, followUp: Ac
   throw new Error('Unsupported activity-fee update.');
 }
 
-export function isActivityFeeIncomplete(record: ActivityFeeRecord): boolean { return record.status !== 'complete'; }
+/**
+ * A future event and a refund explicitly carried to the next reporting period
+ * remain visible as incomplete in Review, but their accounting is complete for
+ * the current period. They therefore must not block this period's financial
+ * statements or closing workflow.
+ */
+export function isActivityFeeIncomplete(record: ActivityFeeRecord): boolean {
+  if (record.status === 'complete' || record.status === 'scheduled') return false;
+  return !(record.status === 'refund-due' && record.history.some(item => item.action === 'excess-refund-deferred'));
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildCurrentMembershipFeePosting, buildPriorMembershipCollectionPosting } from './membershipFees';
+import { buildCurrentMembershipFeePosting, buildMembershipRefundResolution, buildPriorMembershipCollectionPosting } from './membershipFees';
 
 describe('membership fee postings', () => {
   it('posts a full same-day collection directly to cash and revenue', () => {
@@ -32,17 +32,43 @@ describe('membership fee postings', () => {
   });
 
   it('rejects current-year collections above total collectible fees', () => {
-    expect(() => buildCurrentMembershipFeePosting({ totalFees: 100, dateOne: '2026-01-01', collections: [{ date: '', amount: 101 }] })).toThrow(/cannot exceed/i);
+    const result = buildCurrentMembershipFeePosting({ totalFees: 100, dateOne: '2026-01-01', collections: [{ date: '', amount: 101 }] });
+    expect(result.refundLiability).toBe(1);
+    expect(result.lines).toContainEqual({ accountCode: '2130', debit: 0, credit: 1, date: '2026-01-01' });
   });
 
-  it('posts earlier-period collections separately and falls back to Date 1', () => {
-    const result = buildPriorMembershipCollectionPosting({ availableReceivable: 5000, dateOne: '2026-03-03', collections: [{ date: '', amount: 4000 }, { date: '2026-03-04', amount: 500 }] });
+  it('posts earlier-period collections separately using each entered collection date', () => {
+    const result = buildPriorMembershipCollectionPosting({ availableReceivable: 5000, collections: [{ date: '2026-03-03', amount: 4000 }, { date: '2026-03-04', amount: 500 }] });
     expect(result.lines[0].date).toBe('2026-03-03');
     expect(result.lines[2].date).toBe('2026-03-04');
     expect(result.amountStillReceivable).toBe(500);
   });
 
   it('rejects earlier-period collections above the available receivable', () => {
-    expect(() => buildPriorMembershipCollectionPosting({ availableReceivable: 5000, dateOne: '2026-03-03', collections: [{ date: '', amount: 5001 }] })).toThrow(/cannot exceed/i);
+    expect(() => buildPriorMembershipCollectionPosting({ availableReceivable: 5000, collections: [{ date: '2026-03-03', amount: 5001 }] })).toThrow(/cannot exceed/i);
+  });
+
+  it('requires a date on every earlier-period collection instead of using a separate default date', () => {
+    expect(() => buildPriorMembershipCollectionPosting({ availableReceivable: 5000, collections: [{ date: '', amount: 100 }] })).toThrow(/enter a date/i);
+  });
+
+  it('applies later collections to receivable first and sends only the excess to refund liability', () => {
+    const result = buildCurrentMembershipFeePosting({ totalFees: 1000, dateOne: '2026-08-01', collections: [{ date: '2026-08-01', amount: 400 }, { date: '2026-09-01', amount: 800 }] });
+    expect(result.amountStillReceivable).toBe(0);
+    expect(result.refundLiability).toBe(200);
+    expect(result.lines).toContainEqual({ accountCode: '1300', debit: 0, credit: 600, date: '2026-09-01' });
+    expect(result.lines).toContainEqual({ accountCode: '2130', debit: 0, credit: 200, date: '2026-09-01' });
+  });
+
+  it('resolves excess membership collections according to the selected refund status', () => {
+    expect(buildMembershipRefundResolution({ availableLiability: 500, status: 'current', amount: 300, date: '2026-09-15' })).toEqual([
+      { accountCode: '2130', debit: 300, credit: 0, date: '2026-09-15' },
+      { accountCode: '1010', debit: 0, credit: 300, date: '2026-09-15' },
+    ]);
+    expect(buildMembershipRefundResolution({ availableLiability: 500, status: 'next', amount: 0 })).toEqual([]);
+    expect(buildMembershipRefundResolution({ availableLiability: 500, status: 'nonrefundable', amount: 500 })).toEqual([
+      { accountCode: '2130', debit: 500, credit: 0, date: undefined },
+      { accountCode: '4050', debit: 0, credit: 500, date: undefined },
+    ]);
   });
 });

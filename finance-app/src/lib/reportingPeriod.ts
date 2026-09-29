@@ -33,3 +33,8 @@ export function reportingPeriodBounds(semester: Semester, reportingYear: number)
     ? { startDate: `${reportingYear}-08-01`, endDate: `${reportingYear}-12-31` }
     : { startDate: `${reportingYear + 1}-01-01`, endDate: `${reportingYear + 1}-05-31` };
 }
+
+export function isDateWithinReportingPeriod(date: string, semester: Semester, reportingYear: number): boolean {
+  const { startDate, endDate } = reportingPeriodBounds(semester, reportingYear);
+  return date >= startDate && date <= endDate;
+}

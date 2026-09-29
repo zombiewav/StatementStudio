@@ -149,6 +149,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
   { code: '2050', name: 'Due to Officers', type: 'Liabilities', normalBalance: 'Credit', description: 'Amounts owed to officers who paid organization expenses out of their own money, pending reimbursement', isActive: true },
   { code: '2110', name: 'Unearned Activity Fees', type: 'Liabilities', normalBalance: 'Credit', description: 'Activity or event fees collected before the event date', isActive: true },
   { code: '2120', name: 'Refund Liability - Activity Fees', type: 'Liabilities', normalBalance: 'Credit', description: 'Activity fee collections received in excess of the required amount and still refundable', isActive: true },
+  { code: '2130', name: 'Refund Liability - Membership Fees', type: 'Liabilities', normalBalance: 'Credit', description: 'Membership fee collections received in excess of the required amount and still refundable', isActive: true },
   { code: '2200', name: 'Loans & Financial Obligations', type: 'Liabilities', normalBalance: 'Credit', description: 'Loans and other financial obligations payable within a year', isActive: true },
   { code: '2300', name: 'Accrued Liabilities', type: 'Liabilities', normalBalance: 'Credit', description: 'Accrued unpaid expenses such as taxes or interest', isActive: true },
   
@@ -529,6 +530,7 @@ const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   // client's own note) for whoever joins mid-year instead of at the start
   // — 2nd Semester only, the mirror restriction of the type above.
   { keyword: 'new additional members', debitAccountCode: '1010', creditAccountCode: '4040', description: 'Membership Fees From New/Additional Members - 2nd Semester', requiresAccrualCompletion: true, accrualAudience: 'new', availableInSemester: '2nd Semester' },
+  { keyword: 'excess membership fee collection', debitAccountCode: '2130', creditAccountCode: '1010', description: 'Excess Membership Fee Collection - Status' },
   // "Cash prizes received" contains 'prize' as a substring, which would
   // otherwise be shadowed by the Awards & Prizes EXPENSE rule below (money
   // the org gives out, not receives) — checked here, ahead of it, for that
@@ -1046,11 +1048,17 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       .filter(candidate => !idsToDelete.has(candidate.id))
       .map(candidate => candidate.reversedByEntryId === id ? { ...candidate, reversedByEntryId: undefined } : candidate));
     setReceiptAttachments(previous => previous.filter(receipt => !idsToDelete.has(receipt.entryId)));
-    setActivityFeeRecords(previous => previous.map(record => ({
-      ...record,
-      history: record.history.filter(item => !item.journalEntryId || !idsToDelete.has(item.journalEntryId)),
-      updatedAt: new Date().toISOString(),
-    })));
+    setActivityFeeRecords(previous => previous.flatMap(record => {
+      const removedLinkedHistory = record.history.some(item => item.journalEntryId && idsToDelete.has(item.journalEntryId));
+      if (!removedLinkedHistory) return [record];
+      const history = record.history.filter(item => !item.journalEntryId || !idsToDelete.has(item.journalEntryId));
+      // A guided Activity Fee record exists only to track its submitted
+      // journal entries. Once its final linked entry is deleted, retaining
+      // an empty record leaves an orphaned red item in Review even though
+      // the Ledger and Trial Balance are already zero.
+      if (history.length === 0) return [];
+      return [{ ...record, history, updatedAt: new Date().toISOString() }];
+    }));
     logAudit('Delete Posted Transaction', `Permanently deleted ${entry.reference}${idsToDelete.size > 1 ? ' and its linked reversal' : ''}: ${entry.description}.`);
   };
 

@@ -30,7 +30,7 @@ export function categorizeTransactionRule(rule: Pick<ClassificationRule, 'debitA
     return 'merchandise';
   }
 
-  if (rule.creditAccountCode === '4040' || rule.creditAccountCode === '1300' || description.includes("school year's membership")) {
+  if (rule.creditAccountCode === '4040' || rule.creditAccountCode === '1300' || rule.debitAccountCode === '2130' || description.includes("school year's membership")) {
     return 'membership-fees';
   }
 

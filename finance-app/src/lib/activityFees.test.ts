@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildActivityFeeFollowUp, buildActivityFeeReceivableCollections, buildInitialActivityFeeSchedule, buildScheduledActivityFeeRecognition } from './activityFees';
+import { buildActivityFeeFollowUp, buildActivityFeeReceivableCollections, buildInitialActivityFeeSchedule, buildScheduledActivityFeeRecognition, isActivityFeeIncomplete } from './activityFees';
 import { ActivityFeeRecord } from '../types';
 
 const record = (overrides: Partial<ActivityFeeRecord> = {}): ActivityFeeRecord => ({ id: 'af-1', reference: 'AF-0001', eventName: 'Event', totalExpected: 0, totalCollected: 400, totalRefunded: 0, receivableBalance: 0, deferredBalance: 400, status: 'scheduled', createdAt: '', updatedAt: '', history: [], ...overrides });
@@ -23,6 +23,21 @@ describe('final activity fee workflow', () => {
     expect(schedule.postings).toHaveLength(2);
     expect(schedule.next).toMatchObject({ totalExpected: 0, totalCollected: 300, deferredBalance: 300, status: 'scheduled' });
     schedule.postings.forEach(posting => balanced(posting.lines));
+  });
+
+  it('keeps future events visible in Review without blocking this period’s financial statements', () => {
+    expect(isActivityFeeIncomplete(record({ status: 'scheduled' }))).toBe(false);
+  });
+
+  it('does not block financial statements after a refund is explicitly carried forward', () => {
+    const deferredRefund = record({
+      status: 'refund-due',
+      deferredBalance: 0,
+      refundLiabilityBalance: 500,
+      history: [{ id: 'history-1', date: '2026-12-31', reportingPeriod: 'SY 2026-2027 • 1st Semester', action: 'excess-refund-deferred', amount: 500 }],
+    });
+    expect(isActivityFeeIncomplete(deferredRefund)).toBe(false);
+    expect(isActivityFeeIncomplete(record({ status: 'refund-due', deferredBalance: 0, refundLiabilityBalance: 500 }))).toBe(true);
   });
 
   it('separates early, event-date, and post-event collections', () => {

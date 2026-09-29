@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseReportingYear, parseSchoolYear, periodForSemester, reportingPeriodBounds, semesterForPeriod } from './reportingPeriod';
+import { isDateWithinReportingPeriod, parseReportingYear, parseSchoolYear, periodForSemester, reportingPeriodBounds, semesterForPeriod } from './reportingPeriod';
 
 describe('reporting period fields', () => {
   it('keeps semester and period choices consistent', () => {
@@ -24,5 +24,13 @@ describe('reporting period fields', () => {
   it('computes the exact semester boundaries for a school year', () => {
     expect(reportingPeriodBounds('1st Semester', 2021)).toEqual({ startDate: '2021-08-01', endDate: '2021-12-31' });
     expect(reportingPeriodBounds('2nd Semester', 2021)).toEqual({ startDate: '2022-01-01', endDate: '2022-05-31' });
+  });
+
+  it('accepts dates only inside the active reporting semester', () => {
+    expect(isDateWithinReportingPeriod('2021-08-01', '1st Semester', 2021)).toBe(true);
+    expect(isDateWithinReportingPeriod('2021-12-31', '1st Semester', 2021)).toBe(true);
+    expect(isDateWithinReportingPeriod('2022-01-01', '1st Semester', 2021)).toBe(false);
+    expect(isDateWithinReportingPeriod('2022-01-01', '2nd Semester', 2021)).toBe(true);
+    expect(isDateWithinReportingPeriod('2022-06-01', '2nd Semester', 2021)).toBe(false);
   });
 });
