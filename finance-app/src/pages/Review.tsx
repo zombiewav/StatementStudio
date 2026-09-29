@@ -3,8 +3,6 @@ import { ClipboardCheck, CheckCircle2, AlertCircle, Trash2, Undo2 } from 'lucide
 import { useFinance } from '../context/FinanceContext';
 import { JournalEntry } from '../types';
 import { ReceiptAttachments } from '../components/ReceiptAttachments';
-import { ActivityFeeReview } from '../components/ActivityFeeReview';
-import { isActivityFeeIncomplete } from '../lib/activityFees';
 import {
   computePendingObligations,
   computeAdvanceSettlement,
@@ -434,7 +432,7 @@ interface ReviewProps {
 }
 
 export function Review({ onContinueDraft }: ReviewProps): React.ReactElement {
-  const { journalEntries, accounts, activityFeeRecords, draftTransactions, deleteDraftTransaction, deleteJournalEntry, reverseJournalEntry, addJournalEntry, formatCurrency } = useFinance();
+  const { journalEntries, accounts, draftTransactions, deleteDraftTransaction, deleteJournalEntry, reverseJournalEntry, addJournalEntry, formatCurrency } = useFinance();
   const pendingObligations = useMemo(() => computePendingObligations(journalEntries, accounts), [journalEntries, accounts]);
   const reviewStates = useMemo(() => computeTransactionReviewStates(journalEntries, accounts), [journalEntries, accounts]);
   const [statusFilter, setStatusFilter] = useState<'all' | ReviewStatus>('all');
@@ -484,8 +482,7 @@ export function Review({ onContinueDraft }: ReviewProps): React.ReactElement {
   const visibleStates = statusFilter === 'all'
     ? reviewStates
     : reviewStates.filter(state => state.status === statusFilter);
-  const incompleteCount = reviewStates.filter(state => state.status === 'incomplete').length
-    + activityFeeRecords.filter(isActivityFeeIncomplete).length;
+  const incompleteCount = reviewStates.filter(state => state.status === 'incomplete').length;
 
   return (
     <div className="space-y-6 bg-slate-50 dark:bg-slate-950">
@@ -557,8 +554,6 @@ export function Review({ onContinueDraft }: ReviewProps): React.ReactElement {
           </div>
         </section>
       )}
-
-      <ActivityFeeReview />
 
       <section className="space-y-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

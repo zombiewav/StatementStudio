@@ -25,7 +25,7 @@ import { combineOpeningAndPeriodBalances, carryForwardOpeningBalances, OpeningBa
 import { computeClosingEntryLines, findFiscalCloseBlockers } from '../lib/closingEntries';
 import { linkReceiptIdsToEntry } from '../lib/receiptAttachments';
 import { getEffectiveClassificationRules, validateCustomTransactionRule } from '../lib/customTransactionRules';
-import { ActivityFeeFollowUp, ActivityFeeSchedule, buildActivityFeeFollowUp, buildActivityFeeReceivableCollections, buildInitialActivityFeeSchedule, buildScheduledActivityFeeRecognition, isActivityFeeIncomplete } from '../lib/activityFees';
+import { ActivityFeeFollowUp, ActivityFeeSchedule, buildActivityFeeFollowUp, buildActivityFeeReceivableCollections, buildInitialActivityFeeSchedule, buildScheduledActivityFeeRecognition } from '../lib/activityFees';
 
 // The default catch-all project and the account closing entries post their
 // net income plug to — same constants Transactions.tsx and INITIAL_PROJECTS
@@ -1224,10 +1224,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       throw new Error(`${fiscalYear} has already been closed.`);
     }
     const blockers = findFiscalCloseBlockers(journalEntries, accounts);
-    const activityFeeBlockers = activityFeeRecords.filter(isActivityFeeIncomplete);
-    if (blockers.length > 0 || activityFeeBlockers.length > 0) {
-      const totalBlockers = blockers.length + activityFeeBlockers.length;
-      throw new Error(`Cannot close the fiscal year while ${totalBlockers} transaction${totalBlockers === 1 ? '' : 's'} remain incomplete in Review.`);
+    if (blockers.length > 0) {
+      throw new Error(`Cannot close the fiscal year while ${blockers.length} transaction${blockers.length === 1 ? '' : 's'} remain incomplete in Review.`);
     }
 
     const entriesToDate = journalEntries.filter(je => je.date <= closingDate);
