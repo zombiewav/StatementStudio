@@ -16,6 +16,7 @@ import { computeCashFlowDetails } from '../lib/cashFlow';
 import { excludeClosingEntries } from '../lib/closingEntries';
 import { isActivityFeeIncomplete } from '../lib/activityFees';
 import { periodForSemester } from '../lib/reportingPeriod';
+import { combineOpeningAndPeriodBalances } from '../lib/reportingPeriodBalances';
 
 type ActiveStatementTab = 'position' | 'activities' | 'cashflow' | 'changes';
 
@@ -34,6 +35,7 @@ export function FinancialStatements(): React.ReactElement {
     activityFeeRecords,
     formatCurrency, 
     settings,
+    openingBalances,
     recordFinancialStatementHistory,
   } = useFinance();
 
@@ -121,8 +123,8 @@ export function FinancialStatements(): React.ReactElement {
     [journalEntries, endDate]
   );
   const cumulativeToEndBalances = useMemo(
-    () => computeAccountBalances(cumulativeToEndEntries, accounts),
-    [cumulativeToEndEntries, accounts]
+    () => combineOpeningAndPeriodBalances(openingBalances, computeAccountBalances(cumulativeToEndEntries, accounts), accounts),
+    [openingBalances, cumulativeToEndEntries, accounts]
   );
   const cumulativeToEndTotals = useMemo(
     () => computeTypeTotals(cumulativeToEndBalances, accounts),
@@ -300,8 +302,8 @@ export function FinancialStatements(): React.ReactElement {
   };
 
   const cashFlowDetails = useMemo(
-    () => computeCashFlowDetails(journalEntries, accounts, startDate, endDate),
-    [journalEntries, accounts, startDate, endDate]
+    () => computeCashFlowDetails(journalEntries, accounts, startDate, endDate, openingBalances['1010'] || 0),
+    [journalEntries, accounts, startDate, endDate, openingBalances]
   );
 
   return (

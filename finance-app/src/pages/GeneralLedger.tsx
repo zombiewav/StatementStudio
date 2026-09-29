@@ -5,7 +5,7 @@ import { reportingPeriodBounds } from '../lib/reportingPeriod';
 import { AccountHistoryLine, buildAccountPeriodHistory, buildAccountTransactionHistory } from '../lib/transactionHistory';
 
 export function GeneralLedger(): React.ReactElement {
-  const { accounts, journalEntries, accountBalances, formatCurrency, settings } = useFinance();
+  const { accounts, journalEntries, accountBalances, openingBalances, formatCurrency, settings } = useFinance();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedType, setSelectedType] = useState<'All' | 'Assets' | 'Liabilities' | 'Fund Balance' | 'Revenue' | 'Expenses'>('All');
 
@@ -17,13 +17,18 @@ export function GeneralLedger(): React.ReactElement {
     const data: Record<string, { beginningBalance: number; lines: AccountHistoryLine[] }> = {};
 
     accounts.forEach(acc => {
-      data[acc.code] = reportingBounds
+      const history = reportingBounds
         ? buildAccountPeriodHistory(acc, journalEntries, reportingBounds.startDate, reportingBounds.endDate)
         : { beginningBalance: 0, lines: buildAccountTransactionHistory(acc, journalEntries) };
+      const opening = (acc.type === 'Assets' || acc.type === 'Liabilities') ? (openingBalances[acc.code] || 0) : 0;
+      data[acc.code] = {
+        beginningBalance: history.beginningBalance + opening,
+        lines: history.lines.map(line => ({ ...line, runningBalance: line.runningBalance + opening })),
+      };
     });
 
     return data;
-  }, [journalEntries, accounts, reportingBounds?.startDate, reportingBounds?.endDate]);
+  }, [journalEntries, accounts, openingBalances, reportingBounds?.startDate, reportingBounds?.endDate]);
 
   // Filter accounts based on Search and Type selectors
   const filteredAccounts = useMemo(() => {

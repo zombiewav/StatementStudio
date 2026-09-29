@@ -279,6 +279,9 @@ export interface ReportingPeriodWorkspace {
   receiptAttachments: ReceiptAttachment[];
   activityFeeRecords: ActivityFeeRecord[];
   draftTransactions: TransactionDraft[];
+  // Balances brought forward from the immediately preceding reporting period.
+  // Optional so existing localStorage workspaces and older backups remain valid.
+  openingBalances?: Record<string, number>;
 }
 
 // Full export of everything StatementStudio persists to localStorage

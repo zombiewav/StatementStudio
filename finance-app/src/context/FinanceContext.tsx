@@ -21,6 +21,7 @@ import {
 } from '../types';
 import { validateBackupPayload } from '../lib/backupValidation';
 import { computeAccountBalances, computeTypeTotals } from '../lib/accountTotals';
+import { combineOpeningAndPeriodBalances, carryForwardOpeningBalances, OpeningBalances } from '../lib/reportingPeriodBalances';
 import { computeClosingEntryLines, findFiscalCloseBlockers } from '../lib/closingEntries';
 import { linkReceiptIdsToEntry } from '../lib/receiptAttachments';
 import { getEffectiveClassificationRules, validateCustomTransactionRule } from '../lib/customTransactionRules';
@@ -651,6 +652,7 @@ interface FinanceContextType {
   draftTransactions: TransactionDraft[];
   financialStatementHistory: FinancialStatementHistoryRecord[];
   reportingPeriodWorkspaces: ReportingPeriodWorkspace[];
+  openingBalances: OpeningBalances;
 
   addJournalEntry: (date: string, description: string, project: string, lines: JournalLine[], eventName?: string, settlesEntryId?: string, transactionMeta?: TransactionMetadata) => JournalEntry;
   reverseJournalEntry: (id: string) => void;
@@ -811,6 +813,12 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     return local ? JSON.parse(local) : [];
   });
 
+  const [openingBalances, setOpeningBalances] = useState<OpeningBalances>(() => {
+    if (!settings.semester || !settings.reportingYear) return {};
+    const schoolYear = `${settings.reportingYear}-${settings.reportingYear + 1}`;
+    return reportingPeriodWorkspaces.find(workspace => workspace.key === `${schoolYear}::${settings.semester}`)?.openingBalances || {};
+  });
+
   // Sync to LocalStorage
   useEffect(() => {
     localStorage.setItem('ss_accounts', JSON.stringify(accounts));
@@ -883,12 +891,13 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         receiptAttachments,
         activityFeeRecords,
         draftTransactions,
+        openingBalances,
       };
       return existing
         ? previous.map(workspace => workspace.key === key ? snapshot : workspace)
         : [snapshot, ...previous];
     });
-  }, [settings.semester, settings.reportingYear, journalEntries, projects, closedFiscalYears, receiptAttachments, activityFeeRecords, draftTransactions]);
+  }, [settings.semester, settings.reportingYear, journalEntries, projects, closedFiscalYears, receiptAttachments, activityFeeRecords, draftTransactions, openingBalances]);
 
   const logAudit = (action: string, details: string) => {
     const newLog: AuditLog = {
@@ -1339,6 +1348,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     if (current === targetKey) return;
 
     const target = reportingPeriodWorkspaces.find(workspace => workspace.key === targetKey);
+    const nextOpeningBalances = target?.openingBalances
+      || carryForwardOpeningBalances(openingBalances, journalEntries, accounts);
     const now = new Date().toISOString();
     if (current) {
       setReportingPeriodWorkspaces(previous => {
@@ -1356,6 +1367,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
           receiptAttachments,
           activityFeeRecords,
           draftTransactions,
+          openingBalances,
         };
         return existing ? previous.map(workspace => workspace.key === current ? currentSnapshot : workspace) : [currentSnapshot, ...previous];
       });
@@ -1367,6 +1379,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     setReceiptAttachments(target?.receiptAttachments || []);
     setActivityFeeRecords(target?.activityFeeRecords || []);
     setDraftTransactions(target?.draftTransactions || []);
+    setOpeningBalances(nextOpeningBalances);
     setSettings(previous => ({ ...previous, fiscalYear: `SY ${schoolYear} • ${semester}`, semester, reportingYear }));
     logAudit(target ? 'Open Semester Workspace' : 'Add Semester Workspace', `${target ? 'Opened' : 'Created'} ${semester} ${schoolYear}.`);
   };
@@ -1414,6 +1427,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     setActivityFeeRecords([]);
     setDraftTransactions([]);
     setFinancialStatementHistory([]);
+    setOpeningBalances({});
     setAuditLogs([resetLogEntry]);
   };
 
@@ -1425,6 +1439,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     setActivityFeeRecords([]);
     setDraftTransactions([]);
     setFinancialStatementHistory([]);
+    setOpeningBalances({});
     logAudit('Load Sample Data', 'Reset database to original sample data.');
   };
 
@@ -1481,13 +1496,20 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     setActivityFeeRecords(Array.isArray(payload.activityFeeRecords) ? payload.activityFeeRecords : []);
     setDraftTransactions(Array.isArray(payload.draftTransactions) ? payload.draftTransactions : []);
     setFinancialStatementHistory(Array.isArray(payload.financialStatementHistory) ? payload.financialStatementHistory : []);
-    setReportingPeriodWorkspaces(Array.isArray(payload.reportingPeriodWorkspaces) ? payload.reportingPeriodWorkspaces : []);
+    const restoredWorkspaces = Array.isArray(payload.reportingPeriodWorkspaces) ? payload.reportingPeriodWorkspaces : [];
+    setReportingPeriodWorkspaces(restoredWorkspaces);
+    if (payload.settings.semester && payload.settings.reportingYear) {
+      const schoolYear = `${payload.settings.reportingYear}-${payload.settings.reportingYear + 1}`;
+      setOpeningBalances(restoredWorkspaces.find(workspace => workspace.key === `${schoolYear}::${payload.settings.semester}`)?.openingBalances || {});
+    } else {
+      setOpeningBalances({});
+    }
   };
 
   // Computations
   const accountBalances = useMemo(
-    () => computeAccountBalances(journalEntries, accounts),
-    [journalEntries, accounts]
+    () => combineOpeningAndPeriodBalances(openingBalances, computeAccountBalances(journalEntries, accounts), accounts),
+    [openingBalances, journalEntries, accounts]
   );
 
   const totals = useMemo(
@@ -1526,6 +1548,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       draftTransactions,
       financialStatementHistory,
       reportingPeriodWorkspaces,
+      openingBalances,
       addJournalEntry,
       reverseJournalEntry,
       deleteJournalEntry,

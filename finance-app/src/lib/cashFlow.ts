@@ -18,9 +18,10 @@ export function computeCashFlowDetails(
   entries: JournalEntry[],
   accounts: Account[],
   startDate: string,
-  endDate: string
+  endDate: string,
+  openingCash = 0,
 ): CashFlowDetails {
-  const beginningCash = entries
+  const beginningCash = openingCash + entries
     .filter(entry => entry.date < startDate)
     .flatMap(entry => entry.lines)
     .filter(line => CASH_ACCOUNT_CODES.includes(line.accountCode))
