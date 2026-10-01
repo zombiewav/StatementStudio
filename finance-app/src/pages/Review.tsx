@@ -3,6 +3,7 @@ import { ClipboardCheck, CheckCircle2, AlertCircle, Trash2, Undo2 } from 'lucide
 import { useFinance } from '../context/FinanceContext';
 import { JournalEntry } from '../types';
 import { ReceiptAttachments } from '../components/ReceiptAttachments';
+import { CustomerOrderFollowUp } from '../components/CustomerOrderEntry';
 import {
   computePendingObligations,
   computeAdvanceSettlement,
@@ -472,7 +473,7 @@ export function Review({ onContinueDraft }: ReviewProps): React.ReactElement {
   };
 
   const handleDeletePostedTransaction = (entry: JournalEntry) => {
-    const pairWarning = entry.reversedByEntryId ? ' Its linked reversing entry will also be deleted.' : entry.reversalOfEntryId ? ' The original transaction will become active again.' : '';
+    const pairWarning = entry.transactionDetails?.customerOrder ? ' All linked deliveries, collections, refunds, and their inventory movements will also be deleted.' : entry.reversedByEntryId ? ' Its linked reversing entry will also be deleted.' : entry.reversalOfEntryId ? ' The original transaction will become active again.' : '';
     if (!window.confirm(`Permanently delete ${entry.reference}?${pairWarning} This removes it from the journal and ledger, but the deletion remains in the audit log.`)) return;
     deleteJournalEntry(entry.id);
     setSettlementMessage(`${entry.reference} was permanently deleted.`);
@@ -611,7 +612,7 @@ export function Review({ onContinueDraft }: ReviewProps): React.ReactElement {
                       Event occurred — release {formatCurrency(state.restrictedRemaining)}
                     </button>
                   )}
-                  {!state.entry.description.startsWith('Closing Entries') && (
+                  {!state.entry.description.startsWith('Closing Entries') && !state.entry.transactionDetails?.carriedForward && (
                     <button
                       type="button"
                       onClick={() => handleDeletePostedTransaction(state.entry)}
@@ -635,6 +636,7 @@ export function Review({ onContinueDraft }: ReviewProps): React.ReactElement {
                 </div>
               )}
               <ReceiptAttachments entryId={state.entry.id} allowAdd={state.status !== 'reversed'} />
+              {state.entry.transactionDetails?.customerOrder && state.status !== 'reversed' && <CustomerOrderFollowUp entry={state.entry} />}
             </article>
           );
         })}

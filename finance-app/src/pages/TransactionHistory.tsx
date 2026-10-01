@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { BookOpen, ClipboardCheck, FileSpreadsheet, History, ReceiptText } from 'lucide-react';
+import * as AlertDialog from '@radix-ui/react-alert-dialog';
+import { BookOpen, ClipboardCheck, FileSpreadsheet, History, ReceiptText, Trash2 } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import { FinancialStatementHistoryRecord, ReportingPeriodWorkspace } from '../types';
 import { NewFeatureBadge } from '../components/NewFeatureBadge';
@@ -7,8 +8,11 @@ import { NewFeatureBadge } from '../components/NewFeatureBadge';
 type SnapshotView = 'statements' | 'ledger';
 
 export function TransactionHistory({ onNavigate }: { onNavigate: (page: string) => void }): React.ReactElement {
-  const { financialStatementHistory, reportingPeriodWorkspaces, switchReportingPeriod, formatCurrency } = useFinance();
+  const { financialStatementHistory, reportingPeriodWorkspaces, switchReportingPeriod, deleteSemester, formatCurrency } = useFinance();
   const [selected, setSelected] = useState<FinancialStatementHistoryRecord | null>(null);
+  const [deleting, setDeleting] = useState<ReportingPeriodWorkspace | null>(null);
+  const [deleteError, setDeleteError] = useState('');
+  const [notice, setNotice] = useState('');
   const [view, setView] = useState<SnapshotView>('statements');
 
   const openEditableWorkspace = (workspace: ReportingPeriodWorkspace, page: string) => {
@@ -34,9 +38,29 @@ export function TransactionHistory({ onNavigate }: { onNavigate: (page: string) 
   return (
     <div className="space-y-6 bg-slate-50 dark:bg-slate-950">
       <div><h2 className="flex items-center gap-2 text-xl font-bold text-violet-700 dark:text-violet-300"><History className="h-5 w-5" /> Semester Workspace History <NewFeatureBadge /></h2><p className="mt-1 text-xs font-medium text-slate-500">Every semester keeps its own editable Transactions, Review, journals, Ledger, Trial Balance, and Financial Statements.</p></div>
+      {notice && <p role="status" className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">{notice}</p>}
+      {deleting && <AlertDialog.Root open onOpenChange={open => { if (!open) setDeleting(null); }}><AlertDialog.Portal>
+        <AlertDialog.Overlay className="fixed inset-0 z-50 bg-black/50" />
+        <AlertDialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl bg-white p-6 text-slate-900 shadow-xl dark:bg-slate-900 dark:text-slate-100">
+          <AlertDialog.Title className="text-lg font-bold">Delete {deleting.semester} {deleting.schoolYear}?</AlertDialog.Title>
+          <AlertDialog.Description className="mt-3 text-sm text-slate-600 dark:text-slate-300">This permanently deletes this semester's transactions, drafts, receipts, programs, closing records, and saved financial statements. Export a backup in Settings first if you need a copy.</AlertDialog.Description>
+          <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">Other semesters stay unchanged, including their saved beginning balances. You can add this semester again from the selector above to start fresh with balances from the preceding saved semester.</p>
+          {deleteError && <p role="alert" className="mt-3 text-sm text-red-600">{deleteError}</p>}
+          <div className="mt-5 flex justify-end gap-3">
+            <AlertDialog.Cancel asChild><button type="button" className="rounded-lg border px-4 py-2 text-sm font-bold">Cancel</button></AlertDialog.Cancel>
+            <button type="button" onClick={() => {
+              try {
+                deleteSemester(deleting.key);
+                setNotice(`${deleting.semester} ${deleting.schoolYear} deleted. Add it again using the semester selector to start fresh.`);
+                setDeleting(null);
+              } catch (error) { setDeleteError(error instanceof Error ? error.message : 'Could not delete this semester.'); }
+            }} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700">Delete Semester</button>
+          </div>
+        </AlertDialog.Content>
+      </AlertDialog.Portal></AlertDialog.Root>}
       {reportingPeriodWorkspaces.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center dark:border-slate-700 dark:bg-slate-900"><p className="text-sm font-bold">No semester workspaces yet</p><p className="mt-1 text-xs text-slate-500">Add a School Year and semester from the selector above.</p></div> : <div className="grid gap-4 lg:grid-cols-2">{reportingPeriodWorkspaces.map(workspace => {
         const finalSnapshot = financialStatementHistory.find(record => record.schoolYear === workspace.schoolYear && record.semester === workspace.semester);
-        return <section key={workspace.key} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900"><button type="button" onClick={() => finalSnapshot ? setSelected(finalSnapshot) : openEditableWorkspace(workspace, 'transactions')} className="w-full text-left"><p className="text-base font-black text-blue-900 dark:text-blue-200">{workspace.semester} {workspace.schoolYear}</p><p className="mt-1 text-xs text-slate-500">{workspace.journalEntries.length} journal entr{workspace.journalEntries.length === 1 ? 'y' : 'ies'} · {workspace.draftTransactions.length} draft{workspace.draftTransactions.length === 1 ? '' : 's'}{finalSnapshot ? ' · Final FS saved' : ' · FS not finalized yet'}</p></button><div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4"><button type="button" onClick={() => openEditableWorkspace(workspace, 'transactions')} className="rounded-lg border px-2 py-2 text-[10px] font-bold hover:bg-blue-50"><ReceiptText className="mx-auto mb-1 h-4 w-4" />Transactions</button><button type="button" onClick={() => openEditableWorkspace(workspace, 'review')} className="rounded-lg border px-2 py-2 text-[10px] font-bold hover:bg-blue-50"><ClipboardCheck className="mx-auto mb-1 h-4 w-4" />Review</button><button type="button" onClick={() => openEditableWorkspace(workspace, 'ledger')} className="rounded-lg border px-2 py-2 text-[10px] font-bold hover:bg-blue-50"><BookOpen className="mx-auto mb-1 h-4 w-4" />Ledger</button><button type="button" onClick={() => openEditableWorkspace(workspace, 'statements')} className="rounded-lg border px-2 py-2 text-[10px] font-bold hover:bg-blue-50"><FileSpreadsheet className="mx-auto mb-1 h-4 w-4" />FS</button></div></section>;
+        return <section key={workspace.key} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900"><button type="button" onClick={() => finalSnapshot ? setSelected(finalSnapshot) : openEditableWorkspace(workspace, 'transactions')} className="w-full text-left"><p className="text-base font-black text-blue-900 dark:text-blue-200">{workspace.semester} {workspace.schoolYear}</p><p className="mt-1 text-xs text-slate-500">{workspace.journalEntries.length} journal entr{workspace.journalEntries.length === 1 ? 'y' : 'ies'} · {workspace.draftTransactions.length} draft{workspace.draftTransactions.length === 1 ? '' : 's'}{finalSnapshot ? ' · Final FS saved' : ' · FS not finalized yet'}</p></button><div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4"><button type="button" onClick={() => openEditableWorkspace(workspace, 'transactions')} className="rounded-lg border px-2 py-2 text-[10px] font-bold hover:bg-blue-50"><ReceiptText className="mx-auto mb-1 h-4 w-4" />Transactions</button><button type="button" onClick={() => openEditableWorkspace(workspace, 'review')} className="rounded-lg border px-2 py-2 text-[10px] font-bold hover:bg-blue-50"><ClipboardCheck className="mx-auto mb-1 h-4 w-4" />Review</button><button type="button" onClick={() => openEditableWorkspace(workspace, 'ledger')} className="rounded-lg border px-2 py-2 text-[10px] font-bold hover:bg-blue-50"><BookOpen className="mx-auto mb-1 h-4 w-4" />Ledger</button><button type="button" onClick={() => openEditableWorkspace(workspace, 'statements')} className="rounded-lg border px-2 py-2 text-[10px] font-bold hover:bg-blue-50"><FileSpreadsheet className="mx-auto mb-1 h-4 w-4" />FS</button></div><button type="button" onClick={() => { setDeleting(workspace); setDeleteError(''); setNotice(''); }} className="mt-4 inline-flex items-center gap-1.5 rounded-lg px-2 py-2 text-xs font-bold text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950"><Trash2 className="h-4 w-4" />Delete Semester</button></section>;
       })}</div>}
     </div>
   );

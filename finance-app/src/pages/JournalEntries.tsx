@@ -10,6 +10,7 @@ import {
   ArrowUpDown
 } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
+import { customerOrderReversalBlock } from '../lib/customerOrders';
 import { ReceiptAttachments } from '../components/ReceiptAttachments';
 
 export function JournalEntries(): React.ReactElement {
@@ -178,8 +179,9 @@ export function JournalEntries(): React.ReactElement {
                         ) : (
                           <button
                             onClick={() => reverseJournalEntry(je.id)}
+                            disabled={!!customerOrderReversalBlock(je, journalEntries)}
                             className="p-1.5 text-slate-400 dark:text-slate-300 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-500/10 rounded-lg transition-colors"
-                            title="Reverse entry (posts an offsetting correction; the original stays on record)"
+                            title={customerOrderReversalBlock(je, journalEntries) || 'Reverse entry (posts an offsetting correction; the original stays on record)'}
                             type="button"
                           >
                             <RotateCcw className="w-3.5 h-3.5" />

@@ -19,6 +19,7 @@ import {
   JournalLine,
   TransactionDraft
 } from '../types';
+import { deleteSemesterRecords, precedingSemester } from '../lib/semesterDeletion';
 import { validateBackupPayload } from '../lib/backupValidation';
 import { computeAccountBalances, computeTypeTotals } from '../lib/accountTotals';
 import { combineOpeningAndPeriodBalances, carryForwardOpeningBalances, OpeningBalances } from '../lib/reportingPeriodBalances';
@@ -28,6 +29,8 @@ import { getEffectiveClassificationRules, validateCustomTransactionRule } from '
 import { ActivityFeeFollowUp, ActivityFeeSchedule, buildActivityFeeFollowUp, buildActivityFeeReceivableCollections, buildInitialActivityFeeSchedule, buildScheduledActivityFeeRecognition } from '../lib/activityFees';
 import { useAuth } from './AuthContext';
 import { supabase } from '../lib/supabase';
+import { carryForwardCustomerOrders, customerOrderReversalBlock } from '../lib/customerOrders';
+import { reportingPeriodBounds } from '../lib/reportingPeriod';
 
 // The default catch-all project and the account closing entries post their
 // net income plug to — same constants Transactions.tsx and INITIAL_PROJECTS
@@ -154,6 +157,8 @@ export const INITIAL_ACCOUNTS: Account[] = [
   { code: '2120', name: 'Refund Liability - Activity Fees', type: 'Liabilities', normalBalance: 'Credit', description: 'Activity fee collections received in excess of the required amount and still refundable', isActive: true },
   { code: '2130', name: 'Refund Liability - Membership Fees', type: 'Liabilities', normalBalance: 'Credit', description: 'Membership fee collections received in excess of the required amount and still refundable', isActive: true },
   { code: '2200', name: 'Loans & Financial Obligations', type: 'Liabilities', normalBalance: 'Credit', description: 'Loans and other financial obligations payable within a year', isActive: true },
+  { code: '2140', name: 'Unearned Merchandise / Service Revenue', type: 'Liabilities', normalBalance: 'Credit', description: 'Customer advances for undelivered merchandise or services', isActive: true },
+  { code: '2150', name: 'Due to Customers', type: 'Liabilities', normalBalance: 'Credit', description: 'Refundable customer payments exceeding the full order price', isActive: true },
   { code: '2300', name: 'Accrued Liabilities', type: 'Liabilities', normalBalance: 'Credit', description: 'Accrued unpaid expenses such as taxes or interest', isActive: true },
   
   // Fund Balance / Equity (Normal: Credit)
@@ -676,6 +681,7 @@ interface FinanceContextType {
   saveDraftTransaction: (draft: { id?: string; category: string | null; label: string; formState: Record<string, unknown> }) => string;
   deleteDraftTransaction: (id: string) => void;
   recordFinancialStatementHistory: (record: Omit<FinancialStatementHistoryRecord, 'id' | 'generatedAt'>) => FinancialStatementHistoryRecord;
+  deleteSemester: (key: string) => void;
   switchReportingPeriod: (schoolYear: string, semester: '1st Semester' | '2nd Semester', reportingYear: number) => void;
 
   addAccount: (account: Account) => void;
@@ -929,7 +935,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
           setWorkspaceError('Your saved workspace could not be read safely.');
           return;
         }
-        setAccounts(saved.accounts);
+        setAccounts([...saved.accounts, ...INITIAL_ACCOUNTS.filter(a => ['2140', '2150'].includes(a.code) && !saved.accounts.some(existing => existing.code === a.code))]);
         setJournalEntries(saved.journalEntries);
         setProjects(saved.projects || []);
         setAuditLogs(saved.auditLogs || []);
@@ -1130,6 +1136,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   const reverseJournalEntry = (id: string) => {
     const entry = journalEntries.find(e => e.id === id);
     if (!entry || entry.reversedByEntryId || entry.description.startsWith('Closing Entries')) return;
+    const orderBlock = customerOrderReversalBlock(entry, journalEntries);
+    if (orderBlock) { window.alert(orderBlock); return; }
 
     const reference = generateNextReference(journalEntries);
     const reversalEntry: JournalEntry = {
@@ -1154,10 +1162,21 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   const deleteJournalEntry = (id: string) => {
     const entry = journalEntries.find(candidate => candidate.id === id);
     if (!entry || entry.description.startsWith('Closing Entries')) return;
+    if (entry.transactionDetails?.carriedForward) return;
+    if (!entry.transactionDetails?.customerOrder) {
+      const orderBlock = customerOrderReversalBlock(entry, journalEntries);
+      if (orderBlock) { window.alert(orderBlock); return; }
+    }
 
     // Deleting an original also removes its linked reversal; deleting only a
     // reversal reactivates the original by clearing reversedByEntryId.
     const idsToDelete = new Set<string>([id]);
+    // Remove the whole linked order, including reversals, so its inventory
+    // releases and customer balances cannot survive without the original.
+    if (entry.transactionDetails?.customerOrder) {
+      journalEntries.filter(candidate => candidate.transactionDetails?.customerOrderId === id)
+        .forEach(candidate => { idsToDelete.add(candidate.id); if (candidate.reversedByEntryId) idsToDelete.add(candidate.reversedByEntryId); });
+    }
     if (entry.reversedByEntryId) idsToDelete.add(entry.reversedByEntryId);
     setJournalEntries(previous => previous
       .filter(candidate => !idsToDelete.has(candidate.id))
@@ -1452,8 +1471,12 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     if (current === targetKey) return;
 
     const target = reportingPeriodWorkspaces.find(workspace => workspace.key === targetKey);
-    const nextOpeningBalances = target?.openingBalances
-      || carryForwardOpeningBalances(openingBalances, journalEntries, accounts);
+    const predecessor = precedingSemester(reportingPeriodWorkspaces, reportingYear, semester);
+    const nextOpeningBalances = target?.openingBalances || (predecessor
+      ? carryForwardOpeningBalances(
+        predecessor.key === current ? openingBalances : predecessor.openingBalances || {},
+        predecessor.key === current ? journalEntries : predecessor.journalEntries, accounts)
+      : {});
     const now = new Date().toISOString();
     if (current) {
       setReportingPeriodWorkspaces(previous => {
@@ -1477,7 +1500,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       });
     }
 
-    setJournalEntries(target?.journalEntries || []);
+    setJournalEntries(target?.journalEntries || carryForwardCustomerOrders(predecessor ? (predecessor.key === current ? journalEntries : predecessor.journalEntries) : [], reportingPeriodBounds(semester, reportingYear).startDate));
     setProjects(target?.projects || DEFAULT_PROJECTS.map(project => ({ ...project })));
     setClosedFiscalYears(target?.closedFiscalYears || []);
     setReceiptAttachments(target?.receiptAttachments || []);
@@ -1486,6 +1509,27 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     setOpeningBalances(nextOpeningBalances);
     setSettings(previous => ({ ...previous, fiscalYear: `SY ${schoolYear} • ${semester}`, semester, reportingYear }));
     logAudit(target ? 'Open Semester Workspace' : 'Add Semester Workspace', `${target ? 'Opened' : 'Created'} ${semester} ${schoolYear}.`);
+  };
+
+  const deleteSemester = (key: string) => {
+    const result = deleteSemesterRecords(reportingPeriodWorkspaces, financialStatementHistory, key);
+    const activeKey = settings.semester && settings.reportingYear
+      ? `${settings.reportingYear}-${settings.reportingYear + 1}::${settings.semester}` : null;
+    setReportingPeriodWorkspaces(result.workspaces);
+    setFinancialStatementHistory(result.history);
+    if (activeKey === key) {
+      // Clear the selection in the same update so the archive effect cannot
+      // recreate the deleted semester from the active books.
+      setSettings(previous => ({ ...previous, fiscalYear: '', semester: '', reportingYear: undefined }));
+      setJournalEntries([]);
+      setProjects(DEFAULT_PROJECTS.map(project => ({ ...project })));
+      setClosedFiscalYears([]);
+      setReceiptAttachments([]);
+      setActivityFeeRecords([]);
+      setDraftTransactions([]);
+      setOpeningBalances({});
+    }
+    logAudit('Delete Semester', `Deleted ${result.target.semester} ${result.target.schoolYear} and its financial records.`);
   };
 
   const formatCurrency = (val: number): string => {
@@ -1589,7 +1633,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       user: settings.organizationName,
     };
 
-    setAccounts(payload.accounts);
+    setAccounts([...payload.accounts, ...INITIAL_ACCOUNTS.filter(a => ['2140', '2150'].includes(a.code) && !payload.accounts.some(existing => existing.code === a.code))]);
     setJournalEntries(payload.journalEntries);
     setProjects(Array.isArray(payload.projects) ? payload.projects : []);
     setAuditLogs([restoreLogEntry, ...restoredLogs].slice(0, 100));
@@ -1670,6 +1714,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       deleteDraftTransaction,
       recordFinancialStatementHistory,
       switchReportingPeriod,
+      deleteSemester,
       addAccount,
       updateAccount,
       addProject,

@@ -120,7 +120,7 @@ export function buildMerchandiseBatchBalances(entries: JournalEntry[], includeDe
         .reduce((sum, sale) => sum + (sale.transactionDetails?.inventoryCost
           || sale.lines.find(line => line.accountCode === COST_OF_SALES_ACCOUNT_CODE)?.debit
           || 0), 0));
-      const acquisitionCost = entry.lines.find(line => line.accountCode === MERCHANDISE_INVENTORY_ACCOUNT_CODE)?.debit || 0;
+      const acquisitionCost = entry.transactionDetails?.carriedInventoryCost ?? (entry.lines.find(line => line.accountCode === MERCHANDISE_INVENTORY_ACCOUNT_CODE)?.debit || 0);
       return {
         entryId: entry.id,
         reference: entry.reference,

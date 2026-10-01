@@ -8,6 +8,7 @@
 // activitiesBreakdown.ts: takes JournalEntry[]/Account[] in, plain values
 // out, independently testable.
 import { Account, JournalEntry, JournalLine } from '../types';
+import { customerOrderState } from './customerOrders';
 
 // The accounts a transaction can leave open, each answering a different
 // REVIEW question ("did you reimburse them yet?", "have you paid the
@@ -89,6 +90,8 @@ export function computePendingObligations(entries: JournalEntry[], accounts: Acc
     // a new follow-up obligation (for example, liquidating an advance can
     // create Due to Supplier), so they must still be examined.
     if (entry.reversalOfEntryId || entry.reversedByEntryId) continue;
+    // Customer order balances are netted across the complete order history below.
+    if (entry.transactionDetails?.customerOrder || entry.transactionDetails?.customerOrderId) continue;
 
     for (const line of entry.lines) {
       if (!OBLIGATION_ACCOUNT_CODES.includes(line.accountCode as ObligationAccountCode)) continue;
@@ -176,6 +179,13 @@ export function computeTransactionReviewStates(entries: JournalEntry[], accounts
         .reduce((sum, line) => sum + line.debit - line.credit, 0);
       const restrictedRemaining = Math.max(0, restrictedCreated - restrictedReleased);
       if (restrictedRemaining > 0) missing.push(`Temporary donor restriction still open: ${restrictedRemaining}`);
+
+      if (entry.transactionDetails?.customerOrder) {
+        const order = customerOrderState(entry, entries);
+        if (order.remainingSales > EPSILON) missing.push(`Sales still to deliver: ${order.remainingSales}`);
+        if (order.receivable > EPSILON) missing.push(`Due from customer: ${order.receivable}`);
+        if (order.refundable > EPSILON) missing.push(`Due to customer (refundable excess): ${order.refundable}`);
+      }
 
       const status = missing.length > 0 ? 'incomplete' as const : 'complete' as const;
       const linkedDates = entries

@@ -38,6 +38,11 @@ export interface DatedAmountRecord {
 }
 
 export interface TransactionDetails {
+  customerOrder?: { total: number; estimatedCost: number; kind: 'merchandise' | 'service' };
+  customerOrderId?: string;
+  customerOrderOpening?: { sales: number; cost: number; collected: number; unearned: number; receivable: number; refundable: number };
+  carriedInventoryCost?: number;
+  carriedForward?: boolean;
   memo?: string;
   purpose?: string;
   semester?: '1st Semester' | '2nd Semester';

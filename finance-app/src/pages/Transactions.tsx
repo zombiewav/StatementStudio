@@ -23,6 +23,7 @@ import { FUNDING_SOURCE_OPTIONS, buildJournalLines, buildCompoundJournalLines, p
 import { PREPAID_EXPENSE_CODE } from '../lib/reviewEngine';
 import { formatReceiptSize, prepareReceiptAttachment, validateReceiptCount } from '../lib/receiptAttachments';
 import { ActivityFeeEntry } from '../components/ActivityFeeEntry';
+import { CustomerOrderEntry, CUSTOMER_ORDER_DRAFT } from '../components/CustomerOrderEntry';
 import { InventorySummaryCard } from '../components/InventorySummaryCard';
 import { DatedAmountInputRow, DatedAmountRows } from '../components/DatedAmountRows';
 import { NewFeatureBadge } from '../components/NewFeatureBadge';
@@ -125,6 +126,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   // Form State
   const [txName, setTxName] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<TransactionCategoryId | null>(null);
+  const [customerOrdersOpen, setCustomerOrdersOpen] = useState(false);
   // Transaction Name search dropdown: open while the field has focus,
   // filtered live as you type. Selecting an option fills txName with its
   // description and applies that exact rule (see the exact-description
@@ -409,6 +411,13 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   // reflected correctly; every other field is restored as saved.
   useEffect(() => {
     if (!draftToResume || appliedDraftIdRef.current === draftToResume.id) return;
+    if (draftToResume.category === CUSTOMER_ORDER_DRAFT) {
+      appliedDraftIdRef.current = draftToResume.id;
+      setSelectedCategory('merchandise');
+      setCustomerOrdersOpen(true);
+      setEditingDraftId(null);
+      return;
+    }
     if (draftToResume.category === 'activity-fees') {
       appliedDraftIdRef.current = draftToResume.id;
       setSelectedCategory('activity-fees');
@@ -1108,8 +1117,13 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       {selectedCategory === 'activity-fees' && <ActivityFeeEntry defaultOpen draftToResume={draftToResume} onDraftResumed={onDraftResumed} onDraftSaved={onDraftSaved} />}
 
       {selectedCategory === 'merchandise' && <InventorySummaryCard compact />}
+      {selectedCategory === 'merchandise' && <div className="flex flex-wrap gap-2">
+        <button type="button" aria-pressed={!customerOrdersOpen} onClick={() => setCustomerOrdersOpen(false)} className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-bold text-slate-700 dark:border-slate-600 dark:text-slate-200">Purchases / ordinary sales</button>
+        <button type="button" aria-pressed={customerOrdersOpen} onClick={() => setCustomerOrdersOpen(true)} className="rounded-lg border border-blue-300 px-4 py-2 text-xs font-bold text-blue-800 dark:text-blue-200">Customer pre-orders / actual sales</button>
+      </div>}
+      {selectedCategory === 'merchandise' && customerOrdersOpen && <CustomerOrderEntry draftToResume={draftToResume} onDraftResumed={onDraftResumed} onDraftSaved={onDraftSaved} />}
 
-      {selectedCategory && selectedCategory !== 'activity-fees' && (
+      {selectedCategory && selectedCategory !== 'activity-fees' && !(selectedCategory === 'merchandise' && customerOrdersOpen) && (
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
         {/* Left Column: Entry Form */}
         <form onSubmit={handlePost} className="xl:col-span-7 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm p-6 sm:p-8 space-y-5">
