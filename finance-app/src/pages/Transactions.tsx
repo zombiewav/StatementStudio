@@ -46,6 +46,7 @@ import {
   MEMBERSHIP_REFUND_LIABILITY_CODE,
   MembershipRefundStatus,
 } from '../lib/membershipFees';
+import { buildOutrightExpensePosting, OutrightExpensePaymentMethod } from '../lib/outrightExpense';
 import { isDateWithinReportingPeriod, periodForSemester, reportingPeriodBounds } from '../lib/reportingPeriod';
 
 const GENERAL_FUND_PROJECT = 'General Fund Operations';
@@ -172,6 +173,13 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   const [merchandiseCollections, setMerchandiseCollections] = useState<DatedAmountInputRow[]>([{ id: 'collection-1', date, amount: '' }]);
   const [merchandiseRemittances, setMerchandiseRemittances] = useState<DatedAmountInputRow[]>([{ id: 'remittance-1', date, amount: '' }]);
   const [merchandiseCollectionOfficer, setMerchandiseCollectionOfficer] = useState('');
+  const [outrightPaymentMethod, setOutrightPaymentMethod] = useState<OutrightExpensePaymentMethod>('organization-funds');
+  const [outrightOrganizationPayments, setOutrightOrganizationPayments] = useState<DatedAmountInputRow[]>([{ id: 'expense-org-1', date, amount: '' }]);
+  const [outrightOfficerPayments, setOutrightOfficerPayments] = useState<DatedAmountInputRow[]>([{ id: 'expense-officer-1', date, amount: '' }]);
+  const [outrightAdvancePayments, setOutrightAdvancePayments] = useState<DatedAmountInputRow[]>([{ id: 'expense-advance-1', date, amount: '' }]);
+  const [outrightOfficer, setOutrightOfficer] = useState('');
+  const [expenseEvent, setExpenseEvent] = useState<'' | 'yes' | 'no'>('');
+  const [expenseEventName, setExpenseEventName] = useState('');
 
   // "Whose money paid for it?" (Question B from the posting-engine build
   // plan). Only meaningful when the credit side is a cash account — for a
@@ -350,6 +358,13 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       setMerchandiseCollections([{ id: `collection-${Date.now()}`, date, amount: '' }]);
       setMerchandiseRemittances([{ id: `remittance-${Date.now()}`, date, amount: '' }]);
       setMerchandiseCollectionOfficer('');
+      setOutrightPaymentMethod('organization-funds');
+      setOutrightOrganizationPayments([{ id: `expense-org-${Date.now()}`, date, amount: '' }]);
+      setOutrightOfficerPayments([{ id: `expense-officer-${Date.now()}`, date, amount: '' }]);
+      setOutrightAdvancePayments([{ id: `expense-advance-${Date.now()}`, date, amount: '' }]);
+      setOutrightOfficer('');
+      setExpenseEvent('');
+      setExpenseEventName('');
 
       // Keep the funding-source state in sync with whichever cash account
       // the matched rule assumed. When the new type has no funding-source
@@ -497,6 +512,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   // transaction was never recorded — or was already fully spent — so this
   // expense would silently understate what's actually owed.
   const advancesOutstanding = accountBalances['1250'] || 0;
+  const cashAvailable = Math.max(0, accountBalances['1010'] || 0);
   // Membership Fees collections are never paid via an officer's cash
   // advance (they're money coming in from members, not an expense paid
   // out), so this warning must never apply there regardless of whatever
@@ -602,6 +618,24 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     }
   }, [isMerchandiseAcquisition, amount, merchandisePaymentMethod, date, merchandiseOrganizationPaymentTotal, merchandiseOrganizationPayments, merchandiseOfficerPaymentTotal, merchandiseOfficerPayments, merchandiseAdvancePaymentTotal, merchandiseAdvancePayments, merchandiseReimbursementTotal, merchandiseReimbursements, advancesOutstanding, selectedMerchandisePrepayment]);
 
+  const isOutrightExpense = !!classificationPreview && activeAccounts.find(account => account.code === debitCode)?.type === 'Expenses' && !isMerchandiseAcquisition;
+  const outrightOfficerTotal = sumDatedAmounts(outrightOfficerPayments);
+  const outrightAdvanceTotal = sumDatedAmounts(outrightAdvancePayments);
+  const outrightExpenseResult = useMemo(() => {
+    if (!isOutrightExpense || amount <= 0) return { posting: null, error: '' };
+    try {
+      return { posting: buildOutrightExpensePosting({
+        expenseAccountCode: debitCode, totalAmount: amount, paymentMethod: outrightPaymentMethod, transactionDate: date,
+        organizationPayments: outrightOrganizationPayments.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })),
+        officerPayments: outrightOfficerPayments.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })),
+        advancePayments: outrightAdvancePayments.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })),
+        availableAdvance: advancesOutstanding, availableCash: cashAvailable,
+      }), error: '' };
+    } catch (error) {
+      return { posting: null, error: error instanceof Error ? error.message : 'The expense payments are invalid.' };
+    }
+  }, [isOutrightExpense, amount, debitCode, outrightPaymentMethod, date, outrightOrganizationPayments, outrightOfficerPayments, outrightAdvancePayments, advancesOutstanding, cashAvailable]);
+
   useEffect(() => {
     if (isMerchandiseSale) setAmount(merchandiseSaleTotal);
   }, [isMerchandiseSale, merchandiseSaleTotal]);
@@ -636,6 +670,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     if (isMembershipRefundStatus) return membershipRefundResolutionResult.lines;
     if (amount <= 0) return [];
     if (isMerchandiseAcquisition) return merchandiseAcquisitionResult.posting?.lines || [];
+    if (isOutrightExpense) return outrightExpenseResult.posting?.lines || [];
     const deferredAmount = showDeferPortionQuestion ? (Number(notYetUsedAmount) || 0) : 0;
     if (requiresAccrualCompletion || isPriorMembershipCollection) return membershipPostingResult.posting?.lines || [];
     if (isMerchandiseSale) {
@@ -648,7 +683,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       ]);
     }
     return buildJournalLines(debitCode, effectiveCreditCode, amount);
-  }, [classificationPreview, amount, debitCode, effectiveCreditCode, isMembershipRefundStatus, membershipRefundResolutionResult, isMerchandiseAcquisition, merchandiseAcquisitionResult, requiresAccrualCompletion, isPriorMembershipCollection, membershipPostingResult, isMerchandiseSale, merchandiseSaleResult, showDeferPortionQuestion, notYetUsedAmount]);
+  }, [classificationPreview, amount, debitCode, effectiveCreditCode, isMembershipRefundStatus, membershipRefundResolutionResult, isMerchandiseAcquisition, merchandiseAcquisitionResult, isOutrightExpense, outrightExpenseResult, requiresAccrualCompletion, isPriorMembershipCollection, membershipPostingResult, isMerchandiseSale, merchandiseSaleResult, showDeferPortionQuestion, notYetUsedAmount]);
 
   const projectedImpacts = useMemo(
     () => projectJournalLineImpacts(previewLines, activeAccounts, accountBalances),
@@ -821,6 +856,22 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       setErrorMessage(merchandiseAcquisitionResult.error);
       return;
     }
+    if (isOutrightExpense && outrightExpenseResult.error) {
+      setErrorMessage(outrightExpenseResult.error);
+      return;
+    }
+    if (isOutrightExpense && expenseEvent === '') {
+      setErrorMessage('Please state whether this expense is for an event.');
+      return;
+    }
+    if (isOutrightExpense && expenseEvent === 'yes' && !expenseEventName.trim()) {
+      setErrorMessage('Please enter the event name for this expense.');
+      return;
+    }
+    if (isOutrightExpense && (outrightPaymentMethod === 'officer-personal' || outrightPaymentMethod === 'officer-advance' || outrightPaymentMethod === 'combination') && (outrightOfficerTotal > 0 || outrightAdvanceTotal > 0) && !outrightOfficer.trim()) {
+      setErrorMessage('Please enter the accountable officer for this payment.');
+      return;
+    }
     if (debitCode === effectiveCreditCode) {
       setErrorMessage('Debit and Credit accounts must be different for double-entry matching.');
       return;
@@ -895,7 +946,9 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
         ? ` (${formatCurrency(deferredAmount)} not yet used — expected ${expectedUsePeriod === 'within' ? 'within this period' : 'next period'})`
         : '';
 
-      const entryDescription = isMerchandiseAcquisition
+      const entryDescription = isOutrightExpense
+        ? `${description || txName}${expenseEvent === 'yes' ? ` - ${expenseEventName.trim()}` : ' - General and Administrative Expense'}`
+        : isMerchandiseAcquisition
         ? `${description || txName} - ${merchandiseItemLabel} - ${merchandiseBatch.trim()}`
         : isMerchandisePrepayment
           ? `${description || txName} - ${merchandiseItemLabel} - ${merchandiseBatch.trim()}`
@@ -915,7 +968,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
         entryDescription,
         GENERAL_FUND_PROJECT,
         lines,
-        undefined,
+        isOutrightExpense && expenseEvent === 'yes' ? expenseEventName.trim() : undefined,
         undefined,
         {
           transactionType: txName,
@@ -927,10 +980,12 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
             reportingYear: parsedReportingYear,
             fundingSourceId: undefined,
             sponsorshipKind: classificationPreview.sponsorshipKind,
-            counterpartyName: isMerchandiseSale && merchandiseCollectionMethod === 'officer-to-remit'
+            counterpartyName: isOutrightExpense && outrightOfficer.trim()
+              ? outrightOfficer.trim()
+              : isMerchandiseSale && merchandiseCollectionMethod === 'officer-to-remit'
               ? merchandiseCollectionOfficer.trim()
               : counterpartyName.trim() || undefined,
-            eventRelated: false,
+            eventRelated: isOutrightExpense ? expenseEvent === 'yes' : false,
             donorRestriction: showRestrictionQuestion
               ? restrictionAnswer === 'no'
                 ? 'none'
@@ -1645,7 +1700,39 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               </div>
             )}
 
-            {!isMerchandiseAcquisition && !isMerchandiseSale && !requiresAccrualCompletion && !isPriorMembershipCollection && !isMembershipRefundStatus && <div>
+            {isOutrightExpense && (
+              <div className="sm:col-span-2 space-y-4 rounded-xl border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-500/20 dark:bg-indigo-500/10">
+                <div>
+                  <h4 className="text-xs font-black text-violet-700 dark:text-violet-300">Outright expense payment</h4>
+                  <p className="mt-1 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Record the full expense now. Each dated payment is posted separately; any unpaid balance remains in Due to Supplier for Review.</p>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Is this expense for an event?</label>
+                    <select value={expenseEvent} onChange={event => setExpenseEvent(event.target.value as '' | 'yes' | 'no')} className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100">
+                      <option value="">Select Yes or No</option><option value="yes">Yes</option><option value="no">No</option>
+                    </select>
+                  </div>
+                  {expenseEvent === 'yes' && <div><label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Event name</label><input value={expenseEventName} onChange={event => setExpenseEventName(event.target.value)} placeholder="Name of event" className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required /></div>}
+                </div>
+                {expenseEvent === 'no' && <p className="text-[10px] font-semibold text-indigo-800 dark:text-indigo-200">This will be classified as General and Administrative Expense.</p>}
+                <div><label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Total expense amount</label><div className="relative mt-1.5"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-indigo-500">{settings.currencySymbol}</span><input type="number" min="0" step="0.01" value={amount || ''} onChange={event => setAmount(Number(event.target.value))} placeholder="0.00" className="w-full rounded-lg border border-indigo-200 bg-white p-2.5 pl-8 text-xs font-bold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required /></div></div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Payment method</label>
+                  <select value={outrightPaymentMethod} onChange={event => setOutrightPaymentMethod(event.target.value as OutrightExpensePaymentMethod)} className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100">
+                    <option value="organization-funds">Paid directly by the organization</option><option value="officer-personal">Paid by an officer using personal money</option><option value="officer-advance">Paid using an officer cash advance</option><option value="combination">Combination of organization funds, officer money, and/or advance</option><option value="not-yet-paid">Not yet paid</option>
+                  </select>
+                </div>
+                {(outrightPaymentMethod === 'organization-funds' || outrightPaymentMethod === 'combination') && <DatedAmountRows label={`Organization payments (available cash: ${formatCurrency(cashAvailable)})`} rows={outrightOrganizationPayments} onChange={setOutrightOrganizationPayments} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={Math.min(amount || cashAvailable, cashAvailable)} addLabel="Add organization payment" />}
+                {(outrightPaymentMethod === 'officer-personal' || outrightPaymentMethod === 'combination') && <DatedAmountRows label="Officer personal payments" rows={outrightOfficerPayments} onChange={setOutrightOfficerPayments} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={amount || 0} addLabel="Add officer payment" />}
+                {(outrightPaymentMethod === 'officer-advance' || outrightPaymentMethod === 'combination') && <DatedAmountRows label={`Payments using officer advance (available: ${formatCurrency(advancesOutstanding)})`} rows={outrightAdvancePayments} onChange={setOutrightAdvancePayments} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={Math.min(amount || advancesOutstanding, advancesOutstanding)} addLabel="Add advance payment" />}
+                {(outrightPaymentMethod === 'officer-personal' || outrightPaymentMethod === 'officer-advance' || outrightPaymentMethod === 'combination') && <div><label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Accountable officer</label><input value={outrightOfficer} onChange={event => setOutrightOfficer(event.target.value)} placeholder="Officer who paid or used the advance" className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" /></div>}
+                {outrightExpenseResult.posting && <div className="grid grid-cols-1 gap-2 sm:grid-cols-3"><div className="rounded-lg bg-white/80 p-3 text-[10px] dark:bg-slate-900/60"><span className="font-bold text-slate-500">Due to supplier</span><p className="mt-1 font-black text-rose-700">{formatCurrency(outrightExpenseResult.posting.dueToSupplier)}</p></div><div className="rounded-lg bg-white/80 p-3 text-[10px] dark:bg-slate-900/60"><span className="font-bold text-slate-500">Due to officer</span><p className="mt-1 font-black text-amber-700">{formatCurrency(outrightExpenseResult.posting.dueToOfficer)}</p></div><div className="rounded-lg bg-white/80 p-3 text-[10px] dark:bg-slate-900/60"><span className="font-bold text-slate-500">Advance used</span><p className="mt-1 font-black text-indigo-700">{formatCurrency(outrightExpenseResult.posting.advanceUsed)}</p></div></div>}
+                {outrightExpenseResult.error && <p className="text-[10px] font-bold text-rose-700 dark:text-rose-300">{outrightExpenseResult.error}</p>}
+              </div>
+            )}
+
+            {!isOutrightExpense && !isMerchandiseAcquisition && !isMerchandiseSale && !requiresAccrualCompletion && !isPriorMembershipCollection && !isMembershipRefundStatus && <div>
               <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">{isMerchandisePrepayment ? 'Payment' : 'Amount'}</label>
               <div className="relative">
                 <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 dark:text-slate-400">{settings.currencySymbol}</span>
