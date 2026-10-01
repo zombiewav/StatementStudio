@@ -455,8 +455,13 @@ const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   // swap, no expense yet. It's what the REVIEW page's Advances to Officers
   // settlement (src/lib/reviewEngine.ts) resolves once the officer reports
   // back what it was actually used for.
+  { keyword: 'advances to officers', debitAccountCode: '1250', creditAccountCode: '1010', description: 'Advances to Officers' },
   { keyword: 'cash advances given to organization officers', debitAccountCode: '1250', creditAccountCode: '1010', description: 'Cash Advances Given to Organization Officers' },
   { keyword: 'cash advance given to', debitAccountCode: '1250', creditAccountCode: '1010', description: 'Cash Advance Given to Officer' },
+  // Settlement of an already-recorded Due to Officers balance. Kept beside
+  // Advances to Officers because both belong to Miscellaneous Transactions.
+  { keyword: 'reimbursement to officers', debitAccountCode: '2050', creditAccountCode: '1010', description: 'Reimbursement to Officers' },
+  { keyword: 'reimbursement to officer', debitAccountCode: '2050', creditAccountCode: '1010', description: 'Reimbursement to Officer' },
 
   // --- Training Expense -------------------------------------------------------
   { keyword: 'seminar', debitAccountCode: '5060', creditAccountCode: '1010', description: 'Seminar / Conference Attendance Fee' },

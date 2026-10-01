@@ -25,6 +25,17 @@ describe('buildOutrightExpensePosting', () => {
     expect(posting.lines).toEqual(expect.arrayContaining([expect.objectContaining({ accountCode: '2010', debit: 1000, date: '2026-01-02' })]));
   });
 
+  it('records an expense payable next reporting period as expense and Accounts Payable', () => {
+    const posting = buildOutrightExpensePosting({
+      expenseAccountCode: '5030', totalAmount: 1_000, paymentMethod: 'not-yet-paid', transactionDate: '2026-12-31',
+    });
+    expect(posting.dueToSupplier).toBe(1_000);
+    expect(posting.lines).toEqual([
+      { accountCode: '5030', debit: 1_000, credit: 0, date: '2026-12-31' },
+      { accountCode: '2010', debit: 0, credit: 1_000, date: '2026-12-31' },
+    ]);
+  });
+
   it('rejects advance use over the recorded balance', () => {
     expect(() => buildOutrightExpensePosting({ expenseAccountCode: '5030', totalAmount: 100, paymentMethod: 'officer-advance', advancePayments: [{ date: '2026-01-01', amount: 101 }], availableAdvance: 100 })).toThrow('cannot exceed');
   });

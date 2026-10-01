@@ -29,6 +29,8 @@ describe('transaction categories', () => {
   });
 
   it('groups the non-membership entries from the client note under miscellaneous', () => {
+    expect(categorizeTransactionRule(rule('1250', '1010', 'Advances to Officers'))).toBe('other');
+    expect(categorizeTransactionRule(rule('2050', '1010', 'Reimbursement to Officers'))).toBe('other');
     expect(categorizeTransactionRule(rule('1250', '1010', 'Cash Advance Given to Officer'))).toBe('other');
     expect(categorizeTransactionRule(rule('1010', '4050', 'Advertising Revenue'))).toBe('other');
     expect(categorizeTransactionRule(rule('1010', '4050', 'Income from Cash Prizes Received'))).toBe('other');
