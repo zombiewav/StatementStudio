@@ -8,7 +8,7 @@
 // activitiesBreakdown.ts: takes JournalEntry[]/Account[] in, plain values
 // out, independently testable.
 import { Account, JournalEntry, JournalLine } from '../types';
-import { customerOrderState } from './customerOrders';
+import { customerOrderFinalizationIssues, customerOrderState } from './customerOrders';
 
 // The accounts a transaction can leave open, each answering a different
 // REVIEW question ("did you reimburse them yet?", "have you paid the
@@ -182,6 +182,8 @@ export function computeTransactionReviewStates(entries: JournalEntry[], accounts
 
       if (entry.transactionDetails?.customerOrder) {
         const order = customerOrderState(entry, entries);
+        if (entry.transactionDetails.reviewFinalized !== true) missing.push('Transaction needs final review and posting');
+        missing.push(...customerOrderFinalizationIssues(entry));
         if (order.remainingSales > EPSILON) missing.push(`Sales still to deliver: ${order.remainingSales}`);
         if (order.receivable > EPSILON) missing.push(`Due from customer: ${order.receivable}`);
         if (order.refundable > EPSILON) missing.push(`Due to customer (refundable excess): ${order.refundable}`);

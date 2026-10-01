@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { JournalEntry, JournalLine } from '../types';
-import { buildCustomerOrderPosting as build, carryForwardCustomerOrders, customerOrderReversalBlock, customerOrderState } from './customerOrders';
+import { buildCustomerOrderPosting as build, buildProvisionalCustomerOrderPosting, carryForwardCustomerOrders, customerOrderFinalizationIssues, customerOrderReversalBlock, customerOrderState } from './customerOrders';
 import { buildMerchandiseBatchBalances } from './merchandiseSale';
 import { computeTransactionReviewStates } from './reviewEngine';
 
@@ -18,6 +18,17 @@ const followup = (lines: JournalLine[], id = 'delivery', details = {}): JournalE
 const net = (lines: JournalLine[], code: string) => lines.filter(l => l.accountCode === code).reduce((sum, l) => sum + l.debit - l.credit, 0);
 
 describe('customer pre-orders and deliveries', () => {
+  it('posts known cash provisionally while listing unavailable source details', () => {
+    expect(buildProvisionalCustomerOrderPosting(date, [{ date, amount: 250 }])).toEqual([
+      { accountCode: '1010', debit: 250, credit: 0, date },
+      { accountCode: '2140', debit: 0, credit: 250, date },
+    ]);
+    const provisional = { ...root, transactionDetails: { ...root.transactionDetails!, merchandiseItem: '', merchandiseBatch: '', customerOrder: { total: 0, estimatedCost: 0, kind: 'merchandise' as const } } };
+    expect(customerOrderFinalizationIssues(provisional)).toEqual(['Item or service name is missing', 'Batch or order reference is missing', 'Total order selling price is missing']);
+    expect(computeTransactionReviewStates([provisional], [])[0].missing).toEqual([
+      'Transaction needs final review and posting', 'Item or service name is missing', 'Batch or order reference is missing', 'Total order selling price is missing',
+    ]);
+  });
   it('holds the deposit as a liability, without revenue or inventory movements', () => {
     expect(root.lines).toEqual([{ accountCode: '1010', debit: 600, credit: 0, date }, { accountCode: '2140', debit: 0, credit: 600, date }]);
   });
@@ -97,12 +108,14 @@ describe('customer pre-orders and deliveries', () => {
   });
   it('shows one standard Review item, incomplete until delivery, collection and refund finish', () => {
     const sale = followup(build(delivery));
-    expect(computeTransactionReviewStates([root, sale], [])[0]).toMatchObject({ status: 'incomplete', missing: ['Due from customer: 400'] });
+    expect(computeTransactionReviewStates([root, sale], [])[0]).toMatchObject({ status: 'incomplete', missing: ['Transaction needs final review and posting', 'Due from customer: 400'] });
     const payment = followup(build({ ...base, root, entries: [root, sale], date: '2026-08-03', collections: [{ date: '2026-08-03', amount: 450 }] }), 'cash');
     expect(computeTransactionReviewStates([root, sale, payment], [])).toHaveLength(1);
-    expect(computeTransactionReviewStates([root, sale, payment], [])[0].missing).toEqual(['Due to customer (refundable excess): 50']);
+    expect(computeTransactionReviewStates([root, sale, payment], [])[0].missing).toEqual(['Transaction needs final review and posting', 'Due to customer (refundable excess): 50']);
     const refund = followup(build({ ...base, root, entries: [root, sale, payment], date: '2026-08-04', refund: 50 }), 'refund');
-    expect(computeTransactionReviewStates([root, sale, payment, refund], [])[0].status).toBe('complete');
+    expect(computeTransactionReviewStates([root, sale, payment, refund], [])[0].status).toBe('incomplete');
+    const finalized = { ...root, transactionDetails: { ...root.transactionDetails!, reviewFinalized: true } };
+    expect(computeTransactionReviewStates([finalized, sale, payment, refund], [])[0].status).toBe('complete');
   });
   it('restores customer and inventory balances after reversing the latest delivery', () => {
     const sale = followup(build(delivery), 'sale', { merchandiseBatchEntryId: purchase.id, merchandiseQuantitySold: 10, inventoryCost: 700 });

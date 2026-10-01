@@ -39,6 +39,9 @@ export interface DatedAmountRecord {
 
 export interface TransactionDetails {
   customerOrder?: { total: number; estimatedCost: number; kind: 'merchandise' | 'service' };
+  // Customer pre-orders affect the live books immediately, but their source
+  // details remain editable in Review until the user explicitly finalizes them.
+  reviewFinalized?: boolean;
   customerOrderId?: string;
   customerOrderOpening?: { sales: number; cost: number; collected: number; unearned: number; receivable: number; refundable: number };
   carriedInventoryCost?: number;

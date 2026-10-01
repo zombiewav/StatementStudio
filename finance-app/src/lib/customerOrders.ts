@@ -7,6 +7,31 @@ const money = (n: number) => Math.round(n * 100) / 100;
 const active = (e: JournalEntry) => !e.reversalOfEntryId && !e.reversedByEntryId;
 export const sameMerchandise = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
+export function customerOrderFinalizationIssues(entry: JournalEntry): string[] {
+  const details = entry.transactionDetails;
+  const terms = details?.customerOrder;
+  if (!terms) return [];
+  const issues: string[] = [];
+  if (!details.merchandiseItem?.trim()) issues.push('Item or service name is missing');
+  if (!details.merchandiseBatch?.trim()) issues.push('Batch or order reference is missing');
+  if (!Number.isFinite(terms.total) || terms.total <= 0) issues.push('Total order selling price is missing');
+  return issues;
+}
+
+export function buildProvisionalCustomerOrderPosting(date: string, collections: DatedAmountRecord[]): JournalLine[] {
+  validDate(date);
+  const lines: JournalLine[] = [];
+  for (const record of collections) {
+    validDate(record.date);
+    const cash = amount(record.amount, 'Collection');
+    if (!cash) continue;
+    lines.push({ accountCode: '1010', debit: cash, credit: 0, date: record.date });
+    lines.push({ accountCode: CUSTOMER_ADVANCES, debit: 0, credit: cash, date: record.date });
+  }
+  if (!lines.length) throw new Error('Enter at least one collection amount so the provisional transaction has a ledger effect.');
+  return lines;
+}
+
 export function customerOrderReversalBlock(entry: JournalEntry, entries: JournalEntry[]): string | undefined {
   if (entry.transactionDetails?.carriedForward) return 'Opening order and inventory details belong to the previous semester.';
   if (entry.reversalOfEntryId && entries.some(e => e.id === entry.reversalOfEntryId && (e.transactionDetails?.customerOrder || e.transactionDetails?.customerOrderId))) return 'Do not reverse an order reversal; record the corrected activity on the order.';

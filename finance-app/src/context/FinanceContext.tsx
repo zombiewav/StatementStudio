@@ -29,7 +29,7 @@ import { getEffectiveClassificationRules, validateCustomTransactionRule } from '
 import { ActivityFeeFollowUp, ActivityFeeSchedule, buildActivityFeeFollowUp, buildActivityFeeReceivableCollections, buildInitialActivityFeeSchedule, buildScheduledActivityFeeRecognition } from '../lib/activityFees';
 import { useAuth } from './AuthContext';
 import { supabase } from '../lib/supabase';
-import { carryForwardCustomerOrders, customerOrderReversalBlock } from '../lib/customerOrders';
+import { carryForwardCustomerOrders, customerOrderFinalizationIssues, customerOrderReversalBlock } from '../lib/customerOrders';
 import { reportingPeriodBounds } from '../lib/reportingPeriod';
 
 // The default catch-all project and the account closing entries post their
@@ -664,6 +664,8 @@ interface FinanceContextType {
   openingBalances: OpeningBalances;
 
   addJournalEntry: (date: string, description: string, project: string, lines: JournalLine[], eventName?: string, settlesEntryId?: string, transactionMeta?: TransactionMetadata) => JournalEntry;
+  updateJournalEntry: (entry: JournalEntry) => void;
+  finalizeJournalEntry: (id: string) => void;
   reverseJournalEntry: (id: string) => void;
   deleteJournalEntry: (id: string) => void;
   closeFiscalYear: (fiscalYear: string, closingDate: string) => void;
@@ -1127,6 +1129,27 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     setJournalEntries(prev => [...prev, newEntry]);
     logAudit('Create Journal Entry', `Posted journal entry ${reference}: ${description} (${settings.currencySymbol}${lines.reduce((s, l) => s + l.debit, 0).toLocaleString()})`);
     return newEntry;
+  };
+
+  const updateJournalEntry = (entry: JournalEntry) => {
+    const current = journalEntries.find(candidate => candidate.id === entry.id);
+    if (!current || current.reversalOfEntryId || current.reversedByEntryId || current.transactionDetails?.carriedForward || current.transactionDetails?.reviewFinalized || current.description.startsWith('Closing Entries')) {
+      throw new Error('This posted transaction can no longer be edited.');
+    }
+    setJournalEntries(previous => previous.map(candidate => candidate.id === entry.id ? entry : candidate));
+    logAudit('Edit Journal Entry', `Updated posted journal entry ${entry.reference}: ${entry.description}.`);
+  };
+
+  const finalizeJournalEntry = (id: string) => {
+    const current = journalEntries.find(candidate => candidate.id === id);
+    if (!current?.transactionDetails?.customerOrder || current.transactionDetails.reviewFinalized) return;
+    const issues = customerOrderFinalizationIssues(current);
+    if (issues.length) throw new Error(issues.join('. '));
+    setJournalEntries(previous => previous.map(candidate => candidate.id === id ? {
+      ...candidate,
+      transactionDetails: { ...candidate.transactionDetails!, reviewFinalized: true },
+    } : candidate));
+    logAudit('Finalize Journal Entry', `Finalized posted journal entry ${current.reference}: ${current.description}.`);
   };
 
   // Posted entries are never hard-deleted. Correcting one posts a new
@@ -1700,6 +1723,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       reportingPeriodWorkspaces,
       openingBalances,
       addJournalEntry,
+      updateJournalEntry,
+      finalizeJournalEntry,
       reverseJournalEntry,
       deleteJournalEntry,
       closeFiscalYear,

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useFinance } from '../context/FinanceContext';
 import { JournalEntry, TransactionDraft } from '../types';
-import { buildCustomerOrderPosting, customerOrderState, sameMerchandise } from '../lib/customerOrders';
+import { buildCustomerOrderPosting, buildProvisionalCustomerOrderPosting, customerOrderFinalizationIssues, customerOrderState, sameMerchandise } from '../lib/customerOrders';
 import { buildMerchandiseBatchBalances } from '../lib/merchandiseSale';
 import { isDateWithinReportingPeriod } from '../lib/reportingPeriod';
 import { DatedAmountInputRow, DatedAmountRows } from './DatedAmountRows';
@@ -12,11 +12,27 @@ const button = 'rounded-lg border border-blue-300 px-3 py-2 text-xs font-bold te
 const empty = () => ({ mode: 'new', orderId: '', item: 'Lanyard', other: '', batch: '', kind: 'merchandise', total: '', estimatedCost: '', date: '', sales: '', cost: '', quantity: '', batchEntryId: '', refund: '', collections: [{ id: 'cash-1', date: '', amount: '' }] as DatedAmountInputRow[] });
 type Form = ReturnType<typeof empty>;
 
-export function CustomerOrderEntry({ orderId, draftToResume, onDraftResumed, onDraftSaved }: {
-  orderId?: string; draftToResume?: TransactionDraft | null; onDraftResumed?: () => void; onDraftSaved?: () => void;
+export function CustomerOrderEntry({ orderId, editOriginal = false, draftToResume, onDraftResumed }: {
+  orderId?: string; editOriginal?: boolean; draftToResume?: TransactionDraft | null; onDraftResumed?: () => void; onDraftSaved?: () => void;
 }) {
-  const { journalEntries, accounts, settings, formatCurrency, addJournalEntry, saveDraftTransaction, deleteDraftTransaction } = useFinance();
-  const [form, setForm] = useState<Form>(() => ({ ...empty(), ...(orderId ? { mode: 'update', orderId } : {}) }));
+  const { journalEntries, accounts, settings, formatCurrency, addJournalEntry, updateJournalEntry, deleteDraftTransaction } = useFinance();
+  const original = orderId ? journalEntries.find(entry => entry.id === orderId) : undefined;
+  const originalForm = (): Form => {
+    if (!editOriginal || !original?.transactionDetails?.customerOrder) return { ...empty(), ...(orderId ? { mode: 'update', orderId } : {}) };
+    const details = original.transactionDetails;
+    const orderTerms = details.customerOrder;
+    if (!orderTerms) return { ...empty(), ...(orderId ? { mode: 'update', orderId } : {}) };
+    const savedItem = details.merchandiseItem || '';
+    const standardItem = ['Lanyard', 'Shirt', 'Pins', 'Tote Bag', 'Mugs', 'Stickers'].includes(savedItem);
+    return {
+      ...empty(), mode: 'new', orderId: original.id,
+      item: standardItem ? savedItem : 'Others', other: standardItem ? '' : savedItem,
+      batch: details.merchandiseBatch || '', kind: orderTerms.kind,
+      total: String(orderTerms.total), estimatedCost: String(orderTerms.estimatedCost), date: original.date,
+      collections: original.lines.filter(line => line.accountCode === '1010' && line.debit > 0).map((line, index) => ({ id: `saved-${index}`, date: line.date || original.date, amount: String(line.debit) })),
+    };
+  };
+  const [form, setForm] = useState<Form>(originalForm);
   const [draftId, setDraftId] = useState<string>();
   const [message, setMessage] = useState('');
   const applied = useRef('');
@@ -38,10 +54,6 @@ export function CustomerOrderEntry({ orderId, draftToResume, onDraftResumed, onD
   const batches = buildMerchandiseBatchBalances(journalEntries).filter(b => sameMerchandise(b.item, item) && sameMerchandise(b.batch, batch));
   const noInventory = kind === 'merchandise' && !batches.length;
   const total = terms?.total ?? Number(form.total);
-  const saveDraft = () => {
-    const id = saveDraftTransaction({ id: draftId, category: CUSTOMER_ORDER_DRAFT, label: `${form.mode === 'new' ? 'Customer pre-order' : 'Customer order update'} — ${item || 'Untitled'} ${batch}`, formState: { ...form } });
-    setDraftId(id); setMessage('Draft saved. Continue it from Review.'); onDraftSaved?.();
-  };
   const post = (event: React.FormEvent) => {
     event.preventDefault();
     try {
@@ -49,21 +61,36 @@ export function CustomerOrderEntry({ orderId, draftToResume, onDraftResumed, onD
       const semester = settings.semester;
       const reportingYear = settings.reportingYear;
       if (form.mode === 'update' && !root) throw new Error('Choose a saved customer transaction.');
-      if (!item.trim() || !batch.trim()) throw new Error('Enter the item/service and batch/order reference.');
-      if (!root && (!Number.isFinite(Number(form.estimatedCost)) || Number(form.estimatedCost) < 0)) throw new Error('Estimated cost must be zero or greater.');
+      if (root && (!item.trim() || !batch.trim())) throw new Error('The saved order needs an item/service and batch/order reference before follow-up activity can be posted.');
+      if (!root && form.estimatedCost !== '' && (!Number.isFinite(Number(form.estimatedCost)) || Number(form.estimatedCost) < 0)) throw new Error('Estimated cost must be zero or greater.');
       const collections = form.collections.filter(r => r.amount !== '').map(r => ({ date: r.date || form.date, amount: Number(r.amount) }));
       if ([form.date, ...collections.map(r => r.date)].some(d => !isDateWithinReportingPeriod(d, semester, reportingYear))) throw new Error('All dates must be within the active reporting period.');
       const sales = root ? Number(form.sales) : 0;
-      const lines = buildCustomerOrderPosting({ root, entries: journalEntries, total, kind, date: form.date, collections,
-        sales, cost: root ? Number(form.cost) : 0, quantity: root ? Number(form.quantity) : 0,
-        batchEntryId: form.batchEntryId, refund: root ? Number(form.refund) : 0 });
+      const lines = !root && total <= 0
+        ? buildProvisionalCustomerOrderPosting(form.date, collections)
+        : buildCustomerOrderPosting({ root, entries: journalEntries, total, kind, date: form.date, collections,
+          sales, cost: root ? Number(form.cost) : 0, quantity: root ? Number(form.quantity) : 0,
+          batchEntryId: form.batchEntryId, refund: root ? Number(form.refund) : 0 });
       if (lines.some(l => !accounts.some(a => a.code === l.accountCode && a.isActive))) throw new Error('A required posting account is inactive. Enable it in Settings first.');
-      const entry = addJournalEntry(form.date, `${root ? 'Customer order update' : 'Customer pre-order'}: ${item} — ${batch}`, root?.project || 'General Fund Operations', lines, undefined, root?.id, {
+      const description = `${root ? 'Customer order update' : 'Customer pre-order'}: ${item.trim() || 'Details pending'} — ${batch.trim() || 'Reference pending'}`;
+      const transactionDetails = {
+        eventRelated: false, receiptAttachmentIds: original?.transactionDetails?.receiptAttachmentIds || [], merchandiseItem: item.trim(), merchandiseBatch: batch.trim(),
+        ...(root ? { customerOrderId: root.id } : { customerOrder: { total, estimatedCost: Number(form.estimatedCost), kind }, reviewFinalized: false }),
+        ...(sales > 0 && kind === 'merchandise' ? { merchandiseBatchEntryId: form.batchEntryId, merchandiseQuantitySold: Number(form.quantity), inventoryCost: Number(form.cost) } : {}),
+      };
+      if (editOriginal && original) {
+        const candidate = { ...original, date: form.date, description, lines, transactionType: 'Customers’ Pre-order and Downpayment', transactionDetails };
+        const state = customerOrderState(candidate, journalEntries.map(entry => entry.id === original.id ? candidate : entry));
+        if ([state.remainingSales, state.unearned, state.receivable, state.refundable].some(value => value < 0)) throw new Error('These changes conflict with later order activity. Adjust the values or delete the later updates first.');
+        updateJournalEntry(candidate);
+        if (draftId) deleteDraftTransaction(draftId);
+        setDraftId(undefined);
+        setMessage(`${candidate.reference} updated.`);
+        return;
+      }
+      const entry = addJournalEntry(form.date, description, root?.project || 'General Fund Operations', lines, undefined, root?.id, {
         transactionType: root ? 'Actual Sale / Delivery / Render of Service' : 'Customers’ Pre-order and Downpayment',
-        details: { eventRelated: false, receiptAttachmentIds: [], merchandiseItem: item.trim(), merchandiseBatch: batch.trim(),
-          ...(root ? { customerOrderId: root.id } : { customerOrder: { total, estimatedCost: Number(form.estimatedCost), kind } }),
-          ...(sales > 0 && kind === 'merchandise' ? { merchandiseBatchEntryId: form.batchEntryId, merchandiseQuantitySold: Number(form.quantity), inventoryCost: Number(form.cost) } : {}),
-        },
+        details: transactionDetails,
       });
       if (draftId) deleteDraftTransaction(draftId);
       setDraftId(undefined);
@@ -81,7 +108,7 @@ export function CustomerOrderEntry({ orderId, draftToResume, onDraftResumed, onD
       <label className="text-xs font-semibold">Order type<select aria-label="Order type" className={field} value={form.kind} onChange={e => change({ kind: e.target.value })}><option value="merchandise">Merchandise</option><option value="service">Service</option></select></label>
       <label className="text-xs font-semibold">Name of item<select aria-label="Name of item" className={field} value={form.item} onChange={e => change({ item: e.target.value })}>{['Lanyard', 'Shirt', 'Pins', 'Tote Bag', 'Mugs', 'Stickers', 'Others'].map(i => <option key={i}>{i}</option>)}</select></label>
       {form.item === 'Others' && input('other', 'Other item / service name', 'text', true)}
-      {input('batch', 'Batch / order reference', 'text', true)}{input('estimatedCost', 'Total estimated cost price', 'number')}{input('total', 'Total order selling price', 'number', true)}
+      {input('batch', 'Batch / order reference')}{input('estimatedCost', 'Total estimated cost price', 'number')}{input('total', 'Total order selling price', 'number')}
       <p className="text-xs sm:col-span-2">Estimated cost is for reference. Delivery records the actual cost of the items sold.</p>
     </div>}
     {root && state && <div className="space-y-2 rounded-lg bg-slate-50 p-3 text-xs dark:bg-slate-800">
@@ -108,11 +135,14 @@ export function CustomerOrderEntry({ orderId, draftToResume, onDraftResumed, onD
       <p className="text-xs text-slate-500 dark:text-slate-400">Deposits remain unearned until delivery. Later payments settle unpaid sales first. Payments exceeding the entire order are refundable.</p>
     </>}
     {message && <p role="status" className="rounded-lg bg-blue-50 p-3 text-xs font-semibold text-blue-900 dark:bg-blue-900/30 dark:text-blue-200">{message}</p>}
-    <div className="flex gap-3"><button type="submit" className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-bold text-white">Post {root ? 'update' : 'pre-order'}</button><button type="button" className={button} onClick={saveDraft}>Save as Draft</button></div>
+    <div className="flex gap-3"><button type="submit" className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-bold text-white">{editOriginal ? 'Save Changes' : `Post ${root ? 'update' : 'pre-order'}`}</button></div>
   </form>;
 }
 
 export function CustomerOrderFollowUp({ entry }: { entry: JournalEntry }) {
-  const [open, setOpen] = useState(false);
-  return <div className="mt-3"><button className={button} type="button" onClick={() => setOpen(!open)}>{open ? 'Close order update' : 'Update delivery / collections'}</button>{open && <div className="mt-3"><CustomerOrderEntry orderId={entry.id} /></div>}</div>;
+  const [open, setOpen] = useState<'edit' | 'update' | null>(null);
+  const { finalizeJournalEntry } = useFinance();
+  const finalized = entry.transactionDetails?.reviewFinalized === true;
+  const issues = customerOrderFinalizationIssues(entry);
+  return <div className="mt-3"><div className="flex flex-wrap gap-2">{!finalized && <button className={button} type="button" onClick={() => setOpen(open === 'edit' ? null : 'edit')}>{open === 'edit' ? 'Close editor' : 'Edit posted transaction'}</button>}<button className={button} type="button" onClick={() => setOpen(open === 'update' ? null : 'update')}>{open === 'update' ? 'Close order update' : 'Update delivery / collections'}</button>{!finalized && <button type="button" disabled={issues.length > 0} title={issues.join('. ')} onClick={() => { finalizeJournalEntry(entry.id); setOpen(null); }} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50">Finalize and Post</button>}{finalized && <span className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">Finalized</span>}</div>{issues.length > 0 && !finalized && <p className="mt-2 text-xs font-semibold text-amber-700 dark:text-amber-300">Complete the missing details above before finalizing.</p>}{open && <div className="mt-3"><CustomerOrderEntry orderId={entry.id} editOriginal={open === 'edit'} /></div>}</div>;
 }
