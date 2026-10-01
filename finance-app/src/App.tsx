@@ -18,6 +18,7 @@ import { LandingPage } from './pages/LandingPage';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { AuthProvider } from './context/AuthContext';
 
 function DashboardLayout() {
   const [activePage, setActivePage] = useState<string>('dashboard');
@@ -128,8 +129,10 @@ function AppRoutes(): React.ReactElement {
 
 export default function App(): React.ReactElement {
   return (
-    <FinanceProvider>
-      <AppRoutes />
-    </FinanceProvider>
+    <AuthProvider>
+      <FinanceProvider>
+        <AppRoutes />
+      </FinanceProvider>
+    </AuthProvider>
   );
 }

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Search, Bell, Calendar, Building2, CheckCircle, ChevronDown, LogOut } from "lucide-react";
 import { useNavigate } from 'react-router';
+import { supabase } from '../lib/supabase';
 import { useFinance } from '../context/FinanceContext';
 import { Semester, SEMESTER_OPTIONS, periodForSemester, parseSchoolYear } from '../lib/reportingPeriod';
 import { ThemeToggle } from './ThemeToggle';
@@ -207,9 +208,9 @@ export function Navbar({ onMenuToggle, searchTerm, setSearchTerm }: NavbarProps)
 
         <NavActionButton
           variant="ghost"
-          onClick={() => {
-            localStorage.removeItem('isLoggedIn');
-            navigate("/login");
+          onClick={async () => {
+            await supabase.auth.signOut();
+            navigate('/login');
           }}
           ariaLabel="Logout"
         >

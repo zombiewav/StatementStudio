@@ -26,6 +26,8 @@ import { computeClosingEntryLines, findFiscalCloseBlockers } from '../lib/closin
 import { linkReceiptIdsToEntry } from '../lib/receiptAttachments';
 import { getEffectiveClassificationRules, validateCustomTransactionRule } from '../lib/customTransactionRules';
 import { ActivityFeeFollowUp, ActivityFeeSchedule, buildActivityFeeFollowUp, buildActivityFeeReceivableCollections, buildInitialActivityFeeSchedule, buildScheduledActivityFeeRecognition } from '../lib/activityFees';
+import { useAuth } from './AuthContext';
+import { supabase } from '../lib/supabase';
 
 // The default catch-all project and the account closing entries post their
 // net income plug to — same constants Transactions.tsx and INITIAL_PROJECTS
@@ -639,6 +641,8 @@ const INITIAL_LOGS: AuditLog[] = [
 ];
 
 interface FinanceContextType {
+  workspaceStatus: 'idle' | 'loading' | 'ready' | 'error';
+  workspaceError: string | null;
   accounts: Account[];
   journalEntries: JournalEntry[];
   projects: Project[];
@@ -714,6 +718,9 @@ interface FinanceContextType {
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
 
 export function FinanceProvider({ children }: { children: React.ReactNode }) {
+  const { user, loading: authLoading } = useAuth();
+  const [workspaceStatus, setWorkspaceStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<Account[]>(() => {
     const local = localStorage.getItem('ss_accounts');
     if (!local) return INITIAL_ACCOUNTS;
@@ -867,6 +874,105 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     localStorage.setItem('ss_period_workspaces', JSON.stringify(reportingPeriodWorkspaces));
   }, [reportingPeriodWorkspaces]);
+
+  const workspaceSnapshot = useMemo<BackupPayload>(() => ({
+    schemaVersion: 1,
+    exportedAt: new Date().toISOString(),
+    organizationName: settings.organizationName,
+    accounts,
+    journalEntries,
+    projects,
+    auditLogs,
+    settings,
+    closedFiscalYears,
+    receiptAttachments,
+    customClassificationRules,
+    activityFeeRecords,
+    draftTransactions,
+    financialStatementHistory,
+    reportingPeriodWorkspaces,
+  }), [accounts, journalEntries, projects, auditLogs, settings, closedFiscalYears, receiptAttachments, customClassificationRules, activityFeeRecords, draftTransactions, financialStatementHistory, reportingPeriodWorkspaces]);
+
+  // A Supabase workspace is the durable source of data. Local storage remains
+  // a browser cache and supplies a one-time import for the former local-only app.
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user) {
+      setWorkspaceStatus('idle');
+      setWorkspaceError(null);
+      return;
+    }
+
+    let active = true;
+    setWorkspaceStatus('loading');
+    setWorkspaceError(null);
+
+    const loadWorkspace = async () => {
+      const { data, error } = await supabase
+        .from('user_workspaces')
+        .select('data')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (!active) return;
+      if (error) {
+        setWorkspaceStatus('error');
+        setWorkspaceError(error.message);
+        return;
+      }
+
+      if (data) {
+        const saved = data.data as unknown as BackupPayload;
+        const validation = validateBackupPayload(saved);
+        if (!validation.valid) {
+          setWorkspaceStatus('error');
+          setWorkspaceError('Your saved workspace could not be read safely.');
+          return;
+        }
+        setAccounts(saved.accounts);
+        setJournalEntries(saved.journalEntries);
+        setProjects(saved.projects || []);
+        setAuditLogs(saved.auditLogs || []);
+        setSettings(saved.settings);
+        setClosedFiscalYears(saved.closedFiscalYears || []);
+        setReceiptAttachments(saved.receiptAttachments || []);
+        setCustomClassificationRules(saved.customClassificationRules || []);
+        setActivityFeeRecords(saved.activityFeeRecords || []);
+        setDraftTransactions(saved.draftTransactions || []);
+        setFinancialStatementHistory(saved.financialStatementHistory || []);
+        setReportingPeriodWorkspaces(saved.reportingPeriodWorkspaces || []);
+      } else {
+        const legacyWorkspaceExists = Boolean(localStorage.getItem('orgAccount'));
+        const organizationName = typeof user.user_metadata.organization_name === 'string'
+          ? user.user_metadata.organization_name
+          : workspaceSnapshot.organizationName;
+        const initialWorkspace = legacyWorkspaceExists
+          ? workspaceSnapshot
+          : { ...workspaceSnapshot, organizationName, settings: { ...workspaceSnapshot.settings, organizationName } };
+        if (!legacyWorkspaceExists) setSettings(previous => ({ ...previous, organizationName }));
+        const { error: createError } = await supabase.from('user_workspaces').insert({ user_id: user.id, data: initialWorkspace });
+        if (createError) {
+          setWorkspaceStatus('error');
+          setWorkspaceError(createError.message);
+          return;
+        }
+      }
+      if (active) setWorkspaceStatus('ready');
+    };
+
+    void loadWorkspace();
+    return () => { active = false; };
+  // The signed-in account decides when a remote workspace must be loaded.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, user?.id]);
+
+  useEffect(() => {
+    if (!user || workspaceStatus !== 'ready') return;
+    const saveTimer = window.setTimeout(() => {
+      void supabase.from('user_workspaces').upsert({ user_id: user.id, data: workspaceSnapshot, updated_at: new Date().toISOString() });
+    }, 600);
+    return () => window.clearTimeout(saveTimer);
+  }, [user, workspaceStatus, workspaceSnapshot]);
 
   // Keep the active semester's complete editable books mirrored in the
   // workspace archive. Switching semesters therefore behaves like opening
@@ -1533,6 +1639,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <FinanceContext.Provider value={{
+      workspaceStatus,
+      workspaceError,
       accounts,
       journalEntries,
       projects,
