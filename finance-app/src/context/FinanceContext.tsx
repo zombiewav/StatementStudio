@@ -195,25 +195,25 @@ export const INITIAL_ACCOUNTS: Account[] = [
   { code: '5020', name: 'Rent Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Monthly lease cost for office spaces', isActive: true },
   { code: '5030', name: 'Utilities Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Electricity, water, gas, and internet fees', isActive: true },
   { code: '5040', name: 'Office Supplies', type: 'Expenses', normalBalance: 'Debit', description: 'Stationary, postage, and administrative sundries', isActive: true },
-  { code: '5050', name: 'Travel & Transportation', type: 'Expenses', normalBalance: 'Debit', description: 'Business travel, flights, hotels, and mileage', isActive: true },
+  { code: '5050', name: 'Transportation Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Transportation fares and allowances for events and organization activities', isActive: true },
   // Added to support the Training Expense and Maintenance Expense
   // classification categories used by the rule-based engine below. These are
   // additive entries only — they plug into the existing generic balance,
   // totals, and statement calculations without any logic changes.
   { code: '5060', name: 'Training & Seminar Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Costs for staff training, seminars, workshops, and certifications', isActive: true },
-  { code: '5070', name: 'Repairs & Maintenance Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Costs for repairing and maintaining equipment and facilities', isActive: true },
+  { code: '5070', name: 'Repairs and Maintenance Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Costs for repairing and maintaining equipment and facilities', isActive: true },
   // Added to support the "meal(s)" classification rule below, the concrete
   // example (working paper Sheet2, "Payment for Meals") that demonstrates
   // the purpose question (Question A) — see purposeOptions on that rule.
-  { code: '5080', name: 'Meals & Refreshments', type: 'Expenses', normalBalance: 'Debit', description: 'Food and refreshments for meetings, events, and participants', isActive: true },
+  { code: '5080', name: 'Food and Meals Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Food and meals for meetings, events, participants, speakers, and organizers', isActive: true },
   { code: '5090', name: 'Depreciation Expense - Equipment', type: 'Expenses', normalBalance: 'Debit', description: 'Periodic depreciation charged against Equipment & Tools', isActive: true },
   { code: '5095', name: 'Depreciation Expense - Furniture & Fixtures', type: 'Expenses', normalBalance: 'Debit', description: 'Periodic depreciation charged against Furniture & Fixtures', isActive: true },
   { code: '5100', name: 'Bank Charges', type: 'Expenses', normalBalance: 'Debit', description: 'Bank fees, service charges, and transaction fees', isActive: true },
   { code: '5110', name: 'General Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Miscellaneous operating expenses not covered by another category', isActive: true },
-  { code: '5120', name: 'Awards & Prizes Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Awards, prizes, and incentives given out during events and competitions', isActive: true },
+  { code: '5120', name: 'Award and Prizes Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Awards, prizes, and incentives given out during events and competitions', isActive: true },
   { code: '5130', name: 'Communication Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Phone, mobile load, and other communication costs', isActive: true },
   { code: '5140', name: 'Printing Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Printing, photocopying, and reproduction costs', isActive: true },
-  { code: '5150', name: 'Freight Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Freight, shipping, and delivery costs', isActive: true },
+  { code: '5150', name: 'Delivery Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Freight, shipping, and delivery costs', isActive: true },
   { code: '5160', name: 'Supplies Expense', type: 'Expenses', normalBalance: 'Debit', description: 'General event and operational supplies (distinct from administrative Office Supplies)', isActive: true },
   { code: '5170', name: 'Loss from Spoilage', type: 'Expenses', normalBalance: 'Debit', description: 'Donated food or supplies that expired, spoiled, or became unusable', isActive: true },
   { code: '5180', name: 'Uniform Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Uniforms and organization apparel for members and officers', isActive: true },
@@ -221,8 +221,10 @@ export const INITIAL_ACCOUNTS: Account[] = [
   { code: '5200', name: 'Honoraria Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Honoraria paid to guest speakers and resource persons', isActive: true },
   { code: '5210', name: 'Membership Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Dues and fees the organization itself pays to join another association or federation', isActive: true },
   { code: '5220', name: 'Service Charge', type: 'Expenses', normalBalance: 'Debit', description: 'Third-party service charges (distinct from Bank Charges)', isActive: true },
-  { code: '5230', name: 'Donation Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Donations given out by the organization to other causes or organizations', isActive: true },
+  { code: '5230', name: 'Donations and Contributions Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Donations and contributions given by the organization', isActive: true },
   { code: '5240', name: 'Cost of Sales - Merchandise', type: 'Expenses', normalBalance: 'Debit', description: 'Cost carried in inventory for merchandise that has been sold', isActive: true },
+  { code: '5250', name: 'Promotional and Advertising Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Tarpaulins, banners, brochures, and other promotional materials', isActive: true },
+  { code: '5260', name: 'Recording and Production Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Recording sessions, station IDs, and production fees', isActive: true },
 ];
 
 // Sample Projects — fabricated demo programs and budgets, opt-in only via
@@ -367,7 +369,26 @@ const INITIAL_JOURNALS: JournalEntry[] = [
 // general ones that could otherwise match first (e.g. 'bond paper' before
 // 'paper', 'printer ink' before both 'ink' and 'printer', 'ballpen' before
 // 'pen', 'water bill' before 'water', 'electricity' before 'electric').
-const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
+export const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
+  // Exact dropdown labels from the live expense-transactions working paper.
+  // Keep these ahead of broad keywords so the document's wording always
+  // resolves to its stated expense account.
+  { keyword: 'delivery fees/ shipping fees', debitAccountCode: '5150', creditAccountCode: '1010', description: 'Delivery Fees/ Shipping Fees' },
+  { keyword: 'load for event hosts', debitAccountCode: '5130', creditAccountCode: '1010', description: 'Load for Event Hosts' },
+  { keyword: 'cash prizes given to event participants', debitAccountCode: '5120', creditAccountCode: '1010', description: 'Cash Prizes given to Event Participants', mayDeferPortion: true },
+  { keyword: 'load given as prize to event participants', debitAccountCode: '5120', creditAccountCode: '1010', description: 'Load Given as Prize to Event Participants', mayDeferPortion: true },
+  { keyword: 'printing/bookbinding of accomplishment reports and other documents', debitAccountCode: '5140', creditAccountCode: '1010', description: 'Printing/Bookbinding of Accomplishment Reports and Other Documents', mayDeferPortion: true },
+  { keyword: 'mass offerings/donations', debitAccountCode: '5230', creditAccountCode: '1010', description: 'Mass Offerings/Donations' },
+  { keyword: 'purchase of meals consumed by participants, speakers and organizers', debitAccountCode: '5080', creditAccountCode: '1010', description: 'Purchase of Meals consumed by participants, speakers and organizers', mayDeferPortion: true },
+  { keyword: 'transportation fare', debitAccountCode: '5050', creditAccountCode: '1010', description: 'Transportation Fare' },
+  { keyword: 'transportation allowance to hosts, speaker and guests', debitAccountCode: '5050', creditAccountCode: '1010', description: 'Transportation Allowance to hosts, speaker and guests' },
+  { keyword: 'purchase/printing of tarpaulin, banners, brochures and other promotional materials', debitAccountCode: '5250', creditAccountCode: '1010', description: 'Purchase/Printing of Tarpaulin, banners, brochures and other promotional materials', mayDeferPortion: true },
+  { keyword: 'honorarium/token – speaker, facilitator, or judge', debitAccountCode: '5200', creditAccountCode: '1010', description: 'Honorarium/Token – Speaker, Facilitator, or Judge' },
+  { keyword: 'membership fees paid to national organization', debitAccountCode: '5210', creditAccountCode: '1010', description: 'Membership Fees paid to National Organization' },
+  { keyword: 'recording session/station id fees', debitAccountCode: '5260', creditAccountCode: '1010', description: 'Recording Session/Station ID Fees' },
+  { keyword: 'printer repairs', debitAccountCode: '5070', creditAccountCode: '1010', description: 'Printer Repairs' },
+  { keyword: 'cash in/cash out fees', debitAccountCode: '5100', creditAccountCode: '1010', description: 'Cash In/Cash Out Fees' },
+
   // --- Utilities -----------------------------------------------------------
   { keyword: 'electricity', debitAccountCode: '5030', creditAccountCode: '1010', description: 'Electricity Bill Payment' },
   { keyword: 'electric', debitAccountCode: '5030', creditAccountCode: '1010', description: 'Electricity Utility Bill' },
@@ -447,8 +468,8 @@ const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   // --- Inter-organization loans (working paper row 20) ---------------------------
   // Checked before bare 'loan' below (money the org itself borrows) — this
   // is the opposite direction, money the org lends OUT to another org.
-  { keyword: 'loan to other organization', debitAccountCode: '1350', creditAccountCode: '1010', description: 'Loan Given to Other Organization' },
-  { keyword: 'loans to other organization', debitAccountCode: '1350', creditAccountCode: '1010', description: 'Loans Given to Other Organizations' },
+  { keyword: 'loan to other organization', debitAccountCode: '1350', creditAccountCode: '1010', description: 'Loans to Other Organization' },
+  { keyword: 'loans to other organization', debitAccountCode: '1350', creditAccountCode: '1010', description: 'Loans to Other Organization' },
 
   // --- Cash advance given to an officer (client note sheet, row 19) --------------
   // This is the ORIGINAL "give the advance" transaction — a pure asset
@@ -747,6 +768,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       if (account.code === '4035' && account.name === 'Contributions Revenue - Restricted') return { ...account, name: 'Contributions Revenue - Temporarily Restricted' };
       if (account.code === '1200' && account.name === 'Receivables') return { ...account, name: 'Accounts Receivable', description: 'Amounts earned or billed but not yet collected from customers, sponsors, or partners' };
       if (account.code === '2110' && account.name === 'Deferred Activity Fees') return { ...account, name: 'Unearned Activity Fees', description: 'Activity or event fees collected before the event date' };
+      const workingPaperExpense = INITIAL_ACCOUNTS.find(defaultAccount => defaultAccount.code === account.code && ['5050', '5070', '5080', '5120', '5150', '5230'].includes(account.code));
+      if (workingPaperExpense) return { ...account, name: workingPaperExpense.name, description: workingPaperExpense.description };
       return account;
     });
     const savedCodes = new Set(saved.map(a => a.code));
