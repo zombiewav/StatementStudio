@@ -29,6 +29,7 @@ import { DatedAmountInputRow, DatedAmountRows, hasDuplicateEnteredDates } from '
 import { NewFeatureBadge } from '../components/NewFeatureBadge';
 import { ReviewLaterNote } from '../components/ReviewLaterNote';
 import { PrepaidAssetEntry } from '../components/PrepaidAssetEntry';
+import { PayablesEntry } from '../components/PayablesEntry';
 import { categorizeTransactionRule, TRANSACTION_CATEGORIES, TransactionCategoryId } from '../lib/transactionCategories';
 import { merchandiseSaleCostError } from '../lib/transactionHistory';
 import {
@@ -1198,14 +1199,16 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                     ? ShoppingCart
                     : category.id === 'prepaid-assets'
                       ? Layers
+                    : category.id === 'payables'
+                      ? Scale
                     : category.id === 'advances-to-officers'
                       ? TrendingUp
                       : category.id === 'reimbursements-to-officers'
                         ? ArrowRightLeft
                     : LayoutGrid;
             const selected = selectedCategory === category.id;
-            const isNewCategory = ['activity-fees', 'merchandise', 'membership-fees', 'prepaid-assets', 'advances-to-officers', 'reimbursements-to-officers'].includes(category.id);
-            const optionCount = category.id === 'activity-fees' || category.id === 'prepaid-assets'
+            const isNewCategory = ['activity-fees', 'merchandise', 'membership-fees', 'prepaid-assets', 'payables', 'advances-to-officers', 'reimbursements-to-officers'].includes(category.id);
+            const optionCount = category.id === 'activity-fees' || category.id === 'prepaid-assets' || category.id === 'payables'
               ? null
               : new Set(classificationRules.filter(rule => categorizeTransactionRule(rule) === category.id).map(rule => rule.description)).size;
             return (
@@ -1240,6 +1243,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
 
       {selectedCategory === 'activity-fees' && <ActivityFeeEntry defaultOpen draftToResume={draftToResume} onDraftResumed={onDraftResumed} onDraftSaved={onDraftSaved} />}
       {selectedCategory === 'prepaid-assets' && <PrepaidAssetEntry />}
+      {selectedCategory === 'payables' && <PayablesEntry />}
 
       {selectedCategory === 'merchandise' && <InventorySummaryCard compact />}
       {selectedCategory === 'merchandise' && <div className="flex flex-wrap gap-2">
@@ -1248,7 +1252,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       </div>}
       {selectedCategory === 'merchandise' && customerOrdersOpen && <CustomerOrderEntry draftToResume={draftToResume} onDraftResumed={onDraftResumed} onDraftSaved={onDraftSaved} />}
 
-      {selectedCategory && selectedCategory !== 'activity-fees' && selectedCategory !== 'prepaid-assets' && !(selectedCategory === 'merchandise' && customerOrdersOpen) && (
+      {selectedCategory && selectedCategory !== 'activity-fees' && selectedCategory !== 'prepaid-assets' && selectedCategory !== 'payables' && !(selectedCategory === 'merchandise' && customerOrdersOpen) && (
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
         {/* Left Column: Entry Form */}
         <form onSubmit={handlePost} className="xl:col-span-7 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm p-6 sm:p-8 space-y-5">

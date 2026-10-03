@@ -27,6 +27,7 @@ describe('transaction categories', () => {
   it('labels the catch-all group as Miscellaneous Transactions', () => {
     expect(TRANSACTION_CATEGORIES.find(category => category.id === 'other')?.label).toBe('Miscellaneous Transactions');
     expect(TRANSACTION_CATEGORIES.find(category => category.id === 'prepaid-assets')?.label).toBe('Prepaid Assets');
+    expect(TRANSACTION_CATEGORIES.find(category => category.id === 'payables')?.label).toBe('Payables');
   });
 
   it('gives advances and reimbursements to officers their own transaction categories', () => {
@@ -35,6 +36,11 @@ describe('transaction categories', () => {
     expect(categorizeTransactionRule(rule('1250', '1010', 'Advances to Officers'))).toBe('advances-to-officers');
     expect(categorizeTransactionRule(rule('2050', '1010', 'Reimbursement to Officers'))).toBe('reimbursements-to-officers');
     expect(categorizeTransactionRule(rule('1250', '1010', 'Cash Advance Given to Officer'))).toBe('advances-to-officers');
+  });
+
+  it('removes prior-period payable payments from miscellaneous', () => {
+    expect(categorizeTransactionRule(rule('2010', '1010', 'Payment of Previous-Period/Semester Expense Payables'))).toBe('payables');
+    expect(categorizeTransactionRule(rule('2030', '1010', 'Payment of Previous-Period PPE Payable'))).toBe('payables');
   });
 
   it('keeps other non-membership income under miscellaneous', () => {

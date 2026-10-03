@@ -400,6 +400,23 @@ describe('Prepaid Expenses (1260) as an obligation account', () => {
   });
 });
 
+describe('multi-batch payable netting', () => {
+  it('leaves only the payable balance remaining after later batches in the same journal entry', () => {
+    const entries: JournalEntry[] = [baseEntry({
+      id: 'je-batched',
+      lines: [
+        { accountCode: '5030', debit: 1000, credit: 0, date: '2026-01-01' },
+        { accountCode: '1010', debit: 0, credit: 300, date: '2026-01-01' },
+        { accountCode: '2010', debit: 0, credit: 700, date: '2026-01-01' },
+        { accountCode: '2010', debit: 200, credit: 0, date: '2026-01-02' },
+        { accountCode: '1010', debit: 0, credit: 200, date: '2026-01-02' },
+      ],
+    })];
+    const pending = computePendingObligations(entries, accounts);
+    expect(pending.find(item => item.accountCode === '2010')?.remainingAmount).toBe(500);
+  });
+});
+
 describe('buildPrepaidExpenseSettlementLines', () => {
   it('returns nothing when nothing is used yet', () => {
     expect(buildPrepaidExpenseSettlementLines('5160', 0)).toEqual([]);

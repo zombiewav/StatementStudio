@@ -94,26 +94,29 @@ export function computePendingObligations(entries: JournalEntry[], accounts: Acc
     // Customer order balances are netted across the complete order history below.
     if (entry.transactionDetails?.customerOrder || entry.transactionDetails?.customerOrderId) continue;
 
-    for (const line of entry.lines) {
-      if (!OBLIGATION_ACCOUNT_CODES.includes(line.accountCode as ObligationAccountCode)) continue;
-      const accountCode = line.accountCode as ObligationAccountCode;
+    const obligationCodesInEntry = [...new Set(entry.lines.map(line => line.accountCode)
+      .filter(accountCode => OBLIGATION_ACCOUNT_CODES.includes(accountCode as ObligationAccountCode)))] as ObligationAccountCode[];
+    for (const accountCode of obligationCodesInEntry) {
       const account = accounts.find(a => a.code === accountCode);
       if (!account) continue;
 
       const increaseSide: 'debit' | 'credit' = account.normalBalance === 'Debit' ? 'debit' : 'credit';
-      const createdAmount = increaseSide === 'debit' ? line.debit : line.credit;
+      const createdAmount = entry.lines.filter(line => line.accountCode === accountCode).reduce(
+        (sum, line) => sum + (increaseSide === 'debit' ? line.debit - line.credit : line.credit - line.debit),
+        0,
+      );
       if (createdAmount <= EPSILON) continue;
 
       const settledAmount = entries
         .filter(e => e.settlesEntryId === entry.id)
         .reduce((sum, settlement) => {
-          const settleLine = settlement.lines.find(l => l.accountCode === accountCode);
-          if (!settleLine) return sum;
+          const settleLines = settlement.lines.filter(line => line.accountCode === accountCode);
+          if (!settleLines.length) return sum;
           // Signed so reversing a REVIEW settlement restores the exact
           // amount to the pending list instead of leaving it marked paid.
-          return sum + (increaseSide === 'debit'
-            ? settleLine.credit - settleLine.debit
-            : settleLine.debit - settleLine.credit);
+          return sum + settleLines.reduce((lineSum, line) => lineSum + (increaseSide === 'debit'
+            ? line.credit - line.debit
+            : line.debit - line.credit), 0);
         }, 0);
 
       const remainingAmount = createdAmount - settledAmount;

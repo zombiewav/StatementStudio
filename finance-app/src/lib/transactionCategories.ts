@@ -6,6 +6,7 @@ export type TransactionCategoryId =
   | 'membership-fees'
   | 'purchases'
   | 'prepaid-assets'
+  | 'payables'
   | 'advances-to-officers'
   | 'reimbursements-to-officers'
   | 'other';
@@ -22,6 +23,7 @@ export const TRANSACTION_CATEGORIES: TransactionCategory[] = [
   { id: 'membership-fees', label: 'Membership Fees', description: 'Current and prior-period member collections.' },
   { id: 'purchases', label: 'Purchases', description: 'Supplies, equipment, services, and operating expenses.' },
   { id: 'prepaid-assets', label: 'Prepaid Assets', description: 'Buy assets in advance, record deposits, or recognize consumption.' },
+  { id: 'payables', label: 'Payables', description: 'Pay payable balances carried forward from the previous reporting period.' },
   { id: 'advances-to-officers', label: 'Advances to Officers', description: 'Cash advances released to accountable officers.' },
   { id: 'reimbursements-to-officers', label: 'Reimbursement to Officers', description: 'Payments of amounts currently due to accountable officers.' },
   { id: 'other', label: 'Miscellaneous Transactions', description: 'Other income, sponsorships, loans, and adjustments.' },
@@ -46,6 +48,10 @@ export function categorizeTransactionRule(rule: Pick<ClassificationRule, 'debitA
 
   if (rule.debitAccountCode === '2050') {
     return 'reimbursements-to-officers';
+  }
+
+  if (['2010', '2020', '2030', '2040'].includes(rule.debitAccountCode)) {
+    return 'payables';
   }
 
   const debitCode = Number(rule.debitAccountCode);

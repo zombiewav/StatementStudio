@@ -79,20 +79,26 @@ export function buildOutrightExpensePosting(input: OutrightExpenseInput): Outrig
   const lines: JournalLine[] = [];
   addLine(lines, input.expenseAccountCode, totalAmount, 0, date);
 
-  const postPayments = (records: DatedAmountRecord[], accountCode: string) => records.forEach(record => {
-    if (isInitial(record)) addLine(lines, accountCode, 0, record.amount, record.date);
-    else {
-      addLine(lines, payableAccountCode, record.amount, 0, record.date);
-      addLine(lines, accountCode, 0, record.amount, record.date);
-    }
-  });
-  postPayments(org, input.cashAccountCode || '1010');
-  postPayments(officer, '2050');
-  postPayments(advance, '1250');
+  const sources = [
+    { records: org, accountCode: input.cashAccountCode || '1010' },
+    { records: officer, accountCode: '2050' },
+    { records: advance, accountCode: '1250' },
+  ];
+  sources.forEach(source => source.records.filter(isInitial).forEach(record => addLine(lines, source.accountCode, 0, record.amount, record.date)));
 
   const initialPaid = cents(total(org.filter(isInitial)) + total(officer.filter(isInitial)) + total(advance.filter(isInitial)));
-  const dueToSupplier = cents(totalAmount - initialPaid);
-  addLine(lines, payableAccountCode, 0, dueToSupplier, date);
+  const initialPayable = cents(totalAmount - initialPaid);
+  addLine(lines, payableAccountCode, 0, initialPayable, date);
+
+  const laterDates = [...new Set(sources.flatMap(source => source.records.filter(record => !isInitial(record)).map(record => record.date)))].sort();
+  laterDates.forEach(paymentDate => {
+    const batchTotal = cents(sources.reduce((sum, source) => sum + total(source.records.filter(record => !isInitial(record) && record.date === paymentDate)), 0));
+    addLine(lines, payableAccountCode, batchTotal, 0, paymentDate);
+    sources.forEach(source => source.records.filter(record => !isInitial(record) && record.date === paymentDate)
+      .forEach(record => addLine(lines, source.accountCode, 0, record.amount, paymentDate)));
+  });
+
+  const dueToSupplier = cents(totalAmount - paid);
 
   const debitTotal = cents(lines.reduce((sum, line) => sum + line.debit, 0));
   const creditTotal = cents(lines.reduce((sum, line) => sum + line.credit, 0));

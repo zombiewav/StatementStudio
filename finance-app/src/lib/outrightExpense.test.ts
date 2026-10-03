@@ -21,8 +21,26 @@ describe('buildOutrightExpensePosting', () => {
 
   it('uses a later batch to clear the original payable', () => {
     const posting = buildOutrightExpensePosting({ expenseAccountCode: '5030', totalAmount: 1000, paymentMethod: 'organization-funds', transactionDate: '2026-01-01', organizationPayments: [{ date: '2026-01-02', amount: 1000 }], availableCash: 1000 });
-    expect(posting.dueToSupplier).toBe(1000);
+    expect(posting.dueToSupplier).toBe(0);
     expect(posting.lines).toEqual(expect.arrayContaining([expect.objectContaining({ accountCode: '2010', debit: 1000, date: '2026-01-02' })]));
+  });
+
+  it.each([
+    ['expense', '5030', '2010'],
+    ['PPE', '1500', '2030'],
+    ['furniture and fixtures', '1650', '2040'],
+  ])('uses one related-payable debit for a later combination batch for %s', (_label, accountCode, payableCode) => {
+    const posting = buildOutrightExpensePosting({
+      expenseAccountCode: accountCode, payableAccountCode: payableCode, totalAmount: 1000, paymentMethod: 'combination', transactionDate: '2026-01-01',
+      organizationPayments: [{ date: '2026-01-01', amount: 100 }, { date: '2026-01-02', amount: 150 }],
+      officerPayments: [{ date: '2026-01-01', amount: 100 }, { date: '2026-01-02', amount: 100 }],
+      advancePayments: [{ date: '2026-01-01', amount: 100 }, { date: '2026-01-02', amount: 50 }],
+      availableCash: 250, availableAdvance: 150,
+    });
+    expect(posting.dueToSupplier).toBe(400);
+    expect(posting.lines.filter(line => line.accountCode === payableCode && line.date === '2026-01-02')).toEqual([
+      { accountCode: payableCode, debit: 300, credit: 0, date: '2026-01-02' },
+    ]);
   });
 
   it('records an expense payable next reporting period as expense and Accounts Payable', () => {

@@ -73,6 +73,9 @@ export interface TransactionDetails {
   prepaidAssetDownpaymentAmount?: number;
   prepaidAssetPayableAmount?: number;
   prepaidAssetPurpose?: 'event' | 'general';
+  priorPeriodPayableAccountCode?: string;
+  priorPeriodPayablePaymentAmount?: number;
+  priorPeriodPayablePaymentMethod?: 'organization-funds' | 'officer-personal' | 'officer-advance' | 'combination';
   inventoryCost?: number;
   merchandiseItem?: string;
   merchandiseBatch?: string;
