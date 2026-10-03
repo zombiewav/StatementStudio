@@ -26,12 +26,18 @@ describe('transaction categories', () => {
 
   it('labels the catch-all group as Miscellaneous Transactions', () => {
     expect(TRANSACTION_CATEGORIES.find(category => category.id === 'other')?.label).toBe('Miscellaneous Transactions');
+    expect(TRANSACTION_CATEGORIES.find(category => category.id === 'prepaid-assets')?.label).toBe('Prepaid Assets');
   });
 
-  it('groups the non-membership entries from the client note under miscellaneous', () => {
-    expect(categorizeTransactionRule(rule('1250', '1010', 'Advances to Officers'))).toBe('other');
-    expect(categorizeTransactionRule(rule('2050', '1010', 'Reimbursement to Officers'))).toBe('other');
-    expect(categorizeTransactionRule(rule('1250', '1010', 'Cash Advance Given to Officer'))).toBe('other');
+  it('gives advances and reimbursements to officers their own transaction categories', () => {
+    expect(TRANSACTION_CATEGORIES.find(category => category.id === 'advances-to-officers')?.label).toBe('Advances to Officers');
+    expect(TRANSACTION_CATEGORIES.find(category => category.id === 'reimbursements-to-officers')?.label).toBe('Reimbursement to Officers');
+    expect(categorizeTransactionRule(rule('1250', '1010', 'Advances to Officers'))).toBe('advances-to-officers');
+    expect(categorizeTransactionRule(rule('2050', '1010', 'Reimbursement to Officers'))).toBe('reimbursements-to-officers');
+    expect(categorizeTransactionRule(rule('1250', '1010', 'Cash Advance Given to Officer'))).toBe('advances-to-officers');
+  });
+
+  it('keeps other non-membership income under miscellaneous', () => {
     expect(categorizeTransactionRule(rule('1010', '4050', 'Advertising Revenue'))).toBe('other');
     expect(categorizeTransactionRule(rule('1010', '4050', 'Income from Cash Prizes Received'))).toBe('other');
     expect(categorizeTransactionRule(rule('1010', '4060', 'Interest Earned from Bank Savings'))).toBe('other');

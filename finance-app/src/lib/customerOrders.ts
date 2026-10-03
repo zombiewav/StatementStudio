@@ -5,7 +5,11 @@ export const CUSTOMER_ADVANCES = '2140';
 export const CUSTOMER_REFUNDS = '2150';
 const money = (n: number) => Math.round(n * 100) / 100;
 const active = (e: JournalEntry) => !e.reversalOfEntryId && !e.reversedByEntryId;
-export const sameMerchandise = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+const canonicalMerchandise = (value: string): string => {
+  const normalized = value.trim().toLowerCase();
+  return normalized === 'mugs' ? 'mug' : normalized;
+};
+export const sameMerchandise = (a: string, b: string) => canonicalMerchandise(a) === canonicalMerchandise(b);
 
 export function customerOrderFinalizationIssues(entry: JournalEntry): string[] {
   const details = entry.transactionDetails;

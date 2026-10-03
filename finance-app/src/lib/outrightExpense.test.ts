@@ -36,6 +36,19 @@ describe('buildOutrightExpensePosting', () => {
     ]);
   });
 
+  it('routes an unpaid PPE purchase to its dedicated payable account', () => {
+    const posting = buildOutrightExpensePosting({
+      expenseAccountCode: '1500', totalAmount: 2500, paymentMethod: 'organization-funds',
+      organizationPayments: [{ date: '', amount: 1000 }], availableCash: 1000,
+      payableAccountCode: '2030',
+    });
+    expect(posting.lines).toEqual([
+      { accountCode: '1500', debit: 2500, credit: 0 },
+      { accountCode: '1010', debit: 0, credit: 1000 },
+      { accountCode: '2030', debit: 0, credit: 1500 },
+    ]);
+  });
+
   it('rejects advance use over the recorded balance', () => {
     expect(() => buildOutrightExpensePosting({ expenseAccountCode: '5030', totalAmount: 100, paymentMethod: 'officer-advance', advancePayments: [{ date: '2026-01-01', amount: 101 }], availableAdvance: 100 })).toThrow('cannot exceed');
   });

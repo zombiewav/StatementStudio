@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { JournalEntry, JournalLine } from '../types';
-import { buildCustomerOrderPosting as build, buildProvisionalCustomerOrderPosting, carryForwardCustomerOrders, customerOrderFinalizationIssues, customerOrderReversalBlock, customerOrderState } from './customerOrders';
+import { buildCustomerOrderPosting as build, buildProvisionalCustomerOrderPosting, carryForwardCustomerOrders, customerOrderFinalizationIssues, customerOrderReversalBlock, customerOrderState, sameMerchandise } from './customerOrders';
 import { buildMerchandiseBatchBalances } from './merchandiseSale';
 import { computeTransactionReviewStates } from './reviewEngine';
 
@@ -18,6 +18,10 @@ const followup = (lines: JournalLine[], id = 'delivery', details = {}): JournalE
 const net = (lines: JournalLine[], code: string) => lines.filter(l => l.accountCode === code).reduce((sum, l) => sum + l.debit - l.credit, 0);
 
 describe('customer pre-orders and deliveries', () => {
+  it('matches the workbook Mug label with legacy Mugs inventory', () => {
+    expect(sameMerchandise('Mug', 'Mugs')).toBe(true);
+    expect(sameMerchandise('Stickers', 'Stickers')).toBe(true);
+  });
   it('posts known cash provisionally while listing unavailable source details', () => {
     expect(buildProvisionalCustomerOrderPosting(date, [{ date, amount: 250 }])).toEqual([
       { accountCode: '1010', debit: 250, credit: 0, date },

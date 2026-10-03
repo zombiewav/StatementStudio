@@ -118,6 +118,11 @@ export const INITIAL_ACCOUNTS: Account[] = [
   // reclassifies it into the real expense account once it's actually used.
   { code: '1260', name: 'Prepaid Expenses', type: 'Assets', normalBalance: 'Debit', description: 'Cash paid for goods/services not yet used, consumed, or benefited from this period', isActive: true },
   { code: '1270', name: 'Advances to Suppliers - Prepayments', type: 'Assets', normalBalance: 'Debit', description: 'Downpayments for pre-ordered merchandise before the goods are received', isActive: true },
+  { code: '1280', name: 'Awards and Prizes', type: 'Assets', normalBalance: 'Debit', description: 'Awards and prizes purchased in advance and still unused or undistributed', isActive: true },
+  { code: '1285', name: 'Supplies and Materials', type: 'Assets', normalBalance: 'Debit', description: 'Event and operating supplies purchased in advance and still unused', isActive: true },
+  { code: '1290', name: 'Prepaid Wifi', type: 'Assets', normalBalance: 'Debit', description: 'Wifi or mobile-load service purchased before it is consumed', isActive: true },
+  { code: '1295', name: 'Prepaid Rent', type: 'Assets', normalBalance: 'Debit', description: 'Rental rights paid for before the related event or rental period', isActive: true },
+  { code: '1298', name: 'Clothing/Uniform', type: 'Assets', normalBalance: 'Debit', description: 'Uniforms and clothing purchased in advance and not yet issued or consumed', isActive: true },
   { code: '1500', name: 'Equipment & Tools', type: 'Assets', normalBalance: 'Debit', description: 'Laptops, computers, hardware, tools, and other equipment used by the organization', isActive: true },
   // Contra-assets: Credit-normal despite being Assets-type accounts, so they
   // reduce Total Assets instead of adding to it (see isContraAccount in
@@ -143,15 +148,20 @@ export const INITIAL_ACCOUNTS: Account[] = [
   { code: '1300', name: 'Membership Dues Receivable', type: 'Assets', normalBalance: 'Debit', description: 'Membership dues billed to members but not yet collected', isActive: true },
   { code: '1310', name: 'Activity Fees Receivable', type: 'Assets', normalBalance: 'Debit', description: 'Activity or event fees earned but not yet collected from participants', isActive: true },
   { code: '1320', name: 'Due from Officers', type: 'Assets', normalBalance: 'Debit', description: 'Organization collections still held by an accountable officer and not yet remitted', isActive: true },
-  { code: '1350', name: 'Due from Other Organization', type: 'Assets', normalBalance: 'Debit', description: 'Amounts owed to the organization by another organization or affiliate', isActive: true },
+  { code: '1330', name: 'Receivable from Custodian', type: 'Assets', normalBalance: 'Debit', description: 'Amounts entrusted to or recoverable from an organization custodian', isActive: true },
+  { code: '1340', name: 'Deposit for Rent', type: 'Assets', normalBalance: 'Debit', description: 'Downpayments made for prepaid rental arrangements before purchase recognition', isActive: true },
+  { code: '1345', name: 'Deposit for Uniform/Clothing', type: 'Assets', normalBalance: 'Debit', description: 'Downpayments made for uniforms or clothing before purchase recognition', isActive: true },
+  { code: '1350', name: 'Loans to Other Organization', type: 'Assets', normalBalance: 'Debit', description: 'Running balance of loans receivable from other organizations', isActive: true },
 
   // Liabilities (Normal: Credit)
   // Renamed from the generic "Accounts Payable" to match the working
   // paper's own exact term — it distinguishes this (amounts owed directly
   // to a supplier/vendor) from Due to Officers (owed to a person) in the
   // REVIEW settlement mechanism, which asks a different question for each.
-  { code: '2010', name: 'Due to Supplier', type: 'Liabilities', normalBalance: 'Credit', description: 'Outstanding unpaid bills owed directly to a supplier or vendor', isActive: true },
+  { code: '2010', name: 'Account Payable-Expense', type: 'Liabilities', normalBalance: 'Credit', description: 'Outstanding expense payables tracked separately for each supplier or payee', isActive: true },
   { code: '2020', name: 'Merchandise Payable', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid cost of merchandise acquired for resale', isActive: true },
+  { code: '2030', name: 'Accounts Payable-PPE', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid purchases of property, plant, and equipment', isActive: true },
+  { code: '2040', name: 'Accounts Payable-Furniture & Fixture', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid purchases of furniture and fixtures', isActive: true },
   { code: '2050', name: 'Due to Officers', type: 'Liabilities', normalBalance: 'Credit', description: 'Amounts owed to officers who paid organization expenses out of their own money, pending reimbursement', isActive: true },
   { code: '2110', name: 'Unearned Activity Fees', type: 'Liabilities', normalBalance: 'Credit', description: 'Activity or event fees collected before the event date', isActive: true },
   { code: '2120', name: 'Refund Liability - Activity Fees', type: 'Liabilities', normalBalance: 'Credit', description: 'Activity fee collections received in excess of the required amount and still refundable', isActive: true },
@@ -189,6 +199,8 @@ export const INITIAL_ACCOUNTS: Account[] = [
   { code: '4070', name: 'Merchandise Sales', type: 'Revenue', normalBalance: 'Credit', description: 'Revenue from selling organization merchandise or apparel', isActive: true },
   { code: '4080', name: 'Ticket Sales', type: 'Revenue', normalBalance: 'Credit', description: 'Revenue from ticket sales to events', isActive: true },
   { code: '4090', name: 'Activity Fees Revenue', type: 'Revenue', normalBalance: 'Credit', description: 'Activity or event fees recognized when the event occurs or when cancelled fees are non-refundable', isActive: true },
+  { code: '4100', name: 'Donations', type: 'Revenue', normalBalance: 'Credit', description: 'Cash donations received without an outstanding donor restriction', isActive: true },
+  { code: '4110', name: 'Sponsorships', type: 'Revenue', normalBalance: 'Credit', description: 'Cash sponsorships received without an outstanding donor restriction', isActive: true },
 
   // Expenses (Normal: Debit)
   { code: '5010', name: 'Salaries & Wages', type: 'Expenses', normalBalance: 'Debit', description: 'Staff payroll, social security, and benefits', isActive: true },
@@ -458,6 +470,7 @@ export const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   { keyword: 'hardware', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Computer Hardware' },
   { keyword: 'server', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Hosting Server Equipment' },
   { keyword: 'furniture', debitAccountCode: '1650', creditAccountCode: '1010', description: 'Furniture & Fixtures Purchase' },
+  { keyword: 'receivable from custodian', debitAccountCode: '1330', creditAccountCode: '1010', description: 'Receivable from Custodian' },
 
   // --- Inventory (goods for resale) ---------------------------------------------
   { keyword: 'acquisition of merchandise', debitAccountCode: '1700', creditAccountCode: '1010', description: 'Acquisition of Merchandise for Sale' },
@@ -470,6 +483,8 @@ export const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   // is the opposite direction, money the org lends OUT to another org.
   { keyword: 'loan to other organization', debitAccountCode: '1350', creditAccountCode: '1010', description: 'Loans to Other Organization' },
   { keyword: 'loans to other organization', debitAccountCode: '1350', creditAccountCode: '1010', description: 'Loans to Other Organization' },
+  { keyword: 'collection of loan receivable from other organizations', debitAccountCode: '1010', creditAccountCode: '1350', description: 'Collection of Loan Receivable from Other Organizations' },
+  { keyword: 'payment of previous-period expense payables', debitAccountCode: '2010', creditAccountCode: '1010', description: 'Payment of Previous-Period/Semester Expense Payables' },
 
   // --- Cash advance given to an officer (client note sheet, row 19) --------------
   // This is the ORIGINAL "give the advance" transaction — a pure asset
@@ -479,8 +494,7 @@ export const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   { keyword: 'advances to officers', debitAccountCode: '1250', creditAccountCode: '1010', description: 'Advances to Officers' },
   { keyword: 'cash advances given to organization officers', debitAccountCode: '1250', creditAccountCode: '1010', description: 'Cash Advances Given to Organization Officers' },
   { keyword: 'cash advance given to', debitAccountCode: '1250', creditAccountCode: '1010', description: 'Cash Advance Given to Officer' },
-  // Settlement of an already-recorded Due to Officers balance. Kept beside
-  // Advances to Officers because both belong to Miscellaneous Transactions.
+  // Settlement of an already-recorded Due to Officers balance.
   { keyword: 'reimbursement to officers', debitAccountCode: '2050', creditAccountCode: '1010', description: 'Reimbursement to Officers' },
   { keyword: 'reimbursement to officer', debitAccountCode: '2050', creditAccountCode: '1010', description: 'Reimbursement to Officer' },
 
@@ -630,8 +644,9 @@ export const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   { keyword: 'grant', debitAccountCode: '1010', creditAccountCode: '4020', description: 'Public Funding Grant Receipt' },
   { keyword: 'sponsorship donated food', debitAccountCode: '1710', creditAccountCode: '4030', description: 'Sponsorship - Donated Food', sponsorshipKind: 'food' },
   { keyword: 'sponsorship donated supplies', debitAccountCode: '1720', creditAccountCode: '4030', description: 'Sponsorship - Donated Supplies', sponsorshipKind: 'supplies' },
-  { keyword: 'donation', debitAccountCode: '1010', creditAccountCode: '4030', description: 'Charitable Donation Received', sponsorshipKind: 'cash' },
-  { keyword: 'sponsor', debitAccountCode: '1010', creditAccountCode: '4030', description: 'Sponsorship - Cash Contribution', sponsorshipKind: 'cash' },
+  { keyword: 'sponsorships and donations', debitAccountCode: '1010', creditAccountCode: '4100', description: 'Sponsorships and Donations', sponsorshipKind: 'cash' },
+  { keyword: 'donation', debitAccountCode: '1010', creditAccountCode: '4100', description: 'Sponsorships and Donations', sponsorshipKind: 'cash' },
+  { keyword: 'sponsor', debitAccountCode: '1010', creditAccountCode: '4100', description: 'Sponsorships and Donations', sponsorshipKind: 'cash' },
   // Inter-org loans (above, in the Inventory section) are checked first —
   // this bare 'loan' is money the org itself borrows, the opposite
   // direction.
@@ -768,7 +783,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       if (account.code === '4035' && account.name === 'Contributions Revenue - Restricted') return { ...account, name: 'Contributions Revenue - Temporarily Restricted' };
       if (account.code === '1200' && account.name === 'Receivables') return { ...account, name: 'Accounts Receivable', description: 'Amounts earned or billed but not yet collected from customers, sponsors, or partners' };
       if (account.code === '2110' && account.name === 'Deferred Activity Fees') return { ...account, name: 'Unearned Activity Fees', description: 'Activity or event fees collected before the event date' };
-      const workingPaperExpense = INITIAL_ACCOUNTS.find(defaultAccount => defaultAccount.code === account.code && ['5050', '5070', '5080', '5120', '5150', '5230'].includes(account.code));
+      const workingPaperExpense = INITIAL_ACCOUNTS.find(defaultAccount => defaultAccount.code === account.code && ['1350', '2010', '5050', '5070', '5080', '5120', '5150', '5230'].includes(account.code));
       if (workingPaperExpense) return { ...account, name: workingPaperExpense.name, description: workingPaperExpense.description };
       return account;
     });
@@ -965,7 +980,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
           setWorkspaceError('Your saved workspace could not be read safely.');
           return;
         }
-        setAccounts([...saved.accounts, ...INITIAL_ACCOUNTS.filter(a => ['2140', '2150'].includes(a.code) && !saved.accounts.some(existing => existing.code === a.code))]);
+        setAccounts([...saved.accounts, ...INITIAL_ACCOUNTS.filter(a => ['1280', '1285', '1290', '1295', '1298', '1330', '1340', '1345', '2030', '2040', '2140', '2150', '4100', '4110'].includes(a.code) && !saved.accounts.some(existing => existing.code === a.code))]);
         setJournalEntries(saved.journalEntries);
         setProjects(saved.projects || []);
         setAuditLogs(saved.auditLogs || []);
@@ -1684,7 +1699,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       user: settings.organizationName,
     };
 
-    setAccounts([...payload.accounts, ...INITIAL_ACCOUNTS.filter(a => ['2140', '2150'].includes(a.code) && !payload.accounts.some(existing => existing.code === a.code))]);
+    setAccounts([...payload.accounts, ...INITIAL_ACCOUNTS.filter(a => ['1280', '1285', '1290', '1295', '1298', '1330', '1340', '1345', '2030', '2040', '2140', '2150', '4100', '4110'].includes(a.code) && !payload.accounts.some(existing => existing.code === a.code))]);
     setJournalEntries(payload.journalEntries);
     setProjects(Array.isArray(payload.projects) ? payload.projects : []);
     setAuditLogs([restoreLogEntry, ...restoredLogs].slice(0, 100));

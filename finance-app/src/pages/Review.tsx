@@ -21,6 +21,7 @@ import {
   DONATED_EVENT_SUPPLIES_CODE,
   ReviewStatus,
 } from '../lib/reviewEngine';
+import { PREPAID_ASSET_ACCOUNT_CODES } from '../lib/prepaidAssets';
 
 const ADVANCE_STATUS_OPTIONS: { value: AdvanceSettlementStatus; label: string; needsAmount: boolean }[] = [
   { value: 'used-paid-wholly', label: 'Used, and fully covered by the advance', needsAmount: false },
@@ -58,7 +59,7 @@ function ObligationRow({
   // Defaults the expense account to whatever the original entry already
   // used (if any) — the same category almost always applies once more.
   const originalEntry = journalEntries.find(je => je.id === obligation.entryId);
-  const defaultExpenseAccountCode = originalEntry?.lines.find(
+  const defaultExpenseAccountCode = originalEntry?.transactionDetails?.prepaidAssetExpenseAccountCode || originalEntry?.lines.find(
     l => l.debit > 0 && accounts.find(a => a.code === l.accountCode)?.type === 'Expenses'
   )?.accountCode || '';
   const [prepaidAmount, setPrepaidAmount] = useState('');
@@ -72,7 +73,7 @@ function ObligationRow({
 
   const expenseAccounts = accounts.filter(a => a.type === 'Expenses' && a.isActive);
   const isAdvance = obligation.accountCode === '1250';
-  const isPrepaid = obligation.accountCode === PREPAID_EXPENSE_CODE;
+  const isPrepaid = obligation.accountCode === PREPAID_EXPENSE_CODE || PREPAID_ASSET_ACCOUNT_CODES.includes(obligation.accountCode);
   const isDonatedFood = obligation.accountCode === DONATED_FOOD_SUPPLIES_CODE;
   const isDonatedInventory = isDonatedFood || obligation.accountCode === DONATED_EVENT_SUPPLIES_CODE;
   const donatedUsageExpenseAccountCode = isDonatedFood ? '5080' : '5160';
@@ -120,7 +121,7 @@ function ObligationRow({
       return;
     }
     setRowMessage('');
-    const lines = buildPrepaidExpenseSettlementLines(prepaidExpenseAccountCode, amount);
+    const lines = buildPrepaidExpenseSettlementLines(prepaidExpenseAccountCode, amount, obligation.accountCode);
     let postedEntry: JournalEntry | undefined;
     if (lines.length > 0) {
       postedEntry = addJournalEntry(

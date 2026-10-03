@@ -63,6 +63,16 @@ export interface TransactionDetails {
   membershipCollections?: DatedAmountRecord[];
   deferredAmount?: number;
   expectedUsePeriod?: 'within' | 'next';
+  prepaidAssetCategory?: 'awards' | 'supplies' | 'wifi' | 'rent' | 'uniform';
+  prepaidAssetItem?: string;
+  prepaidAssetQuantity?: number;
+  prepaidAssetPurchasePrice?: number;
+  prepaidAssetPaymentMethod?: 'organization-funds' | 'officer-personal' | 'officer-advance' | 'combination' | 'not-yet-paid';
+  prepaidAssetExpenseAccountCode?: string;
+  prepaidAssetDownpaymentEntryId?: string;
+  prepaidAssetDownpaymentAmount?: number;
+  prepaidAssetPayableAmount?: number;
+  prepaidAssetPurpose?: 'event' | 'general';
   inventoryCost?: number;
   merchandiseItem?: string;
   merchandiseBatch?: string;

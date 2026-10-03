@@ -3,6 +3,7 @@ import { Search, ListFilter, ArrowLeftRight } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import { reportingPeriodBounds } from '../lib/reportingPeriod';
 import { AccountHistoryLine, buildAccountPeriodHistory, buildAccountTransactionHistory } from '../lib/transactionHistory';
+import { counterpartyBalances } from '../lib/counterpartyBalances';
 
 export function GeneralLedger(): React.ReactElement {
   const { accounts, journalEntries, accountBalances, openingBalances, formatCurrency, settings } = useFinance();
@@ -42,6 +43,17 @@ export function GeneralLedger(): React.ReactElement {
       return matchesSearch && matchesType;
     });
   }, [accounts, searchTerm, selectedType]);
+  const expensePayableLedgers = useMemo(() => {
+    const account = accounts.find(candidate => candidate.code === '2010');
+    if (!account) return [];
+    return counterpartyBalances(journalEntries, '2010', 'Credit').map(summary => {
+      const entries = journalEntries.filter(entry => entry.transactionDetails?.counterpartyName?.trim().toLocaleLowerCase() === summary.name.toLocaleLowerCase());
+      const history = reportingBounds
+        ? buildAccountPeriodHistory(account, entries, reportingBounds.startDate, reportingBounds.endDate)
+        : { beginningBalance: 0, lines: buildAccountTransactionHistory(account, entries) };
+      return { ...summary, ...history };
+    });
+  }, [accounts, journalEntries, reportingBounds?.startDate, reportingBounds?.endDate]);
 
   return (
     <div className="space-y-6 bg-slate-50 dark:bg-slate-950">
@@ -94,6 +106,16 @@ export function GeneralLedger(): React.ReactElement {
           const currentBal = reportingBounds
             ? lines[lines.length - 1]?.runningBalance ?? accountHistory.beginningBalance
             : accountBalances[acc.code] || 0;
+
+          if (acc.code === '2010' && expensePayableLedgers.length > 0) return (
+            <section key={acc.code} className="space-y-4">
+              <div><h3 className="text-sm font-black text-slate-900 dark:text-slate-100">2010 Account Payable-Expense</h3><p className="mt-1 text-[10px] font-medium text-slate-500">A separate running ledger is shown for every supplier or payee.</p></div>
+              {expensePayableLedgers.map(ledger => <div key={ledger.name.toLocaleLowerCase()} className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <div className="flex items-center justify-between border-b bg-slate-50/50 px-6 py-4 dark:border-slate-800 dark:bg-slate-800/30"><div><p className="text-[9px] font-bold uppercase text-slate-500">Supplier / Payee Ledger</p><h4 className="text-sm font-black">{ledger.name}</h4></div><div className="text-right"><p className="text-[9px] font-bold uppercase text-slate-500">Outstanding Balance</p><p className="text-sm font-black text-blue-900 dark:text-blue-200">{formatCurrency(ledger.lines[ledger.lines.length - 1]?.runningBalance ?? ledger.beginningBalance)}</p></div></div>
+                <div className="overflow-x-auto"><table className="w-full min-w-[620px] text-left text-xs"><thead><tr className="border-b text-[9px] uppercase text-slate-500"><th className="px-5 py-2">Date</th><th className="px-4 py-2">Reference</th><th className="px-4 py-2">Description</th><th className="px-4 py-2 text-right">Debit</th><th className="px-4 py-2 text-right">Credit</th><th className="px-5 py-2 text-right">Balance</th></tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-800">{reportingBounds && <tr className="bg-indigo-50/60 dark:bg-indigo-500/10"><td className="px-5 py-2">{new Date(`${reportingBounds.startDate}T00:00:00`).toLocaleDateString()}</td><td className="px-4 py-2 font-bold">B/F</td><td className="px-4 py-2">Beginning Balance</td><td></td><td></td><td className="px-5 py-2 text-right font-black">{formatCurrency(ledger.beginningBalance)}</td></tr>}{ledger.lines.map(line => <tr key={`${line.entryId}-${line.date}-${line.debit}-${line.credit}`}><td className="px-5 py-2">{line.date ? new Date(`${line.date}T00:00:00`).toLocaleDateString() : 'No date'}</td><td className="px-4 py-2 font-bold text-blue-800 dark:text-blue-200">{line.reference}</td><td className="px-4 py-2">{line.description}</td><td className="px-4 py-2 text-right">{line.debit ? formatCurrency(line.debit) : ''}</td><td className="px-4 py-2 text-right">{line.credit ? formatCurrency(line.credit) : ''}</td><td className="px-5 py-2 text-right font-black">{formatCurrency(line.runningBalance)}</td></tr>)}</tbody></table></div>
+              </div>)}
+            </section>
+          );
 
           return (
             <div key={acc.code} className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden hover:shadow-md transition-shadow">

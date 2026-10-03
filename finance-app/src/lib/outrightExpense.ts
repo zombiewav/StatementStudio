@@ -13,6 +13,7 @@ export interface OutrightExpenseInput {
   availableAdvance?: number;
   availableCash?: number;
   cashAccountCode?: string;
+  payableAccountCode?: string;
 }
 
 export interface OutrightExpensePosting {
@@ -73,6 +74,7 @@ export function buildOutrightExpensePosting(input: OutrightExpenseInput): Outrig
   if (orgTotal > availableCash) throw new Error('Organization cash payments cannot exceed the available cash balance.');
 
   const date = input.transactionDate || '';
+  const payableAccountCode = input.payableAccountCode || '2010';
   const isInitial = (record: DatedAmountRecord) => !date || !record.date || record.date === date;
   const lines: JournalLine[] = [];
   addLine(lines, input.expenseAccountCode, totalAmount, 0, date);
@@ -80,7 +82,7 @@ export function buildOutrightExpensePosting(input: OutrightExpenseInput): Outrig
   const postPayments = (records: DatedAmountRecord[], accountCode: string) => records.forEach(record => {
     if (isInitial(record)) addLine(lines, accountCode, 0, record.amount, record.date);
     else {
-      addLine(lines, '2010', record.amount, 0, record.date);
+      addLine(lines, payableAccountCode, record.amount, 0, record.date);
       addLine(lines, accountCode, 0, record.amount, record.date);
     }
   });
@@ -90,7 +92,7 @@ export function buildOutrightExpensePosting(input: OutrightExpenseInput): Outrig
 
   const initialPaid = cents(total(org.filter(isInitial)) + total(officer.filter(isInitial)) + total(advance.filter(isInitial)));
   const dueToSupplier = cents(totalAmount - initialPaid);
-  addLine(lines, '2010', 0, dueToSupplier, date);
+  addLine(lines, payableAccountCode, 0, dueToSupplier, date);
 
   const debitTotal = cents(lines.reduce((sum, line) => sum + line.debit, 0));
   const creditTotal = cents(lines.reduce((sum, line) => sum + line.credit, 0));

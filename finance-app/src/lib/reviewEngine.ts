@@ -9,6 +9,7 @@
 // out, independently testable.
 import { Account, JournalEntry, JournalLine } from '../types';
 import { customerOrderFinalizationIssues, customerOrderState } from './customerOrders';
+import { PREPAID_ASSET_ACCOUNT_CODES } from './prepaidAssets';
 
 // The accounts a transaction can leave open, each answering a different
 // REVIEW question ("did you reimburse them yet?", "have you paid the
@@ -18,7 +19,7 @@ export const DONATED_FOOD_SUPPLIES_CODE = '1710';
 export const DONATED_EVENT_SUPPLIES_CODE = '1720';
 export const LOSS_FROM_SPOILAGE_CODE = '5170';
 export const DONATED_INVENTORY_ACCOUNT_CODES = [DONATED_FOOD_SUPPLIES_CODE, DONATED_EVENT_SUPPLIES_CODE] as const;
-export const OBLIGATION_ACCOUNT_CODES = ['2050', '2010', '2020', '1200', '1320', '1250', '1260', ...DONATED_INVENTORY_ACCOUNT_CODES] as const;
+export const OBLIGATION_ACCOUNT_CODES = ['2050', '2010', '2020', '2030', '2040', '1200', '1320', '1250', '1260', ...PREPAID_ASSET_ACCOUNT_CODES, ...DONATED_INVENTORY_ACCOUNT_CODES] as const;
 export type ObligationAccountCode = typeof OBLIGATION_ACCOUNT_CODES[number];
 
 // Prepaid Expenses: the general "not yet used" holding account any
@@ -162,7 +163,7 @@ export function computeTransactionReviewStates(entries: JournalEntry[], accounts
       }
 
       const missing = (pendingByEntry.get(entry.id) || []).map(item => {
-        if (item.accountCode === PREPAID_EXPENSE_CODE) return `${obligationAccountLabel(item.accountCode, accounts)} still unused: ${item.remainingAmount}`;
+        if (item.accountCode === PREPAID_EXPENSE_CODE || PREPAID_ASSET_ACCOUNT_CODES.includes(item.accountCode)) return `${obligationAccountLabel(item.accountCode, accounts)} still unused: ${item.remainingAmount}`;
         if (DONATED_INVENTORY_ACCOUNT_CODES.includes(item.accountCode as typeof DONATED_INVENTORY_ACCOUNT_CODES[number])) {
           return `${obligationAccountLabel(item.accountCode, accounts)} still unused or unresolved: ${item.remainingAmount}`;
         }
@@ -365,12 +366,13 @@ export function buildAdvanceSettlementLines(
  */
 export function buildPrepaidExpenseSettlementLines(
   expenseAccountCode: string,
-  amount: number
+  amount: number,
+  prepaidAccountCode = PREPAID_EXPENSE_CODE
 ): JournalLine[] {
   if (amount <= 0) return [];
   return [
     { accountCode: expenseAccountCode, debit: amount, credit: 0 },
-    { accountCode: PREPAID_EXPENSE_CODE, debit: 0, credit: amount },
+    { accountCode: prepaidAccountCode, debit: 0, credit: amount },
   ];
 }
 

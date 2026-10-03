@@ -4,7 +4,7 @@ import { JournalEntry, TransactionDraft } from '../types';
 import { buildCustomerOrderPosting, buildProvisionalCustomerOrderPosting, customerOrderFinalizationIssues, customerOrderState, sameMerchandise } from '../lib/customerOrders';
 import { buildMerchandiseBatchBalances } from '../lib/merchandiseSale';
 import { isDateWithinReportingPeriod } from '../lib/reportingPeriod';
-import { DatedAmountInputRow, DatedAmountRows } from './DatedAmountRows';
+import { DatedAmountInputRow, DatedAmountRows, hasDuplicateEnteredDates } from './DatedAmountRows';
 
 export const CUSTOMER_ORDER_DRAFT = 'customer-order';
 const field = 'mt-1 w-full rounded-lg border border-slate-300 bg-white p-2.5 text-xs text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100';
@@ -12,10 +12,10 @@ const button = 'rounded-lg border border-blue-300 px-3 py-2 text-xs font-bold te
 const empty = () => ({ mode: 'new', orderId: '', item: 'Lanyard', other: '', batch: '', kind: 'merchandise', total: '', estimatedCost: '', date: '', sales: '', cost: '', quantity: '', batchEntryId: '', refund: '', collections: [{ id: 'cash-1', date: '', amount: '' }] as DatedAmountInputRow[] });
 type Form = ReturnType<typeof empty>;
 
-export function CustomerOrderEntry({ orderId, editOriginal = false, draftToResume, onDraftResumed }: {
+export function CustomerOrderEntry({ orderId, editOriginal = false, draftToResume, onDraftResumed, onDraftSaved }: {
   orderId?: string; editOriginal?: boolean; draftToResume?: TransactionDraft | null; onDraftResumed?: () => void; onDraftSaved?: () => void;
 }) {
-  const { journalEntries, accounts, settings, formatCurrency, addJournalEntry, updateJournalEntry, deleteDraftTransaction } = useFinance();
+  const { journalEntries, accounts, settings, formatCurrency, addJournalEntry, updateJournalEntry, saveDraftTransaction, deleteDraftTransaction } = useFinance();
   const original = orderId ? journalEntries.find(entry => entry.id === orderId) : undefined;
   const originalForm = (): Form => {
     if (!editOriginal || !original?.transactionDetails?.customerOrder) return { ...empty(), ...(orderId ? { mode: 'update', orderId } : {}) };
@@ -23,10 +23,10 @@ export function CustomerOrderEntry({ orderId, editOriginal = false, draftToResum
     const orderTerms = details.customerOrder;
     if (!orderTerms) return { ...empty(), ...(orderId ? { mode: 'update', orderId } : {}) };
     const savedItem = details.merchandiseItem || '';
-    const standardItem = ['Lanyard', 'Shirt', 'Pins', 'Tote Bag', 'Mugs', 'Stickers'].includes(savedItem);
+    const standardItem = ['Lanyard', 'Shirt', 'Pins', 'Tote Bag', 'Mug', 'Mugs', 'Stickers'].includes(savedItem);
     return {
       ...empty(), mode: 'new', orderId: original.id,
-      item: standardItem ? savedItem : 'Others', other: standardItem ? '' : savedItem,
+      item: savedItem === 'Mugs' ? 'Mug' : standardItem ? savedItem : 'Others', other: standardItem ? '' : savedItem,
       batch: details.merchandiseBatch || '', kind: orderTerms.kind,
       total: String(orderTerms.total), estimatedCost: String(orderTerms.estimatedCost), date: original.date,
       collections: original.lines.filter(line => line.accountCode === '1010' && line.debit > 0).map((line, index) => ({ id: `saved-${index}`, date: line.date || original.date, amount: String(line.debit) })),
@@ -64,6 +64,7 @@ export function CustomerOrderEntry({ orderId, editOriginal = false, draftToResum
       if (root && (!item.trim() || !batch.trim())) throw new Error('The saved order needs an item/service and batch/order reference before follow-up activity can be posted.');
       if (!root && form.estimatedCost !== '' && (!Number.isFinite(Number(form.estimatedCost)) || Number(form.estimatedCost) < 0)) throw new Error('Estimated cost must be zero or greater.');
       const collections = form.collections.filter(r => r.amount !== '').map(r => ({ date: r.date || form.date, amount: Number(r.amount) }));
+      if (hasDuplicateEnteredDates(form.collections)) throw new Error('Each entered collection date can only be used once.');
       if ([form.date, ...collections.map(r => r.date)].some(d => !isDateWithinReportingPeriod(d, semester, reportingYear))) throw new Error('All dates must be within the active reporting period.');
       const sales = root ? Number(form.sales) : 0;
       const lines = !root && total <= 0
@@ -98,6 +99,18 @@ export function CustomerOrderEntry({ orderId, editOriginal = false, draftToResum
       setMessage(`${entry.reference} posted. Saved order details are loaded below; enter only new activity.`);
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Could not post the customer order.'); }
   };
+  const saveDraft = () => {
+    const draftItem = form.item === 'Others' ? form.other : form.item;
+    const id = saveDraftTransaction({
+      id: draftId,
+      category: CUSTOMER_ORDER_DRAFT,
+      label: `${form.mode === 'update' ? 'Customer order update' : 'Customer pre-order'}: ${draftItem || 'Item pending'}${form.batch ? ` — ${form.batch}` : ''}`,
+      formState: form,
+    });
+    setDraftId(id);
+    setMessage('Customer transaction saved as a draft. Continue it from Review when the remaining information is available.');
+    onDraftSaved?.();
+  };
   const input = (key: keyof Form, label: string, type = 'text', required = false) => <label className="block text-xs font-semibold">{label}<input aria-label={label} className={field} type={type} value={String(form[key])} onChange={e => change({ [key]: e.target.value })} required={required} {...(type === 'number' ? { min: 0, step: key === 'quantity' ? '1' : '0.01' } : {})} /></label>;
   return <form onSubmit={post} className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
     <h3 className="text-sm font-bold">Customer pre-orders and actual sales</h3>
@@ -106,7 +119,7 @@ export function CustomerOrderEntry({ orderId, editOriginal = false, draftToResum
     {form.mode === 'update' && !orderId && <label className="block text-xs font-semibold">Choose customer transaction<select aria-label="Choose customer transaction" className={field} value={form.orderId} onChange={e => { setForm({ ...empty(), mode: 'update', orderId: e.target.value }); setDraftId(undefined); }}><option value="">Select a saved order…</option>{orders.map(e => <option key={e.id} value={e.id}>{e.reference} — {e.transactionDetails?.merchandiseItem} — {e.transactionDetails?.merchandiseBatch}</option>)}</select></label>}
     {form.mode === 'new' && <div className="grid gap-4 sm:grid-cols-2">
       <label className="text-xs font-semibold">Order type<select aria-label="Order type" className={field} value={form.kind} onChange={e => change({ kind: e.target.value })}><option value="merchandise">Merchandise</option><option value="service">Service</option></select></label>
-      <label className="text-xs font-semibold">Name of item<select aria-label="Name of item" className={field} value={form.item} onChange={e => change({ item: e.target.value })}>{['Lanyard', 'Shirt', 'Pins', 'Tote Bag', 'Mugs', 'Stickers', 'Others'].map(i => <option key={i}>{i}</option>)}</select></label>
+      <label className="text-xs font-semibold">Name of item<select aria-label="Name of item" className={field} value={form.item} onChange={e => change({ item: e.target.value })}>{['Lanyard', 'Shirt', 'Pins', 'Tote Bag', 'Mug', 'Stickers', 'Others'].map(i => <option key={i}>{i}</option>)}</select></label>
       {form.item === 'Others' && input('other', 'Other item / service name', 'text', true)}
       {input('batch', 'Batch / order reference')}{input('estimatedCost', 'Total estimated cost price', 'number')}{input('total', 'Total order selling price', 'number')}
       <p className="text-xs sm:col-span-2">Estimated cost is for reference. Delivery records the actual cost of the items sold.</p>
@@ -135,7 +148,7 @@ export function CustomerOrderEntry({ orderId, editOriginal = false, draftToResum
       <p className="text-xs text-slate-500 dark:text-slate-400">Deposits remain unearned until delivery. Later payments settle unpaid sales first. Payments exceeding the entire order are refundable.</p>
     </>}
     {message && <p role="status" className="rounded-lg bg-blue-50 p-3 text-xs font-semibold text-blue-900 dark:bg-blue-900/30 dark:text-blue-200">{message}</p>}
-    <div className="flex gap-3"><button type="submit" className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-bold text-white">{editOriginal ? 'Save Changes' : `Post ${root ? 'update' : 'pre-order'}`}</button></div>
+    <div className="flex flex-wrap gap-3"><button type="submit" className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-bold text-white">{editOriginal ? 'Save Changes' : `Post ${root ? 'update' : 'pre-order'}`}</button>{!editOriginal && <button type="button" onClick={saveDraft} className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-bold text-slate-700 dark:border-slate-600 dark:text-slate-200">Save as Draft</button>}</div>
   </form>;
 }
 

@@ -27,7 +27,7 @@ describe('live working-paper expense dropdown', () => {
   });
 
   it('uses the corrected loan transaction label', () => {
-    expect(DEFAULT_RULES.filter(rule => rule.keyword.includes('loan') && rule.keyword.includes('other organization')).map(rule => rule.description))
+    expect(DEFAULT_RULES.filter(rule => rule.debitAccountCode === '1350').map(rule => rule.description))
       .toEqual(['Loans to Other Organization', 'Loans to Other Organization']);
   });
 });
