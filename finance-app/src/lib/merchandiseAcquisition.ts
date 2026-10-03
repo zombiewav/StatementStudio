@@ -39,6 +39,18 @@ export interface MerchandiseAcquisitionPosting {
   prepaymentApplied: number;
 }
 
+export interface MerchandisePrepaymentInput {
+  amount: number;
+  paymentMethod: Exclude<MerchandisePaymentMethod, 'not-yet-paid'>;
+  transactionDate?: string;
+  organizationPayments?: DatedAmountRecord[];
+  officerPayments?: DatedAmountRecord[];
+  advancePayments?: DatedAmountRecord[];
+  availableCash?: number;
+  availableAdvance?: number;
+  cashAccountCode?: string;
+}
+
 const cents = (value: number): number => Math.round(value * 100) / 100;
 
 function requireNonNegative(label: string, value: number): number {
@@ -74,6 +86,32 @@ function addLine(lines: JournalLine[], accountCode: string, debit: number, credi
     return;
   }
   lines.push({ accountCode, debit: normalizedDebit, credit: normalizedCredit, ...(date ? { date } : {}) });
+}
+
+/** Records a supplier downpayment for pre-ordered merchandise. */
+export function buildMerchandisePrepaymentPosting(input: MerchandisePrepaymentInput): JournalLine[] {
+  const prepayment = requireNonNegative('Supplier downpayment', input.amount);
+  if (prepayment <= 0) throw new Error('Supplier downpayment must be greater than zero.');
+  const organizationPayments = datedAmounts('Organization payment', input.organizationPayments, 0, input.transactionDate);
+  const officerPayments = datedAmounts('Officer payment', input.officerPayments, 0, input.transactionDate);
+  const advancePayments = datedAmounts('Advance payment', input.advancePayments, 0, input.transactionDate);
+  const organizationAmount = total(organizationPayments);
+  const officerAmount = total(officerPayments);
+  const advanceAmount = total(advancePayments);
+  const funded = cents(organizationAmount + officerAmount + advanceAmount);
+  const allowed = input.paymentMethod === 'organization-funds' ? organizationAmount
+    : input.paymentMethod === 'officer-personal' ? officerAmount
+      : input.paymentMethod === 'organization-advance' ? advanceAmount : funded;
+  if (funded !== allowed) throw new Error('Only enter payments for the selected payment method.');
+  if (funded !== prepayment) throw new Error('The payment-source total must equal the supplier downpayment.');
+  if (organizationAmount > requireNonNegative('Available cash', input.availableCash || 0)) throw new Error('Organization payment cannot exceed the available cash balance.');
+  if (advanceAmount > requireNonNegative('Available officer advance', input.availableAdvance || 0)) throw new Error('Payment through an officer advance cannot exceed that officer’s available advance balance.');
+
+  const lines: JournalLine[] = [{ accountCode: ADVANCES_TO_SUPPLIERS_ACCOUNT_CODE, debit: prepayment, credit: 0, ...(input.transactionDate ? { date: input.transactionDate } : {}) }];
+  organizationPayments.forEach(payment => addLine(lines, input.cashAccountCode || '1010', 0, payment.amount, payment.date));
+  officerPayments.forEach(payment => addLine(lines, DUE_TO_OFFICERS_ACCOUNT_CODE, 0, payment.amount, payment.date));
+  advancePayments.forEach(payment => addLine(lines, ADVANCES_TO_OFFICERS_ACCOUNT_CODE, 0, payment.amount, payment.date));
+  return lines;
 }
 
 /**

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildMerchandiseAcquisitionPosting } from './merchandiseAcquisition';
+import { buildMerchandiseAcquisitionPosting, buildMerchandisePrepaymentPosting } from './merchandiseAcquisition';
 
 describe('merchandise acquisition posting', () => {
   it('records an organization payment and leaves the unpaid cost in Merchandise Payable', () => {
@@ -155,5 +155,25 @@ describe('merchandise acquisition posting', () => {
     expect(() => buildMerchandiseAcquisitionPosting({ totalCost: 100, paymentMethod: 'organization-funds', organizationPayment: 101 })).toThrow(/cannot exceed/i);
     expect(() => buildMerchandiseAcquisitionPosting({ totalCost: 100, paymentMethod: 'officer-personal', officerPayment: 50, reimbursement: 51 })).toThrow(/reimbursement/i);
     expect(() => buildMerchandiseAcquisitionPosting({ totalCost: 100, paymentMethod: 'organization-advance', advancePayment: 50, availableAdvance: 49 })).toThrow(/advance used/i);
+  });
+});
+
+describe('merchandise supplier prepayment', () => {
+  it('records a combination-funded supplier downpayment', () => {
+    expect(buildMerchandisePrepaymentPosting({
+      amount: 600, paymentMethod: 'advance-and-personal', transactionDate: '2026-10-04',
+      organizationPayments: [{ date: '', amount: 200 }], officerPayments: [{ date: '', amount: 150 }],
+      advancePayments: [{ date: '', amount: 250 }], availableCash: 200, availableAdvance: 250,
+    })).toEqual([
+      { accountCode: '1270', debit: 600, credit: 0, date: '2026-10-04' },
+      { accountCode: '1010', debit: 0, credit: 200, date: '2026-10-04' },
+      { accountCode: '2050', debit: 0, credit: 150, date: '2026-10-04' },
+      { accountCode: '1250', debit: 0, credit: 250, date: '2026-10-04' },
+    ]);
+  });
+
+  it('requires source totals to equal the downpayment and enforces the officer advance balance', () => {
+    expect(() => buildMerchandisePrepaymentPosting({ amount: 100, paymentMethod: 'organization-funds', organizationPayments: [{ date: '', amount: 90 }], availableCash: 100 })).toThrow(/must equal/i);
+    expect(() => buildMerchandisePrepaymentPosting({ amount: 100, paymentMethod: 'organization-advance', advancePayments: [{ date: '', amount: 100 }], availableAdvance: 99 })).toThrow(/advance balance/i);
   });
 });

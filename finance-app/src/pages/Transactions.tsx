@@ -34,6 +34,7 @@ import { categorizeTransactionRule, TRANSACTION_CATEGORIES, TransactionCategoryI
 import { merchandiseSaleCostError } from '../lib/transactionHistory';
 import {
   buildMerchandiseAcquisitionPosting,
+  buildMerchandisePrepaymentPosting,
   MerchandisePaymentMethod,
 } from '../lib/merchandiseAcquisition';
 import {
@@ -423,6 +424,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       setMerchandiseOfficerPayments([{ id: `officer-payment-${Date.now()}`, date, amount: '' }]);
       setMerchandiseAdvancePayments([{ id: `advance-payment-${Date.now()}`, date, amount: '' }]);
       setMerchandiseReimbursements([{ id: `reimbursement-${Date.now()}`, date, amount: '' }]);
+      setOutrightOfficer('');
       setMerchandiseSaleItem('');
       setMerchandiseSaleBatchId('');
       setMerchandiseQuantitySold('');
@@ -572,7 +574,13 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       }))
       .filter(candidate => candidate.amount > 0);
   }, [journalEntries]);
-  const selectedMerchandisePrepayment = availableMerchandisePrepayments.find(candidate => candidate.entry.id === merchandisePrepaymentEntryId);
+  const matchingMerchandisePrepayments = availableMerchandisePrepayments.filter(candidate => {
+    const details = candidate.entry.transactionDetails;
+    const selectedItem = merchandiseItem === 'Others' ? merchandiseOtherTitle.trim() : merchandiseItem;
+    return (!selectedItem || details?.merchandiseItem === selectedItem)
+      && (!merchandiseBatch.trim() || details?.merchandiseBatch === merchandiseBatch.trim());
+  });
+  const selectedMerchandisePrepayment = matchingMerchandisePrepayments.find(candidate => candidate.entry.id === merchandisePrepaymentEntryId);
   const selectedMerchandiseBatch = merchandiseBatches.find(batch => batch.entryId === merchandiseSaleBatchId);
   const merchandiseSaleItems = useMemo(() => [...new Set(merchandiseBatches.map(batch => batch.item))].sort((a, b) => a.localeCompare(b)), [merchandiseBatches]);
   const effectiveMerchandiseSaleItem = merchandiseSaleItem || selectedMerchandiseBatch?.item || '';
@@ -651,6 +659,24 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     }
   }, [isMerchandiseAcquisition, amount, merchandisePaymentMethod, date, merchandiseOrganizationPaymentTotal, merchandiseOrganizationPayments, merchandiseOfficerPaymentTotal, merchandiseOfficerPayments, merchandiseAdvancePaymentTotal, merchandiseAdvancePayments, merchandiseReimbursementTotal, merchandiseReimbursements, advancesOutstanding, selectedMerchandisePrepayment]);
 
+  const merchandisePrepaymentResult = useMemo(() => {
+    if (!isMerchandisePrepayment || amount <= 0 || merchandisePaymentMethod === 'not-yet-paid') return { lines: [] as JournalLine[], error: '' };
+    try {
+      return { lines: buildMerchandisePrepaymentPosting({
+        amount,
+        paymentMethod: merchandisePaymentMethod,
+        transactionDate: date,
+        organizationPayments: merchandiseOrganizationPayments.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })),
+        officerPayments: merchandiseOfficerPayments.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })),
+        advancePayments: merchandiseAdvancePayments.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })),
+        availableCash: cashAvailable,
+        availableAdvance: selectedOfficerAdvanceBalance,
+      }), error: '' };
+    } catch (error) {
+      return { lines: [] as JournalLine[], error: error instanceof Error ? error.message : 'The supplier downpayment amounts are invalid.' };
+    }
+  }, [isMerchandisePrepayment, amount, merchandisePaymentMethod, date, merchandiseOrganizationPayments, merchandiseOfficerPayments, merchandiseAdvancePayments, cashAvailable, selectedOfficerAdvanceBalance]);
+
   const isDepreciationEntry = debitCode === '5090' || debitCode === '5095';
   const isOutrightExpense = !!classificationPreview && activeAccounts.find(account => account.code === debitCode)?.type === 'Expenses' && !isMerchandiseAcquisition && !isDepreciationEntry;
   const isPpeAcquisition = selectedCategory === 'purchases' && (debitCode === '1500' || debitCode === '1650');
@@ -708,6 +734,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     if (isMembershipRefundStatus) return membershipRefundResolutionResult.lines;
     if (amount <= 0) return [];
     if (isMerchandiseAcquisition) return merchandiseAcquisitionResult.posting?.lines || [];
+    if (isMerchandisePrepayment) return merchandisePrepaymentResult.lines;
     if (isGuidedPurchase) return outrightExpenseResult.posting?.lines || [];
     const deferredAmount = showDeferPortionQuestion ? (Number(notYetUsedAmount) || 0) : 0;
     if (requiresAccrualCompletion || isPriorMembershipCollection) return membershipPostingResult.posting?.lines || [];
@@ -721,7 +748,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       ]);
     }
     return buildJournalLines(debitCode, effectiveCreditCode, amount);
-  }, [classificationPreview, amount, debitCode, effectiveCreditCode, isMembershipRefundStatus, membershipRefundResolutionResult, isMerchandiseAcquisition, merchandiseAcquisitionResult, isGuidedPurchase, outrightExpenseResult, requiresAccrualCompletion, isPriorMembershipCollection, membershipPostingResult, isMerchandiseSale, merchandiseSaleResult, showDeferPortionQuestion, notYetUsedAmount]);
+  }, [classificationPreview, amount, debitCode, effectiveCreditCode, isMembershipRefundStatus, membershipRefundResolutionResult, isMerchandiseAcquisition, merchandiseAcquisitionResult, isMerchandisePrepayment, merchandisePrepaymentResult, isGuidedPurchase, outrightExpenseResult, requiresAccrualCompletion, isPriorMembershipCollection, membershipPostingResult, isMerchandiseSale, merchandiseSaleResult, showDeferPortionQuestion, notYetUsedAmount]);
 
   const projectedImpacts = useMemo(
     () => projectJournalLineImpacts(previewLines, activeAccounts, accountBalances),
@@ -891,6 +918,14 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       setErrorMessage(merchandiseAcquisitionResult.error);
       return;
     }
+    if (isMerchandisePrepayment && merchandisePrepaymentResult.error) {
+      setErrorMessage(merchandisePrepaymentResult.error);
+      return;
+    }
+    if (isMerchandisePrepayment && (merchandisePaymentMethod === 'officer-personal' || merchandisePaymentMethod === 'organization-advance' || merchandisePaymentMethod === 'advance-and-personal') && !outrightOfficer.trim()) {
+      setErrorMessage('Please enter the accountable officer for this supplier downpayment.');
+      return;
+    }
     if (isGuidedPurchase && outrightExpenseResult.error) {
       setErrorMessage(outrightExpenseResult.error);
       return;
@@ -1043,7 +1078,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
             reportingYear: parsedReportingYear,
             fundingSourceId: undefined,
             sponsorshipKind: classificationPreview.sponsorshipKind,
-            counterpartyName: isGuidedPurchase && outrightOfficer.trim()
+            counterpartyName: (isGuidedPurchase || isMerchandisePrepayment) && outrightOfficer.trim()
               ? outrightOfficer.trim()
               : isMerchandiseSale && merchandiseCollectionMethod === 'officer-to-remit'
               ? merchandiseCollectionOfficer.trim()
@@ -1071,13 +1106,13 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
             merchandisePurchaseDate: isMerchandiseAcquisition ? date : undefined,
             merchandisePrepaymentEntryId: isMerchandiseAcquisition ? merchandisePrepaymentEntryId || undefined : undefined,
             merchandisePrepaymentAmount: isMerchandiseAcquisition ? selectedMerchandisePrepayment?.amount : undefined,
-            merchandisePaymentMethod: isMerchandiseAcquisition ? merchandisePaymentMethod : undefined,
-            merchandiseOrganizationPayment: isMerchandiseAcquisition ? merchandiseOrganizationPaymentTotal : undefined,
-            merchandiseOrganizationPayments: isMerchandiseAcquisition ? merchandiseOrganizationPayments.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })) : undefined,
-            merchandiseOfficerPayment: isMerchandiseAcquisition ? merchandiseOfficerPaymentTotal : undefined,
-            merchandiseOfficerPayments: isMerchandiseAcquisition ? merchandiseOfficerPayments.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })) : undefined,
-            merchandiseAdvancePayment: isMerchandiseAcquisition ? merchandiseAdvancePaymentTotal : undefined,
-            merchandiseAdvancePayments: isMerchandiseAcquisition ? merchandiseAdvancePayments.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })) : undefined,
+            merchandisePaymentMethod: (isMerchandiseAcquisition || isMerchandisePrepayment) ? merchandisePaymentMethod : undefined,
+            merchandiseOrganizationPayment: (isMerchandiseAcquisition || isMerchandisePrepayment) ? merchandiseOrganizationPaymentTotal : undefined,
+            merchandiseOrganizationPayments: (isMerchandiseAcquisition || isMerchandisePrepayment) ? merchandiseOrganizationPayments.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })) : undefined,
+            merchandiseOfficerPayment: (isMerchandiseAcquisition || isMerchandisePrepayment) ? merchandiseOfficerPaymentTotal : undefined,
+            merchandiseOfficerPayments: (isMerchandiseAcquisition || isMerchandisePrepayment) ? merchandiseOfficerPayments.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })) : undefined,
+            merchandiseAdvancePayment: (isMerchandiseAcquisition || isMerchandisePrepayment) ? merchandiseAdvancePaymentTotal : undefined,
+            merchandiseAdvancePayments: (isMerchandiseAcquisition || isMerchandisePrepayment) ? merchandiseAdvancePayments.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })) : undefined,
             merchandiseReimbursement: isMerchandiseAcquisition ? merchandiseReimbursementTotal : undefined,
             merchandiseReimbursements: isMerchandiseAcquisition ? merchandiseReimbursements.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })) : undefined,
             merchandisePayableAmount: isMerchandiseAcquisition ? merchandiseAcquisitionResult.posting?.merchandisePayable : undefined,
@@ -1406,6 +1441,28 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                   </div>
                 </div>
                 {merchandiseItem === 'Others' && <div><label className="block text-[10px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Other merchandise title</label><input type="text" value={merchandiseOtherTitle} onChange={event => setMerchandiseOtherTitle(event.target.value)} placeholder="Enter the merchandise name" className="mt-1.5 w-full rounded-lg border border-violet-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-violet-500/30 dark:bg-slate-800 dark:text-slate-100" required /></div>}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Payment method</label>
+                  <select value={merchandisePaymentMethod} onChange={event => setMerchandisePaymentMethod(event.target.value as MerchandisePaymentMethod)} className="mt-1.5 w-full rounded-lg border border-violet-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-violet-500/30 dark:bg-slate-800 dark:text-slate-100">
+                    <option value="organization-funds">Paid directly by the organization</option>
+                    <option value="officer-personal">Paid by an officer using personal money</option>
+                    <option value="organization-advance">Paid using a cash advance previously given to the officer</option>
+                    <option value="advance-and-personal">Combination of organization funds, officer personal money, and/or cash advance</option>
+                  </select>
+                </div>
+                {(merchandisePaymentMethod === 'officer-personal' || merchandisePaymentMethod === 'organization-advance' || merchandisePaymentMethod === 'advance-and-personal') && <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Accountable officer</label>
+                  <input list="preorder-officers" value={outrightOfficer} onChange={event => setOutrightOfficer(event.target.value)} placeholder="Officer name" className="mt-1.5 w-full rounded-lg border border-violet-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-violet-500/30 dark:bg-slate-800 dark:text-slate-100" required />
+                  <datalist id="preorder-officers">{officerAdvanceBalances.map(record => <option key={record.name} value={record.name} />)}</datalist>
+                  {(merchandisePaymentMethod === 'organization-advance' || merchandisePaymentMethod === 'advance-and-personal') && <p className="mt-1 text-[10px] font-medium text-violet-700 dark:text-violet-300">Available advance for this officer: {formatCurrency(selectedOfficerAdvanceBalance)}</p>}
+                </div>}
+                {(merchandisePaymentMethod === 'organization-funds' || merchandisePaymentMethod === 'advance-and-personal') && <DatedAmountRows label={`Organization payment (available cash: ${formatCurrency(cashAvailable)})`} rows={merchandiseOrganizationPayments} onChange={setMerchandiseOrganizationPayments} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={amount || cashAvailable} addLabel="Add payment" allowBlankDates blankDateHelp="Date is optional." />}
+                {(merchandisePaymentMethod === 'officer-personal' || merchandisePaymentMethod === 'advance-and-personal') && <div>
+                  <DatedAmountRows label="Amount paid personally by the officer" rows={merchandiseOfficerPayments} onChange={setMerchandiseOfficerPayments} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={amount || undefined} addLabel="Add officer payment" allowBlankDates blankDateHelp="Date is optional." />
+                  <p className="mt-1 text-[10px] font-medium text-violet-700 dark:text-violet-300">Record reimbursement separately under Reimbursement to Officers.</p>
+                </div>}
+                {(merchandisePaymentMethod === 'organization-advance' || merchandisePaymentMethod === 'advance-and-personal') && <DatedAmountRows label="Payment using the officer cash advance" rows={merchandiseAdvancePayments} onChange={setMerchandiseAdvancePayments} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={Math.min(amount || selectedOfficerAdvanceBalance, selectedOfficerAdvanceBalance)} addLabel="Add advance payment" allowBlankDates blankDateHelp="Date is optional." />}
+                {merchandisePrepaymentResult.error && amount > 0 && <p className="text-[10px] font-bold text-rose-700 dark:text-rose-300">{merchandisePrepaymentResult.error}</p>}
               </div>
             )}
 
@@ -1447,7 +1504,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                   <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Previously recorded downpayment (if applicable)</label>
                   <select value={merchandisePrepaymentEntryId} onChange={event => setMerchandisePrepaymentEntryId(event.target.value)} className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100">
                     <option value="">No linked downpayment</option>
-                    {availableMerchandisePrepayments.map(candidate => <option key={candidate.entry.id} value={candidate.entry.id}>{candidate.entry.reference} — {candidate.entry.transactionDetails?.merchandiseItem || candidate.entry.description} — {formatCurrency(candidate.amount)}</option>)}
+                    {matchingMerchandisePrepayments.map(candidate => <option key={candidate.entry.id} value={candidate.entry.id}>{candidate.entry.reference} — {candidate.entry.transactionDetails?.merchandiseItem || candidate.entry.description} — {candidate.entry.transactionDetails?.merchandiseBatch} — {formatCurrency(candidate.amount)}</option>)}
                   </select>
                   <p className="mt-1 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Only downpayments recorded separately under Merchandise Transactions appear here.</p>
                 </div>
