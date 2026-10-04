@@ -27,4 +27,12 @@ describe('prior-period payable payments', () => {
       { transactionDetails: { priorPeriodPayableAccountCode: '2010', priorPeriodPayablePaymentAmount: 400 } },
     ])).toBe(350);
   });
+
+  it('accepts the separate prepaid-assets payable account', () => {
+    const result = buildPriorPeriodPayablePayment({ payableAccountCode: '2060', paymentMethod: 'organization-funds', transactionDate: '2026-10-03', paymentDate: '', organizationAmount: 300, remainingOpeningBalance: 500, availableCash: 300, availableAdvance: 0 });
+    expect(result.lines).toEqual([
+      { accountCode: '2060', debit: 300, credit: 0, date: '2026-10-03' },
+      { accountCode: '1010', debit: 0, credit: 300, date: '2026-10-03' },
+    ]);
+  });
 });

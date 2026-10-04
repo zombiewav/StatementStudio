@@ -16,6 +16,32 @@ export interface ClosingEntryResult {
   totalExpenses: number;
 }
 
+export const INCOME_SUMMARY_ACCOUNT_CODE = '3000';
+
+export function computeClosingStageLines(accountBalances: Record<string, number>, accounts: Account[], stage: 'revenue' | 'expense' | 'income-summary', fundBalanceAccountCode: string): JournalLine[] {
+  const lines: JournalLine[] = [];
+  if (stage === 'revenue') {
+    let total = 0;
+    accounts.filter(account => account.type === 'Revenue').forEach(account => {
+      const balance = accountBalances[account.code] || 0;
+      if (balance > 0) { lines.push({ accountCode: account.code, debit: balance, credit: 0 }); total += balance; }
+    });
+    if (total) lines.push({ accountCode: INCOME_SUMMARY_ACCOUNT_CODE, debit: 0, credit: total });
+  } else if (stage === 'expense') {
+    let total = 0;
+    accounts.filter(account => account.type === 'Expenses').forEach(account => {
+      const balance = accountBalances[account.code] || 0;
+      if (balance > 0) { lines.push({ accountCode: account.code, debit: 0, credit: balance }); total += balance; }
+    });
+    if (total) lines.unshift({ accountCode: INCOME_SUMMARY_ACCOUNT_CODE, debit: total, credit: 0 });
+  } else {
+    const balance = accountBalances[INCOME_SUMMARY_ACCOUNT_CODE] || 0;
+    if (balance > 0) lines.push({ accountCode: INCOME_SUMMARY_ACCOUNT_CODE, debit: balance, credit: 0 }, { accountCode: fundBalanceAccountCode, debit: 0, credit: balance });
+    if (balance < 0) lines.push({ accountCode: fundBalanceAccountCode, debit: -balance, credit: 0 }, { accountCode: INCOME_SUMMARY_ACCOUNT_CODE, debit: 0, credit: -balance });
+  }
+  return lines;
+}
+
 /**
  * Closing entries belong in the ledger and point-in-time balances, but they
  * are not operating activity. Excluding their recorded journal IDs preserves

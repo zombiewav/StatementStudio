@@ -17,11 +17,12 @@ import { excludeClosingEntries } from '../lib/closingEntries';
 import { periodForSemester } from '../lib/reportingPeriod';
 import { combineOpeningAndPeriodBalances } from '../lib/reportingPeriodBalances';
 
-type ActiveStatementTab = 'position' | 'activities' | 'cashflow' | 'changes';
+type ActiveStatementTab = 'position' | 'activities' | 'functional' | 'cashflow' | 'changes';
 
 const STATEMENT_OPTIONS: { id: ActiveStatementTab; label: string }[] = [
   { id: 'position', label: 'Financial Position' },
   { id: 'activities', label: 'Activities' },
+  { id: 'functional', label: 'Functional Expenses' },
   { id: 'cashflow', label: 'Cash Flows' },
   { id: 'changes', label: 'Changes in Fund Balance' },
 ];
@@ -41,6 +42,7 @@ export function FinancialStatements(): React.ReactElement {
   const [selectedStatements, setSelectedStatements] = useState<Record<ActiveStatementTab, boolean>>({
     position: true,
     activities: true,
+    functional: true,
     cashflow: true,
     changes: true,
   });
@@ -84,7 +86,9 @@ export function FinancialStatements(): React.ReactElement {
     () => computeTransactionReviewStates(journalEntries, accounts).filter(item => item.status === 'incomplete'),
     [journalEntries, accounts]
   );
-  const isGated = incompleteReviewItems.length > 0;
+  const activeClose = closedFiscalYears.find(record => record.fiscalYear === settings.fiscalYear);
+  const closingIncomplete = !activeClose?.completed;
+  const isGated = incompleteReviewItems.length > 0 || closingIncomplete;
 
   // Compute Account Balances specifically for the filtered date range —
   // right for Revenue/Expenses (a period's activity), but NOT for Assets,
@@ -259,6 +263,16 @@ export function FinancialStatements(): React.ReactElement {
 
         csvContent += `"Total Expenses",${filteredTotals.Expenses}\n\n`;
         csvContent += `"Net Surplus/(Deficit)",${fNetIncome}\n`;
+      } else if (activeTab === 'functional') {
+        csvContent += 'FUNCTIONAL EXPENSES\n';
+        csvContent += `"Expense Category",${activitiesExpenseBreakdown.eventNames.map(name => `"${name}"`).join(',')},"Total Program Services","General & Administrative","Total Expenses"\n`;
+        accounts.filter(account => account.type === 'Expenses').forEach(account => {
+          const programAmounts = activitiesExpenseBreakdown.eventNames.map(name => activitiesExpenseBreakdown.eventGroups[name][account.code] || 0);
+          const totalPrograms = programAmounts.reduce((total, amount) => total + amount, 0);
+          const generalAdmin = activitiesExpenseBreakdown.generalAdminByAccount[account.code] || 0;
+          csvContent += `"${account.name}",${programAmounts.join(',')},${totalPrograms},${generalAdmin},${totalPrograms + generalAdmin}\n`;
+        });
+        csvContent += `"Total Expenses",${activitiesExpenseBreakdown.eventNames.map(name => Object.values(activitiesExpenseBreakdown.eventGroups[name]).reduce((total, amount) => total + amount, 0)).join(',')},${activitiesExpenseBreakdown.eventRelatedTotal},${activitiesExpenseBreakdown.generalAdminTotal},${filteredTotals.Expenses}\n`;
       } else if (activeTab === 'cashflow') {
         csvContent += "CASH FLOWS FROM OPERATING ACTIVITIES\n";
         csvContent += "Cash received from:\n";
@@ -416,7 +430,7 @@ export function FinancialStatements(): React.ReactElement {
               <p className="text-[10px] font-bold text-slate-700 dark:text-slate-200">Custom FS set</p>
               <button
                 type="button"
-                onClick={() => setSelectedStatements({ position: true, activities: true, cashflow: true, changes: true })}
+                onClick={() => setSelectedStatements({ position: true, activities: true, functional: true, cashflow: true, changes: true })}
                 className="text-[9px] font-bold text-blue-700 hover:underline dark:text-blue-300"
               >
                 Select all
@@ -464,6 +478,18 @@ export function FinancialStatements(): React.ReactElement {
           </button>
 
           <button
+            onClick={() => setActiveTab('functional')}
+            disabled={!selectedStatements.functional}
+            className={`w-full text-left px-3.5 py-2.5 rounded-xl font-semibold text-xs transition-colors flex items-center justify-between group ${
+              !selectedStatements.functional ? 'hidden' : activeTab === 'functional' ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+            type="button"
+          >
+            <span>Statement of Functional Expenses</span>
+            <Eye className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 text-blue-600 dark:text-blue-400 transition-opacity" />
+          </button>
+
+          <button
             onClick={() => setActiveTab('cashflow')}
             disabled={!selectedStatements.cashflow}
             className={`w-full text-left px-3.5 py-2.5 rounded-xl font-semibold text-xs transition-colors flex items-center justify-between group ${
@@ -495,8 +521,11 @@ export function FinancialStatements(): React.ReactElement {
               <ClipboardCheck className="w-10 h-10 text-amber-500 mx-auto mb-3" />
               <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Statements aren't ready yet</h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 max-w-md mx-auto">
-                {incompleteReviewItems.length} item{incompleteReviewItems.length === 1 ? '' : 's'} in REVIEW still need an answer before the books are final. Resolve them in Review, then come back here.
+                {incompleteReviewItems.length > 0
+                  ? `${incompleteReviewItems.length} item${incompleteReviewItems.length === 1 ? '' : 's'} in REVIEW still need an answer before the books are final. Resolve them in Review, then come back here.`
+                  : 'Complete the three required Closing Entries stages for the active fiscal year before generating financial statements.'}
               </p>
+              {closingIncomplete && incompleteReviewItems.length === 0 && <p className="mt-2 text-[10px] font-semibold text-amber-700 dark:text-amber-300">Go to Closing Entries to close Revenue, Expenses, then Income Summary.</p>}
               <div className="mt-6 max-w-md mx-auto text-left space-y-2">
                 {incompleteReviewItems.slice(0, 8).map(item => (
                   <div key={item.entry.id} className="flex justify-between items-center px-3.5 py-2 bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 rounded-lg text-[11px]">
@@ -517,6 +546,7 @@ export function FinancialStatements(): React.ReactElement {
             <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 mt-1 uppercase tracking-wider">
               {activeTab === 'position' && 'Statement of Financial Position'}
               {activeTab === 'activities' && 'Statement of Activities (Income Statement)'}
+              {activeTab === 'functional' && 'Statement of Functional Expenses'}
               {activeTab === 'cashflow' && 'Statement of Cash Flows (Direct Method)'}
               {activeTab === 'changes' && 'Statement of Changes in Fund Balance'}
             </h2>
@@ -632,7 +662,20 @@ export function FinancialStatements(): React.ReactElement {
                   </div>
                 </div>
 
-                {/* EXPENSES — split General & Administrative vs Event-Related */}
+                {/* Program Services is deliberately a single linked amount: its detail belongs in the Statement of Functional Expenses. */}
+                <div>
+                  <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wider text-[10px]">Program-Related Expenses</h3>
+                  <div className="flex justify-between py-1 px-4 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                    <span>Program Services — see Statement of Functional Expenses</span>
+                    <span className="font-bold">{formatCurrency(activitiesExpenseBreakdown.eventRelatedTotal)}</span>
+                  </div>
+                  <div className="flex justify-between py-2 border-t border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-slate-100 mt-2 px-2">
+                    <span className="uppercase text-[10px] tracking-wider">Total Program-Related Expenses</span>
+                    <span className="border-b border-slate-200 dark:border-slate-700">{formatCurrency(activitiesExpenseBreakdown.eventRelatedTotal)}</span>
+                  </div>
+                </div>
+
+                {/* SUPPORTING SERVICES — journal entries without an event name */}
                 <div>
                   <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wider text-[10px]">General & Administrative Expenses</h3>
                   <div className="space-y-1">
@@ -652,41 +695,6 @@ export function FinancialStatements(): React.ReactElement {
                   </div>
                 </div>
 
-                {activitiesExpenseBreakdown.eventNames.length > 0 && (
-                  <div>
-                    <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wider text-[10px]">Event-Related Expenses</h3>
-                    <div className="space-y-3">
-                      {activitiesExpenseBreakdown.eventNames.map(eventName => {
-                        const byAccount = activitiesExpenseBreakdown.eventGroups[eventName];
-                        const eventTotal = Object.values(byAccount).reduce((s, v) => s + v, 0);
-                        return (
-                          <div key={eventName} className="pl-2">
-                            <div className="flex justify-between py-1 px-2 text-[11px] font-bold text-slate-700 dark:text-slate-300">
-                              <span>{eventName}</span>
-                              <span>{formatCurrency(eventTotal)}</span>
-                            </div>
-                            <div className="space-y-1">
-                              {Object.entries(byAccount).map(([code, amount]) => {
-                                const acc = accounts.find(a => a.code === code);
-                                return (
-                                  <div key={code} className="flex justify-between py-1 px-4 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-600 dark:text-slate-400">
-                                    <span>{acc?.name || code}</span>
-                                    <span className="font-bold">{formatCurrency(amount)}</span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <div className="flex justify-between py-2 border-t border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-slate-100 mt-2 px-2">
-                      <span className="uppercase text-[10px] tracking-wider">Total Event-Related</span>
-                      <span className="border-b border-slate-200 dark:border-slate-700">{formatCurrency(activitiesExpenseBreakdown.eventRelatedTotal)}</span>
-                    </div>
-                  </div>
-                )}
-
                 <div className="flex justify-between py-2 border-t-2 border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-slate-100 mt-2 px-2">
                   <span className="uppercase text-[10px] tracking-wider">Total Expenses & Outflows</span>
                   <span className="border-b border-slate-200 dark:border-slate-700">{formatCurrency(filteredTotals.Expenses)}</span>
@@ -704,7 +712,54 @@ export function FinancialStatements(): React.ReactElement {
               </div>
             )}
 
-            {/* 3. Statement of Cash Flows (Direct Method) */}
+            {/* 3. Statement of Functional Expenses */}
+            {activeTab === 'functional' && (
+              <div className="space-y-4">
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-sans">
+                  Program Services are expenses posted with an event name. Supporting Services are expenses posted without an event name.
+                </p>
+                <div className="overflow-x-auto border border-slate-200 dark:border-slate-700 rounded-lg">
+                  <table className="min-w-full text-[10px]">
+                    <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
+                      <tr>
+                        <th className="sticky left-0 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-left font-bold">Expense Category</th>
+                        {activitiesExpenseBreakdown.eventNames.map(name => <th key={name} className="min-w-28 px-3 py-2 text-right font-bold">{name}</th>)}
+                        <th className="min-w-28 px-3 py-2 text-right font-bold">Total Program Services</th>
+                        <th className="min-w-28 px-3 py-2 text-right font-bold">Supporting Services (G&A)</th>
+                        <th className="min-w-28 px-3 py-2 text-right font-bold">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {accounts.filter(account => account.type === 'Expenses').map(account => {
+                        const programAmounts = activitiesExpenseBreakdown.eventNames.map(name => activitiesExpenseBreakdown.eventGroups[name][account.code] || 0);
+                        const totalPrograms = programAmounts.reduce((total, amount) => total + amount, 0);
+                        const generalAdmin = activitiesExpenseBreakdown.generalAdminByAccount[account.code] || 0;
+                        return (
+                          <tr key={account.code} className="border-t border-slate-100 dark:border-slate-800">
+                            <th className="sticky left-0 bg-white dark:bg-slate-900 px-3 py-2 text-left font-medium">{account.name}</th>
+                            {programAmounts.map((amount, index) => <td key={activitiesExpenseBreakdown.eventNames[index]} className="px-3 py-2 text-right">{formatCurrency(amount)}</td>)}
+                            <td className="px-3 py-2 text-right font-semibold">{formatCurrency(totalPrograms)}</td>
+                            <td className="px-3 py-2 text-right font-semibold">{formatCurrency(generalAdmin)}</td>
+                            <td className="px-3 py-2 text-right font-bold">{formatCurrency(totalPrograms + generalAdmin)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot className="border-t-2 border-slate-300 bg-slate-50 font-bold dark:border-slate-600 dark:bg-slate-800">
+                      <tr>
+                        <th className="sticky left-0 bg-slate-50 px-3 py-2 text-left dark:bg-slate-800">Total Expenses</th>
+                        {activitiesExpenseBreakdown.eventNames.map(name => <td key={name} className="px-3 py-2 text-right">{formatCurrency(Object.values(activitiesExpenseBreakdown.eventGroups[name]).reduce((total, amount) => total + amount, 0))}</td>)}
+                        <td className="px-3 py-2 text-right">{formatCurrency(activitiesExpenseBreakdown.eventRelatedTotal)}</td>
+                        <td className="px-3 py-2 text-right">{formatCurrency(activitiesExpenseBreakdown.generalAdminTotal)}</td>
+                        <td className="px-3 py-2 text-right">{formatCurrency(filteredTotals.Expenses)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* 4. Statement of Cash Flows (Direct Method) */}
             {activeTab === 'cashflow' && (
               <div className="space-y-6">
                 {/* OPERATING ACTIVITIES */}

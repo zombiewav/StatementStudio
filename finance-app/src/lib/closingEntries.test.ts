@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeClosingEntryLines, excludeClosingEntries, findFiscalCloseBlockers } from './closingEntries';
+import { computeClosingEntryLines, computeClosingStageLines, excludeClosingEntries, findFiscalCloseBlockers } from './closingEntries';
 import { Account, ClosingRecord, JournalEntry } from '../types';
 
 const accounts: Account[] = [
@@ -76,6 +76,14 @@ describe('computeClosingEntryLines', () => {
     const result = computeClosingEntryLines(balances, accounts, '3010');
     expect(result.lines.find(l => l.accountCode === '4010')).toBeUndefined();
     expect(result.lines.find(l => l.accountCode === '4040')).toBeUndefined();
+  });
+});
+
+describe('staged closing entries', () => {
+  it('closes revenues, then expenses, then Income Summary into accumulated surplus', () => {
+    expect(computeClosingStageLines({ '4010': 1000 }, accounts, 'revenue', '3010')).toEqual([{ accountCode: '4010', debit: 1000, credit: 0 }, { accountCode: '3000', debit: 0, credit: 1000 }]);
+    expect(computeClosingStageLines({ '5020': 400 }, accounts, 'expense', '3010')).toEqual([{ accountCode: '3000', debit: 400, credit: 0 }, { accountCode: '5020', debit: 0, credit: 400 }]);
+    expect(computeClosingStageLines({ '3000': 600 }, accounts, 'income-summary', '3010')).toEqual([{ accountCode: '3000', debit: 600, credit: 0 }, { accountCode: '3010', debit: 0, credit: 600 }]);
   });
 });
 

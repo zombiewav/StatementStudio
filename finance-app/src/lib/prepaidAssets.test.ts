@@ -20,7 +20,7 @@ describe('prepaid assets', () => {
       expect.objectContaining({ accountCode: '1010', credit: 200 }),
       expect.objectContaining({ accountCode: '2050', credit: 100 }),
       expect.objectContaining({ accountCode: '1250', credit: 250 }),
-      expect.objectContaining({ accountCode: '2010', credit: 450 }),
+      expect.objectContaining({ accountCode: '2060', credit: 450 }),
     ]));
   });
 

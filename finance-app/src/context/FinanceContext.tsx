@@ -23,7 +23,7 @@ import { deleteSemesterRecords, precedingSemester } from '../lib/semesterDeletio
 import { validateBackupPayload } from '../lib/backupValidation';
 import { computeAccountBalances, computeTypeTotals } from '../lib/accountTotals';
 import { combineOpeningAndPeriodBalances, carryForwardOpeningBalances, OpeningBalances } from '../lib/reportingPeriodBalances';
-import { computeClosingEntryLines, findFiscalCloseBlockers } from '../lib/closingEntries';
+import { computeClosingEntryLines, computeClosingStageLines, findFiscalCloseBlockers } from '../lib/closingEntries';
 import { linkReceiptIdsToEntry } from '../lib/receiptAttachments';
 import { getEffectiveClassificationRules, validateCustomTransactionRule } from '../lib/customTransactionRules';
 import { ActivityFeeFollowUp, ActivityFeeSchedule, buildActivityFeeFollowUp, buildActivityFeeReceivableCollections, buildInitialActivityFeeSchedule, buildScheduledActivityFeeRecognition } from '../lib/activityFees';
@@ -38,6 +38,7 @@ import { reportingPeriodBounds } from '../lib/reportingPeriod';
 // reference them without a hardcoded string of its own.
 const GENERAL_FUND_PROJECT = 'General Fund Operations';
 const GENERAL_FUND_BALANCE_CODE = '3010';
+const INCOME_SUMMARY_ACCOUNT_CODE = '3000';
 
 // Extended classification rule shape used by the rule-based classification
 // engine below. It builds on the base `ClassificationRule` shape from
@@ -163,6 +164,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
   { code: '2020', name: 'Merchandise Payable', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid cost of merchandise acquired for resale', isActive: true },
   { code: '2030', name: 'Accounts Payable-PPE', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid purchases of property, plant, and equipment', isActive: true },
   { code: '2040', name: 'Accounts Payable-Furniture & Fixture', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid purchases of furniture and fixtures', isActive: true },
+  { code: '2060', name: 'Accounts Payable-Prepaid Assets', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid purchases of prepaid assets carried into the following reporting period', isActive: true },
   { code: '2050', name: 'Due to Officers', type: 'Liabilities', normalBalance: 'Credit', description: 'Amounts owed to officers who paid organization expenses out of their own money, pending reimbursement', isActive: true },
   { code: '2110', name: 'Unearned Activity Fees', type: 'Liabilities', normalBalance: 'Credit', description: 'Activity or event fees collected before the event date', isActive: true },
   { code: '2120', name: 'Refund Liability - Activity Fees', type: 'Liabilities', normalBalance: 'Credit', description: 'Activity fee collections received in excess of the required amount and still refundable', isActive: true },
@@ -173,6 +175,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
   { code: '2300', name: 'Accrued Liabilities', type: 'Liabilities', normalBalance: 'Credit', description: 'Accrued unpaid expenses such as taxes or interest', isActive: true },
   
   // Fund Balance / Equity (Normal: Credit)
+  { code: '3000', name: 'Income Summary', type: 'Fund Balance', normalBalance: 'Credit', description: 'Temporary year-end clearing account used only by Closing Entries', isActive: true },
   { code: '3010', name: 'General Fund Balance', type: 'Fund Balance', normalBalance: 'Credit', description: 'Unrestricted accumulated fund balances', isActive: true },
   { code: '3020', name: 'Restricted Fund Balance', type: 'Fund Balance', normalBalance: 'Credit', description: 'Donor-restricted capital or specific reserves', isActive: true },
   
@@ -711,6 +714,7 @@ interface FinanceContextType {
   reverseJournalEntry: (id: string) => void;
   deleteJournalEntry: (id: string) => void;
   closeFiscalYear: (fiscalYear: string, closingDate: string) => void;
+  postClosingStage: (fiscalYear: string, closingDate: string, stage: 'revenue' | 'expense' | 'income-summary') => void;
   attachReceiptsToEntry: (entryId: string, receipts: ReceiptAttachmentDraft[]) => void;
   addCustomClassificationRule: (description: string, debitAccountCode: string, creditAccountCode: string) => void;
   updateCustomClassificationRule: (id: string, updated: Partial<Pick<CustomClassificationRule, 'description' | 'debitAccountCode' | 'creditAccountCode' | 'isActive'>>) => void;
@@ -844,7 +848,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
 
   const [closedFiscalYears, setClosedFiscalYears] = useState<ClosingRecord[]>(() => {
     const local = localStorage.getItem('ss_closings');
-    return local ? JSON.parse(local) : [];
+    return local ? (JSON.parse(local) as ClosingRecord[]).map(record => record.completed === undefined && record.journalEntryId ? { ...record, completed: true } : record) : [];
   });
 
   const [receiptAttachments, setReceiptAttachments] = useState<ReceiptAttachment[]>(() => {
@@ -981,7 +985,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
           setWorkspaceError('Your saved workspace could not be read safely.');
           return;
         }
-        setAccounts([...saved.accounts, ...INITIAL_ACCOUNTS.filter(a => ['1280', '1285', '1290', '1295', '1298', '1330', '1340', '1345', '1360', '2030', '2040', '2140', '2150', '4100', '4110'].includes(a.code) && !saved.accounts.some(existing => existing.code === a.code))]);
+        setAccounts([...saved.accounts, ...INITIAL_ACCOUNTS.filter(a => ['1280', '1285', '1290', '1295', '1298', '1330', '1340', '1345', '1360', '2030', '2040', '2060', '2140', '2150', '4100', '4110'].includes(a.code) && !saved.accounts.some(existing => existing.code === a.code))]);
         setJournalEntries(saved.journalEntries);
         setProjects(saved.projects || []);
         setAuditLogs(saved.auditLogs || []);
@@ -1442,6 +1446,25 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     logAudit('Close Fiscal Year', `Closed ${fiscalYear} as of ${closingDate}: net ${netIncome >= 0 ? 'surplus' : 'deficit'} of ${settings.currencySymbol}${Math.abs(netIncome).toLocaleString()} posted to Fund Balance via ${entry.reference}.`);
   };
 
+  const postClosingStage = (fiscalYear: string, closingDate: string, stage: 'revenue' | 'expense' | 'income-summary') => {
+    const current = closedFiscalYears.find(record => record.fiscalYear === fiscalYear);
+    if (current?.completed) throw new Error(`${fiscalYear} has already been closed.`);
+    const requiredPrevious = stage === 'expense' ? current?.revenueClosingEntryId : stage === 'income-summary' ? current?.expenseClosingEntryId : true;
+    if (!requiredPrevious) throw new Error('Complete the previous closing step first.');
+    if (stage === 'revenue' && findFiscalCloseBlockers(journalEntries, accounts).length > 0) throw new Error('Complete all Review items before posting closing entries.');
+    const balances = computeAccountBalances(journalEntries.filter(entry => entry.date <= closingDate), accounts);
+    const lines = computeClosingStageLines(balances, accounts, stage, GENERAL_FUND_BALANCE_CODE);
+    if (!lines.length) throw new Error(stage === 'income-summary' ? 'Income Summary has no balance to close.' : `No ${stage} balances remain to close.`);
+    const label = stage === 'revenue' ? 'Close Revenues to Income Summary' : stage === 'expense' ? 'Close Expenses to Income Summary' : 'Close Income Summary to Accumulated Net Surplus (Deficit)';
+    const entry = addJournalEntry(closingDate, `${label} — ${fiscalYear}`, GENERAL_FUND_PROJECT, lines);
+    setClosedFiscalYears(previous => {
+      const record: ClosingRecord = current || { id: `closing-${Date.now()}`, fiscalYear, closingDate, netIncome: 0, journalEntryId: '', closedAt: '' };
+      const next = stage === 'revenue' ? { ...record, revenueClosingEntryId: entry.id } : stage === 'expense' ? { ...record, expenseClosingEntryId: entry.id } : { ...record, incomeSummaryClosingEntryId: entry.id, journalEntryId: entry.id, closedAt: new Date().toISOString(), completed: true, netIncome: balances[INCOME_SUMMARY_ACCOUNT_CODE] || 0 };
+      return current ? previous.map(item => item.fiscalYear === fiscalYear ? next : item) : [...previous, next];
+    });
+    logAudit('Closing Entries', `${label} posted for ${fiscalYear} via ${entry.reference}.`);
+  };
+
   const addAccount = (account: Account) => {
     if (accounts.some(a => a.code === account.code)) {
       throw new Error(`Account code ${account.code} already exists.`);
@@ -1700,7 +1723,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       user: settings.organizationName,
     };
 
-    setAccounts([...payload.accounts, ...INITIAL_ACCOUNTS.filter(a => ['1280', '1285', '1290', '1295', '1298', '1330', '1340', '1345', '1360', '2030', '2040', '2140', '2150', '4100', '4110'].includes(a.code) && !payload.accounts.some(existing => existing.code === a.code))]);
+    setAccounts([...payload.accounts, ...INITIAL_ACCOUNTS.filter(a => ['1280', '1285', '1290', '1295', '1298', '1330', '1340', '1345', '1360', '2030', '2040', '2060', '2140', '2150', '4100', '4110'].includes(a.code) && !payload.accounts.some(existing => existing.code === a.code))]);
     setJournalEntries(payload.journalEntries);
     setProjects(Array.isArray(payload.projects) ? payload.projects : []);
     setAuditLogs([restoreLogEntry, ...restoredLogs].slice(0, 100));
@@ -1772,6 +1795,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       reverseJournalEntry,
       deleteJournalEntry,
       closeFiscalYear,
+      postClosingStage,
       attachReceiptsToEntry,
       addCustomClassificationRule,
       updateCustomClassificationRule,

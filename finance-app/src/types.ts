@@ -203,6 +203,10 @@ export interface ClosingRecord {
   netIncome: number;
   journalEntryId: string;
   closedAt: string;
+  revenueClosingEntryId?: string;
+  expenseClosingEntryId?: string;
+  incomeSummaryClosingEntryId?: string;
+  completed?: boolean;
 }
 
 export type ActivityFeeStatus =

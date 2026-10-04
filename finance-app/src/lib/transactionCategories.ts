@@ -52,7 +52,7 @@ export function categorizeTransactionRule(rule: Pick<ClassificationRule, 'debitA
     return 'reimbursements-to-officers';
   }
 
-  if (['2010', '2020', '2030', '2040'].includes(rule.debitAccountCode)) {
+  if (['2010', '2020', '2030', '2040', '2060'].includes(rule.debitAccountCode)) {
     return 'payables';
   }
 

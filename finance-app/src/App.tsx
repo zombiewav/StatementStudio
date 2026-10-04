@@ -14,6 +14,8 @@ import { FinancialStatements } from './pages/FinancialStatements';
 import { Analytics } from './pages/Analytics';
 import { ProjectsPage } from './pages/ProjectsPage';
 import { Settings } from './pages/Settings';
+import { ClosingEntries } from './pages/ClosingEntries';
+import { PostClosingTrialBalance } from './pages/PostClosingTrialBalance';
 import { LandingPage } from './pages/LandingPage';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
@@ -62,6 +64,10 @@ function DashboardLayout() {
         return <ProjectsPage />;
       case 'settings':
         return <Settings />;
+      case 'closing-entries':
+        return <ClosingEntries />;
+      case 'post-closing-trial-balance':
+        return <PostClosingTrialBalance />;
       default:
         return <Dashboard />;
     }

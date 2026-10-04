@@ -81,7 +81,7 @@ export function buildPrepaidAssetPurchasePosting(input: PrepaidAssetPurchaseInpu
   lines.push(...datedCreditLines(officer, '2050'));
   lines.push(...datedCreditLines(advance, '1250'));
   const payable = cents(price - paid);
-  if (payable > 0) lines.push({ accountCode: '2010', debit: 0, credit: payable, date: input.purchaseDate });
+  if (payable > 0) lines.push({ accountCode: '2060', debit: 0, credit: payable, date: input.purchaseDate });
   return { lines, payable, paid };
 }
 
