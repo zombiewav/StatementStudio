@@ -679,7 +679,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
 
   const isDepreciationEntry = debitCode === '5090' || debitCode === '5095';
   const isOutrightExpense = !!classificationPreview && activeAccounts.find(account => account.code === debitCode)?.type === 'Expenses' && !isMerchandiseAcquisition && !isDepreciationEntry;
-  const isPpeAcquisition = selectedCategory === 'purchases' && (debitCode === '1500' || debitCode === '1650');
+  const isPpeAcquisition = selectedCategory === 'ppe-transactions' && (debitCode === '1500' || debitCode === '1650');
   const isGuidedPurchase = isOutrightExpense || isPpeAcquisition;
   const guidedPayableAccountCode = debitCode === '1650' ? '2040' : isPpeAcquisition ? '2030' : '2010';
   const outrightOfficerTotal = sumDatedAmounts(outrightOfficerPayments);
@@ -1230,7 +1230,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                 ? ShoppingBag
                 : category.id === 'membership-fees'
                   ? Users
-                  : category.id === 'purchases'
+                  : category.id === 'expense-transactions' || category.id === 'ppe-transactions'
                     ? ShoppingCart
                     : category.id === 'prepaid-assets'
                       ? Layers
@@ -1456,12 +1456,16 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                   <datalist id="preorder-officers">{officerAdvanceBalances.map(record => <option key={record.name} value={record.name} />)}</datalist>
                   {(merchandisePaymentMethod === 'organization-advance' || merchandisePaymentMethod === 'advance-and-personal') && <p className="mt-1 text-[10px] font-medium text-violet-700 dark:text-violet-300">Available advance for this officer: {formatCurrency(selectedOfficerAdvanceBalance)}</p>}
                 </div>}
-                {(merchandisePaymentMethod === 'organization-funds' || merchandisePaymentMethod === 'advance-and-personal') && <DatedAmountRows label={`Organization payment (available cash: ${formatCurrency(cashAvailable)})`} rows={merchandiseOrganizationPayments} onChange={setMerchandiseOrganizationPayments} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={amount || cashAvailable} addLabel="Add payment" allowBlankDates blankDateHelp="Date is optional." />}
+                {(merchandisePaymentMethod === 'organization-funds' || merchandisePaymentMethod === 'advance-and-personal') && <DatedAmountRows label={`Organization payment (available cash: ${formatCurrency(cashAvailable)})`} rows={merchandiseOrganizationPayments} onChange={setMerchandiseOrganizationPayments} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={Math.min(amount || cashAvailable, cashAvailable)} addLabel="Add payment" allowBlankDates blankDateHelp="Date is optional." />}
                 {(merchandisePaymentMethod === 'officer-personal' || merchandisePaymentMethod === 'advance-and-personal') && <div>
                   <DatedAmountRows label="Amount paid personally by the officer" rows={merchandiseOfficerPayments} onChange={setMerchandiseOfficerPayments} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={amount || undefined} addLabel="Add officer payment" allowBlankDates blankDateHelp="Date is optional." />
                   <p className="mt-1 text-[10px] font-medium text-violet-700 dark:text-violet-300">Record reimbursement separately under Reimbursement to Officers.</p>
                 </div>}
-                {(merchandisePaymentMethod === 'organization-advance' || merchandisePaymentMethod === 'advance-and-personal') && <DatedAmountRows label="Payment using the officer cash advance" rows={merchandiseAdvancePayments} onChange={setMerchandiseAdvancePayments} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={Math.min(amount || selectedOfficerAdvanceBalance, selectedOfficerAdvanceBalance)} addLabel="Add advance payment" allowBlankDates blankDateHelp="Date is optional." />}
+                {(merchandisePaymentMethod === 'organization-advance' || merchandisePaymentMethod === 'advance-and-personal') && <>
+                  <DatedAmountRows label="Payment using the officer cash advance" rows={merchandiseAdvancePayments} onChange={setMerchandiseAdvancePayments} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={Math.min(amount || selectedOfficerAdvanceBalance, selectedOfficerAdvanceBalance)} addLabel="Add advance payment" allowBlankDates blankDateHelp="Date is optional." />
+                  {outrightOfficer.trim() && selectedOfficerAdvanceBalance <= 0 && <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[10px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">No recorded cash advance is available for {outrightOfficer.trim()}. Record the advance first under Advances to Officers before using it for this supplier downpayment.</div>}
+                  {officerAdvanceBalances.length > 0 && <div className="overflow-hidden rounded-lg border border-violet-200 bg-white/70 text-[10px] dark:border-violet-500/30 dark:bg-slate-900/40"><p className="px-3 py-2 font-black uppercase tracking-wide text-violet-900 dark:text-violet-200">Available advances by officer</p>{officerAdvanceBalances.map(record => <div key={record.name} className="flex items-center justify-between border-t border-violet-100 px-3 py-2 dark:border-violet-500/20"><span className="font-semibold text-slate-700 dark:text-slate-200">{record.name}</span><span className="font-black text-violet-800 dark:text-violet-200">{formatCurrency(record.balance)}</span></div>)}</div>}
+                </>}
                 {merchandisePrepaymentResult.error && amount > 0 && <p className="text-[10px] font-bold text-rose-700 dark:text-rose-300">{merchandisePrepaymentResult.error}</p>}
               </div>
             )}
@@ -1528,7 +1532,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                 </div>
 
                 {merchandisePaymentMethod === 'organization-funds' && (
-                  <DatedAmountRows label="How much was paid by the organization to the supplier?" rows={merchandiseOrganizationPayments} onChange={setMerchandiseOrganizationPayments} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={Math.max(0, amount - (selectedMerchandisePrepayment?.amount || 0))} addLabel="Add payment" />
+                  <DatedAmountRows label="How much was paid by the organization to the supplier?" rows={merchandiseOrganizationPayments} onChange={setMerchandiseOrganizationPayments} currencySymbol={settings.currencySymbol} defaultDate={date} addLabel="Add payment" />
                 )}
 
                 {(merchandisePaymentMethod === 'organization-advance' || merchandisePaymentMethod === 'advance-and-personal') && (
@@ -1540,12 +1544,14 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
 
                 {(merchandisePaymentMethod === 'officer-personal' || merchandisePaymentMethod === 'advance-and-personal') && (
                   <div className="space-y-4">
-                    <DatedAmountRows label="How much was paid personally by the officer?" rows={merchandiseOfficerPayments} onChange={setMerchandiseOfficerPayments} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={Math.max(0, amount - (merchandisePaymentMethod === 'advance-and-personal' ? merchandiseAdvancePaymentTotal : 0))} addLabel="Add officer payment" />
+                    <DatedAmountRows label="How much was paid personally by the officer?" rows={merchandiseOfficerPayments} onChange={setMerchandiseOfficerPayments} currencySymbol={settings.currencySymbol} defaultDate={date} addLabel="Add officer payment" />
                     <DatedAmountRows label="How much was reimbursed to the officer?" rows={merchandiseReimbursements} onChange={setMerchandiseReimbursements} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={merchandiseOfficerPaymentTotal} addLabel="Add reimbursement" />
                   </div>
                 )}
 
                 {merchandisePaymentMethod === 'not-yet-paid' && <p className="rounded-lg bg-white/80 p-3 text-[10px] font-semibold text-indigo-800 dark:bg-slate-900/60 dark:text-indigo-200">The full batch cost will remain in Merchandise Payable and appear in Review until settled.</p>}
+                {merchandiseAcquisitionResult.posting && merchandiseAcquisitionResult.posting.merchandisePayable > 0 && <p className="rounded-lg bg-amber-50 p-3 text-[10px] font-semibold text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">The unpaid {formatCurrency(merchandiseAcquisitionResult.posting.merchandisePayable)} will be recorded in Merchandise Payable for Review.</p>}
+                {merchandiseAcquisitionResult.posting && merchandiseAcquisitionResult.posting.supplierReceivable > 0 && <p className="rounded-lg bg-amber-50 p-3 text-[10px] font-semibold text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">The excess {formatCurrency(merchandiseAcquisitionResult.posting.supplierReceivable)} will be recorded in Receivable from Supplier.</p>}
                 {merchandiseAcquisitionResult.error && amount > 0 && <p className="text-[10px] font-bold text-rose-700 dark:text-rose-300">{merchandiseAcquisitionResult.error}</p>}
               </div>
             )}

@@ -152,6 +152,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
   { code: '1340', name: 'Deposit for Rent', type: 'Assets', normalBalance: 'Debit', description: 'Downpayments made for prepaid rental arrangements before purchase recognition', isActive: true },
   { code: '1345', name: 'Deposit for Uniform/Clothing', type: 'Assets', normalBalance: 'Debit', description: 'Downpayments made for uniforms or clothing before purchase recognition', isActive: true },
   { code: '1350', name: 'Loans to Other Organization', type: 'Assets', normalBalance: 'Debit', description: 'Running balance of loans receivable from other organizations', isActive: true },
+  { code: '1360', name: 'Receivable from Supplier', type: 'Assets', normalBalance: 'Debit', description: 'Merchandise payments made to a supplier in excess of the related batch cost', isActive: true },
 
   // Liabilities (Normal: Credit)
   // Renamed from the generic "Accounts Payable" to match the working
@@ -980,7 +981,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
           setWorkspaceError('Your saved workspace could not be read safely.');
           return;
         }
-        setAccounts([...saved.accounts, ...INITIAL_ACCOUNTS.filter(a => ['1280', '1285', '1290', '1295', '1298', '1330', '1340', '1345', '2030', '2040', '2140', '2150', '4100', '4110'].includes(a.code) && !saved.accounts.some(existing => existing.code === a.code))]);
+        setAccounts([...saved.accounts, ...INITIAL_ACCOUNTS.filter(a => ['1280', '1285', '1290', '1295', '1298', '1330', '1340', '1345', '1360', '2030', '2040', '2140', '2150', '4100', '4110'].includes(a.code) && !saved.accounts.some(existing => existing.code === a.code))]);
         setJournalEntries(saved.journalEntries);
         setProjects(saved.projects || []);
         setAuditLogs(saved.auditLogs || []);
@@ -1699,7 +1700,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       user: settings.organizationName,
     };
 
-    setAccounts([...payload.accounts, ...INITIAL_ACCOUNTS.filter(a => ['1280', '1285', '1290', '1295', '1298', '1330', '1340', '1345', '2030', '2040', '2140', '2150', '4100', '4110'].includes(a.code) && !payload.accounts.some(existing => existing.code === a.code))]);
+    setAccounts([...payload.accounts, ...INITIAL_ACCOUNTS.filter(a => ['1280', '1285', '1290', '1295', '1298', '1330', '1340', '1345', '1360', '2030', '2040', '2140', '2150', '4100', '4110'].includes(a.code) && !payload.accounts.some(existing => existing.code === a.code))]);
     setJournalEntries(payload.journalEntries);
     setProjects(Array.isArray(payload.projects) ? payload.projects : []);
     setAuditLogs([restoreLogEntry, ...restoredLogs].slice(0, 100));

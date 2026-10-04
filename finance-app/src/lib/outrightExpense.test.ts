@@ -70,4 +70,18 @@ describe('buildOutrightExpensePosting', () => {
   it('rejects advance use over the recorded balance', () => {
     expect(() => buildOutrightExpensePosting({ expenseAccountCode: '5030', totalAmount: 100, paymentMethod: 'officer-advance', advancePayments: [{ date: '2026-01-01', amount: 101 }], availableAdvance: 100 })).toThrow('cannot exceed');
   });
+
+  it.each([
+    ['expense', '5030', '2010'],
+    ['PPE', '1500', '2030'],
+  ])('does not allow %s payments to exceed the purchase price', (_label, accountCode, payableAccountCode) => {
+    expect(() => buildOutrightExpensePosting({
+      expenseAccountCode: accountCode,
+      payableAccountCode,
+      totalAmount: 100,
+      paymentMethod: 'organization-funds',
+      organizationPayments: [{ date: '2026-01-01', amount: 101 }],
+      availableCash: 101,
+    })).toThrow('Total payment cannot exceed the expense amount.');
+  });
 });

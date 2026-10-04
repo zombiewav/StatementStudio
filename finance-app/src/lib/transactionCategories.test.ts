@@ -18,9 +18,10 @@ describe('transaction categories', () => {
     expect(categorizeTransactionRule(rule('1010', '1300', "Collection of Previous School Year's Membership Fees Still Receivable"))).toBe('membership-fees');
   });
 
-  it('groups expense and equipment purchases while keeping unrelated entries in other', () => {
-    expect(categorizeTransactionRule(rule('5040', '1010', 'Office Supplies Purchase'))).toBe('purchases');
-    expect(categorizeTransactionRule(rule('1500', '1010', 'Developer Laptop Purchase'))).toBe('purchases');
+  it('keeps expense and PPE transaction types in separate dropdown categories', () => {
+    expect(categorizeTransactionRule(rule('5040', '1010', 'Office Supplies Purchase'))).toBe('expense-transactions');
+    expect(categorizeTransactionRule(rule('1500', '1010', 'Developer Laptop Purchase'))).toBe('ppe-transactions');
+    expect(categorizeTransactionRule(rule('1650', '1010', 'Furniture & Fixtures Purchase'))).toBe('ppe-transactions');
     expect(categorizeTransactionRule(rule('1010', '4030', 'Sponsorship - Cash Contribution'))).toBe('other');
   });
 

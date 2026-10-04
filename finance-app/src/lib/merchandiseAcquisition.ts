@@ -5,6 +5,7 @@ export const MERCHANDISE_PAYABLE_ACCOUNT_CODE = '2020';
 export const ADVANCES_TO_OFFICERS_ACCOUNT_CODE = '1250';
 export const ADVANCES_TO_SUPPLIERS_ACCOUNT_CODE = '1270';
 export const DUE_TO_OFFICERS_ACCOUNT_CODE = '2050';
+export const RECEIVABLE_FROM_SUPPLIER_ACCOUNT_CODE = '1360';
 
 export type MerchandisePaymentMethod =
   | 'organization-funds'
@@ -37,6 +38,7 @@ export interface MerchandiseAcquisitionPosting {
   advanceUsed: number;
   cashPaid: number;
   prepaymentApplied: number;
+  supplierReceivable: number;
 }
 
 export interface MerchandisePrepaymentInput {
@@ -147,24 +149,19 @@ export function buildMerchandiseAcquisitionPosting(input: MerchandiseAcquisition
   ensureNotBeforePurchase('Advance payment', advancePayments);
   ensureNotBeforePurchase('Reimbursement', reimbursements);
 
-  let supplierPaid = 0;
   let cashPaid = 0;
   let dueToOfficer = 0;
   let advanceUsed = 0;
 
   if (input.paymentMethod === 'organization-funds') {
-    supplierPaid = organizationPayment;
     cashPaid = organizationPayment;
   } else if (input.paymentMethod === 'officer-personal') {
-    supplierPaid = officerPayment;
     cashPaid = reimbursement;
     if (reimbursement > officerPayment) throw new Error('The reimbursement cannot exceed what the officer paid personally.');
     dueToOfficer = cents(officerPayment - reimbursement);
   } else if (input.paymentMethod === 'organization-advance') {
-    supplierPaid = advancePayment;
     advanceUsed = advancePayment;
   } else if (input.paymentMethod === 'advance-and-personal') {
-    supplierPaid = cents(advancePayment + officerPayment);
     advanceUsed = advancePayment;
     cashPaid = reimbursement;
     if (reimbursement > officerPayment) throw new Error('The reimbursement cannot exceed what the officer paid personally.');
@@ -174,11 +171,6 @@ export function buildMerchandiseAcquisitionPosting(input: MerchandiseAcquisition
   if (advanceUsed > availableAdvance) {
     throw new Error('The advance used cannot exceed the recorded Advances to Officers balance.');
   }
-  if (cents(prepaymentAmount + supplierPaid) > totalCost) {
-    throw new Error('Payments to the supplier cannot exceed the total merchandise cost.');
-  }
-
-  const merchandisePayable = cents(totalCost - prepaymentAmount - supplierPaid);
   const lines: JournalLine[] = [];
   addLine(lines, MERCHANDISE_INVENTORY_ACCOUNT_CODE, totalCost, 0, input.transactionDate);
   addLine(lines, ADVANCES_TO_SUPPLIERS_ACCOUNT_CODE, 0, prepaymentAmount, input.transactionDate);
@@ -188,38 +180,49 @@ export function buildMerchandiseAcquisitionPosting(input: MerchandiseAcquisition
 
   if (input.paymentMethod === 'organization-funds') {
     purchaseDatePayments(organizationPayments).forEach(payment => addLine(lines, cashAccountCode, 0, payment.amount, payment.date));
-    laterPayments(organizationPayments).forEach(payment => {
-      addLine(lines, MERCHANDISE_PAYABLE_ACCOUNT_CODE, payment.amount, 0, payment.date);
-      addLine(lines, cashAccountCode, 0, payment.amount, payment.date);
-    });
   }
   if (input.paymentMethod === 'organization-advance' || input.paymentMethod === 'advance-and-personal') {
     purchaseDatePayments(advancePayments).forEach(payment => addLine(lines, ADVANCES_TO_OFFICERS_ACCOUNT_CODE, 0, payment.amount, payment.date));
-    laterPayments(advancePayments).forEach(payment => {
-      addLine(lines, MERCHANDISE_PAYABLE_ACCOUNT_CODE, payment.amount, 0, payment.date);
-      addLine(lines, ADVANCES_TO_OFFICERS_ACCOUNT_CODE, 0, payment.amount, payment.date);
-    });
   }
   if (input.paymentMethod === 'officer-personal' || input.paymentMethod === 'advance-and-personal') {
     purchaseDatePayments(officerPayments).forEach(payment => addLine(lines, DUE_TO_OFFICERS_ACCOUNT_CODE, 0, payment.amount, payment.date));
-    laterPayments(officerPayments).forEach(payment => {
-      addLine(lines, MERCHANDISE_PAYABLE_ACCOUNT_CODE, payment.amount, 0, payment.date);
-      addLine(lines, DUE_TO_OFFICERS_ACCOUNT_CODE, 0, payment.amount, payment.date);
+  }
+  const purchaseDateSupplierPayments = cents(
+    total(purchaseDatePayments(organizationPayments))
+    + total(purchaseDatePayments(officerPayments))
+    + total(purchaseDatePayments(advancePayments))
+  );
+  const payableAtPurchase = Math.max(0, cents(totalCost - prepaymentAmount - purchaseDateSupplierPayments));
+  const supplierReceivableAtPurchase = Math.max(0, cents(prepaymentAmount + purchaseDateSupplierPayments - totalCost));
+
+  let remainingPayable = payableAtPurchase;
+  let supplierReceivable = supplierReceivableAtPurchase;
+  const applyLaterPayment = (payments: DatedAmountRecord[], sourceAccountCode: string) => {
+    laterPayments(payments).forEach(payment => {
+      const payableSettled = Math.min(payment.amount, remainingPayable);
+      const excessPayment = cents(payment.amount - payableSettled);
+      addLine(lines, MERCHANDISE_PAYABLE_ACCOUNT_CODE, payableSettled, 0, payment.date);
+      addLine(lines, RECEIVABLE_FROM_SUPPLIER_ACCOUNT_CODE, excessPayment, 0, payment.date);
+      addLine(lines, sourceAccountCode, 0, payment.amount, payment.date);
+      remainingPayable = cents(remainingPayable - payableSettled);
+      supplierReceivable = cents(supplierReceivable + excessPayment);
     });
+  };
+  if (input.paymentMethod === 'organization-funds') applyLaterPayment(organizationPayments, cashAccountCode);
+  if (input.paymentMethod === 'organization-advance' || input.paymentMethod === 'advance-and-personal') applyLaterPayment(advancePayments, ADVANCES_TO_OFFICERS_ACCOUNT_CODE);
+  if (input.paymentMethod === 'officer-personal' || input.paymentMethod === 'advance-and-personal') applyLaterPayment(officerPayments, DUE_TO_OFFICERS_ACCOUNT_CODE);
+  if (input.paymentMethod === 'officer-personal' || input.paymentMethod === 'advance-and-personal') {
     reimbursements.forEach(payment => {
       addLine(lines, DUE_TO_OFFICERS_ACCOUNT_CODE, payment.amount, 0, payment.date);
       addLine(lines, cashAccountCode, 0, payment.amount, payment.date);
     });
   }
-  const payableAtPurchase = cents(totalCost - prepaymentAmount
-    - total(purchaseDatePayments(organizationPayments))
-    - total(purchaseDatePayments(officerPayments))
-    - total(purchaseDatePayments(advancePayments)));
   addLine(lines, MERCHANDISE_PAYABLE_ACCOUNT_CODE, 0, payableAtPurchase, input.transactionDate);
+  addLine(lines, RECEIVABLE_FROM_SUPPLIER_ACCOUNT_CODE, supplierReceivableAtPurchase, 0, input.transactionDate);
 
   const debits = cents(lines.reduce((sum, line) => sum + line.debit, 0));
   const credits = cents(lines.reduce((sum, line) => sum + line.credit, 0));
   if (debits !== credits) throw new Error('The merchandise acquisition entry is not balanced.');
 
-  return { lines, merchandisePayable, dueToOfficer, advanceUsed, cashPaid, prepaymentApplied: prepaymentAmount };
+  return { lines, merchandisePayable: remainingPayable, dueToOfficer, advanceUsed, cashPaid, prepaymentApplied: prepaymentAmount, supplierReceivable };
 }

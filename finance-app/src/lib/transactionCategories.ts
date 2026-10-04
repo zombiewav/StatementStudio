@@ -4,7 +4,8 @@ export type TransactionCategoryId =
   | 'activity-fees'
   | 'merchandise'
   | 'membership-fees'
-  | 'purchases'
+  | 'expense-transactions'
+  | 'ppe-transactions'
   | 'prepaid-assets'
   | 'payables'
   | 'advances-to-officers'
@@ -21,7 +22,8 @@ export const TRANSACTION_CATEGORIES: TransactionCategory[] = [
   { id: 'activity-fees', label: 'Activity Fees', description: 'Collections for events, including future or postponed events.' },
   { id: 'merchandise', label: 'Merchandise Transactions', description: 'Buy inventory or record merchandise sales.' },
   { id: 'membership-fees', label: 'Membership Fees', description: 'Current and prior-period member collections.' },
-  { id: 'purchases', label: 'Purchases', description: 'Supplies, equipment, services, and operating expenses.' },
+  { id: 'expense-transactions', label: 'Expense Transactions', description: 'Operating, event, and administrative expenses.' },
+  { id: 'ppe-transactions', label: 'PPE Transactions', description: 'Property, plant, equipment, and furniture purchases.' },
   { id: 'prepaid-assets', label: 'Prepaid Assets', description: 'Buy assets in advance, record deposits, or recognize consumption.' },
   { id: 'payables', label: 'Payables', description: 'Pay payable balances carried forward from the previous reporting period.' },
   { id: 'advances-to-officers', label: 'Advances to Officers', description: 'Cash advances released to accountable officers.' },
@@ -54,9 +56,13 @@ export function categorizeTransactionRule(rule: Pick<ClassificationRule, 'debitA
     return 'payables';
   }
 
+  if (PURCHASE_ASSET_CODES.has(rule.debitAccountCode)) {
+    return 'ppe-transactions';
+  }
+
   const debitCode = Number(rule.debitAccountCode);
-  if ((debitCode >= 5000 && debitCode < 6000) || PURCHASE_ASSET_CODES.has(rule.debitAccountCode)) {
-    return 'purchases';
+  if (debitCode >= 5000 && debitCode < 6000) {
+    return 'expense-transactions';
   }
 
   return 'other';

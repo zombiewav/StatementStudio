@@ -18,6 +18,7 @@ describe('merchandise acquisition posting', () => {
       advanceUsed: 0,
       cashPaid: 600,
       prepaymentApplied: 0,
+      supplierReceivable: 0,
     });
   });
 
@@ -151,8 +152,33 @@ describe('merchandise acquisition posting', () => {
     })).toThrow(/earlier than the Date of Purchase/i);
   });
 
-  it('rejects overpayments, excessive reimbursements, and unavailable advances', () => {
-    expect(() => buildMerchandiseAcquisitionPosting({ totalCost: 100, paymentMethod: 'organization-funds', organizationPayment: 101 })).toThrow(/cannot exceed/i);
+  it('posts merchandise overpayments to Receivable from Supplier after settling Merchandise Payable', () => {
+    expect(buildMerchandiseAcquisitionPosting({
+      totalCost: 1000,
+      paymentMethod: 'organization-funds',
+      transactionDate: '2026-02-10',
+      prepaymentAmount: 200,
+      organizationPayments: [
+        { date: '2026-02-10', amount: 300 },
+        { date: '2026-02-15', amount: 700 },
+      ],
+    })).toMatchObject({ merchandisePayable: 0, supplierReceivable: 200 });
+    expect(buildMerchandiseAcquisitionPosting({
+      totalCost: 1000,
+      paymentMethod: 'organization-funds',
+      transactionDate: '2026-02-10',
+      prepaymentAmount: 200,
+      organizationPayments: [
+        { date: '2026-02-10', amount: 300 },
+        { date: '2026-02-15', amount: 700 },
+      ],
+    }).lines).toEqual(expect.arrayContaining([
+        { accountCode: '2020', debit: 500, credit: 0, date: '2026-02-15' },
+        { accountCode: '1360', debit: 200, credit: 0, date: '2026-02-15' },
+    ]));
+  });
+
+  it('continues to reject excessive reimbursements and unavailable advances', () => {
     expect(() => buildMerchandiseAcquisitionPosting({ totalCost: 100, paymentMethod: 'officer-personal', officerPayment: 50, reimbursement: 51 })).toThrow(/reimbursement/i);
     expect(() => buildMerchandiseAcquisitionPosting({ totalCost: 100, paymentMethod: 'organization-advance', advancePayment: 50, availableAdvance: 49 })).toThrow(/advance used/i);
   });
