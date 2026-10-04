@@ -139,6 +139,11 @@ export function FinancialStatements(): React.ReactElement {
     const priorEntries = journalEntries.filter(je => je.date < startDate);
     return computeTypeTotals(computeAccountBalances(priorEntries, accounts), accounts)['Fund Balance'];
   }, [journalEntries, startDate, accounts]);
+  const beginningNetAssetsByRestriction = useMemo(() => {
+    const priorEntries = journalEntries.filter(je => je.date < startDate);
+    const balances = combineOpeningAndPeriodBalances(openingBalances, computeAccountBalances(priorEntries, accounts), accounts);
+    return { unrestricted: balances['3010'] || 0, temporary: balances['3020'] || 0, permanent: balances['3030'] || 0 };
+  }, [journalEntries, startDate, accounts, openingBalances]);
 
   const fNetIncome = filteredTotals.Revenue - filteredTotals.Expenses;
   const unclosedNetIncome = ledgerPeriodTotals.Revenue - ledgerPeriodTotals.Expenses;
@@ -153,6 +158,53 @@ export function FinancialStatements(): React.ReactElement {
     () => computeActivitiesExpenseBreakdown(performanceEntries, accounts),
     [performanceEntries, accounts]
   );
+  const positionAssetGroups = useMemo(() => {
+    const groups: Array<[string, string[]]> = [
+      ['Cash and Cash Equivalents', ['1010', '1015']], ['Receivables', ['1200', '1210', '1300', '1310', '1330', '1360', '1370']], ['Advances and Dues', ['1220', '1230', '1250', '1270', '1320']], ['Inventories', ['1700']], ['Prepaid Assets', ['1260', '1280', '1285', '1290', '1295', '1298']], ['Donated Assets', ['1710', '1720']], ['Deposits', ['1340', '1345']], ['Property and Equipment', ['1500', '1550', '1600', '1650', '1660']],
+    ];
+    const assigned = new Set(groups.flatMap(([, codes]) => codes));
+    return [...groups.map(([label, codes]) => [label, accounts.filter(account => codes.includes(account.code))] as const), ['Other Assets', accounts.filter(account => account.type === 'Assets' && !assigned.has(account.code))] as const];
+  }, [accounts]);
+  const positionLiabilityGroups = useMemo(() => {
+    const groups: Array<[string, string[]]> = [
+      ['Dues and Payables', ['2010', '2020', '2030', '2040', '2050', '2060', '2070', '2080']], ['Unearned Revenues', ['2110', '2140']], ['Refund Liabilities', ['2120', '2130', '2150']], ['Loans and Accrued Liabilities', ['2200', '2300']],
+    ];
+    const assigned = new Set(groups.flatMap(([, codes]) => codes));
+    const grouped = groups.map(([label, codes]) => [label, accounts.filter(account => codes.includes(account.code))] as const);
+    const other = accounts.filter(account => account.type === 'Liabilities' && !assigned.has(account.code));
+    return other.length ? [...grouped, ['Other Liabilities', other] as const] : grouped;
+  }, [accounts]);
+
+  const activitiesRestrictionColumns = useMemo(() => {
+    const temporarilyRestricted = performanceEntries
+      .filter(entry => !entry.settlesEntryId)
+      .flatMap(entry => entry.lines)
+      .filter(line => line.accountCode === '4035')
+      .reduce((sum, line) => sum + line.credit - line.debit, 0);
+    const restrictionReleases = performanceEntries
+      .filter(entry => Boolean(entry.settlesEntryId))
+      .flatMap(entry => entry.lines)
+      .filter(line => line.accountCode === '4035')
+      .reduce((sum, line) => sum + line.debit - line.credit, 0);
+    const permanentlyRestricted = performanceEntries
+      .flatMap(entry => entry.lines)
+      .filter(line => line.accountCode === '4036')
+      .reduce((sum, line) => sum + line.credit - line.debit, 0);
+    const totalRevenue = filteredTotals.Revenue;
+    // A release debits 4035 and credits 4030.  It belongs on its own row,
+    // rather than being counted once in revenue and again as a release.
+    const unrestrictedRevenue = totalRevenue - temporarilyRestricted - permanentlyRestricted;
+    return {
+      unrestrictedRevenue,
+      temporarilyRestricted,
+      permanentlyRestricted,
+      restrictionReleases,
+      unrestrictedChange: unrestrictedRevenue - filteredTotals.Expenses,
+      temporaryChange: temporarilyRestricted - restrictionReleases,
+      permanentChange: permanentlyRestricted,
+      beginning: beginningNetAssetsByRestriction,
+    };
+  }, [filteredTotals, performanceEntries, beginningNetAssetsByRestriction]);
 
   const saveFinalSnapshot = (action: 'Print' | 'Export PDF' | 'Export Excel') => {
     if (!settings.semester || !settings.reportingYear) return;
@@ -241,6 +293,14 @@ export function FinancialStatements(): React.ReactElement {
           csvContent += `"${acc.name}",${filteredBalances[acc.code] || 0}\n`;
         });
         csvContent += `"Total Revenue",${filteredTotals.Revenue}\n\n`;
+        csvContent += 'STATEMENT OF ACTIVITIES BY RESTRICTION\n';
+        csvContent += 'Category,Unrestricted,Temporarily Restricted,Permanently Restricted,Total\n';
+        csvContent += `"Revenues and gains",${activitiesRestrictionColumns.unrestrictedRevenue},${activitiesRestrictionColumns.temporarilyRestricted},${activitiesRestrictionColumns.permanentlyRestricted},${filteredTotals.Revenue}\n`;
+        csvContent += `"Net assets released from restrictions",${activitiesRestrictionColumns.restrictionReleases},${-activitiesRestrictionColumns.restrictionReleases},0,0\n`;
+        csvContent += `"Expenses and losses",${-filteredTotals.Expenses},0,0,${-filteredTotals.Expenses}\n`;
+        csvContent += `"Increase (decrease) in net assets",${activitiesRestrictionColumns.unrestrictedChange},${activitiesRestrictionColumns.temporaryChange},${activitiesRestrictionColumns.permanentChange},${fNetIncome}\n`;
+        csvContent += `"Net assets at beginning of year",${activitiesRestrictionColumns.beginning.unrestricted},${activitiesRestrictionColumns.beginning.temporary},${activitiesRestrictionColumns.beginning.permanent},${activitiesRestrictionColumns.beginning.unrestricted + activitiesRestrictionColumns.beginning.temporary + activitiesRestrictionColumns.beginning.permanent}\n`;
+        csvContent += `"Net assets at end of year",${activitiesRestrictionColumns.beginning.unrestricted + activitiesRestrictionColumns.unrestrictedChange},${activitiesRestrictionColumns.beginning.temporary + activitiesRestrictionColumns.temporaryChange},${activitiesRestrictionColumns.beginning.permanent + activitiesRestrictionColumns.permanentChange},${activitiesRestrictionColumns.beginning.unrestricted + activitiesRestrictionColumns.unrestrictedChange + activitiesRestrictionColumns.beginning.temporary + activitiesRestrictionColumns.temporaryChange + activitiesRestrictionColumns.beginning.permanent + activitiesRestrictionColumns.permanentChange}\n\n`;
 
         csvContent += "GENERAL & ADMINISTRATIVE EXPENSES\n";
         accounts.filter(a => a.type === 'Expenses').forEach(acc => {
@@ -568,7 +628,9 @@ export function FinancialStatements(): React.ReactElement {
                 <div>
                   <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wider text-[10px]">Assets</h3>
                   <div className="space-y-1">
-                    {accounts.filter(a => a.type === 'Assets').map(acc => {
+                    {positionAssetGroups.map(([group, groupAccounts]) => <React.Fragment key={group}>
+                    <p className="px-2 pt-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">{group}</p>
+                    {groupAccounts.map(acc => {
                       const bal = cumulativeToEndBalances[acc.code] || 0;
                       const isContra = isContraAccount(acc);
                       return (
@@ -578,6 +640,7 @@ export function FinancialStatements(): React.ReactElement {
                         </div>
                       );
                     })}
+                    </React.Fragment>)}
                   </div>
                   <div className="flex justify-between py-2 border-t border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-slate-100 mt-2 px-2">
                     <span className="uppercase text-[10px] tracking-wider">Total Assets</span>
@@ -589,7 +652,9 @@ export function FinancialStatements(): React.ReactElement {
                 <div>
                   <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wider text-[10px]">Liabilities</h3>
                   <div className="space-y-1">
-                    {accounts.filter(a => a.type === 'Liabilities').map(acc => {
+                    {positionLiabilityGroups.map(([group, groupAccounts]) => <React.Fragment key={group}>
+                    <p className="px-2 pt-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">{group}</p>
+                    {groupAccounts.map(acc => {
                       const bal = cumulativeToEndBalances[acc.code] || 0;
                       return (
                         <div key={acc.code} className="flex justify-between py-1 px-4 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
@@ -598,6 +663,7 @@ export function FinancialStatements(): React.ReactElement {
                         </div>
                       );
                     })}
+                    </React.Fragment>)}
                   </div>
                   <div className="flex justify-between py-2 border-t border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-slate-100 mt-2 px-2">
                     <span className="uppercase text-[10px] tracking-wider">Total Liabilities</span>
@@ -607,7 +673,7 @@ export function FinancialStatements(): React.ReactElement {
 
                 {/* FUND BALANCE SECTION */}
                 <div>
-                  <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wider text-[10px]">Fund Balance / Equity</h3>
+                  <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wider text-[10px]">Net Assets</h3>
                   <div className="space-y-1">
                     {accounts.filter(a => a.type === 'Fund Balance').map(acc => {
                       const bal = cumulativeToEndBalances[acc.code] || 0;
@@ -660,6 +726,22 @@ export function FinancialStatements(): React.ReactElement {
                     <span className="uppercase text-[10px] tracking-wider">Total Revenue & Inflows</span>
                     <span className="border-b border-slate-200 dark:border-slate-700">{formatCurrency(filteredTotals.Revenue)}</span>
                   </div>
+                </div>
+
+                <div className="overflow-x-auto border border-slate-200 dark:border-slate-700 rounded-lg">
+                  <table className="min-w-full text-[10px]">
+                    <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200"><tr><th className="px-3 py-2 text-left font-bold">Statement of Activities by restriction</th><th className="px-3 py-2 text-right font-bold">Unrestricted</th><th className="px-3 py-2 text-right font-bold">Temporarily Restricted</th><th className="px-3 py-2 text-right font-bold">Permanently Restricted</th><th className="px-3 py-2 text-right font-bold">Total</th></tr></thead>
+                    <tbody>
+                      <tr className="border-t border-slate-100 dark:border-slate-800"><th className="px-3 py-2 text-left font-medium">Revenues and gains</th><td className="px-3 py-2 text-right">{formatCurrency(activitiesRestrictionColumns.unrestrictedRevenue)}</td><td className="px-3 py-2 text-right">{formatCurrency(activitiesRestrictionColumns.temporarilyRestricted)}</td><td className="px-3 py-2 text-right">{formatCurrency(activitiesRestrictionColumns.permanentlyRestricted)}</td><td className="px-3 py-2 text-right font-semibold">{formatCurrency(filteredTotals.Revenue)}</td></tr>
+                      <tr className="border-t border-slate-100 dark:border-slate-800"><th className="px-3 py-2 text-left font-medium">Net assets released from restrictions</th><td className="px-3 py-2 text-right">{formatCurrency(activitiesRestrictionColumns.restrictionReleases)}</td><td className="px-3 py-2 text-right">{formatCurrency(-activitiesRestrictionColumns.restrictionReleases)}</td><td className="px-3 py-2 text-right">{formatCurrency(0)}</td><td className="px-3 py-2 text-right font-semibold">{formatCurrency(0)}</td></tr>
+                      <tr className="border-t border-slate-100 dark:border-slate-800"><th className="px-3 py-2 text-left font-medium">Expenses and losses</th><td className="px-3 py-2 text-right">{formatCurrency(-filteredTotals.Expenses)}</td><td className="px-3 py-2 text-right">{formatCurrency(0)}</td><td className="px-3 py-2 text-right">{formatCurrency(0)}</td><td className="px-3 py-2 text-right font-semibold">{formatCurrency(-filteredTotals.Expenses)}</td></tr>
+                    </tbody>
+                    <tfoot className="border-t-2 border-slate-300 bg-slate-50 font-bold dark:border-slate-600 dark:bg-slate-800">
+                      <tr><th className="px-3 py-2 text-left">Increase (decrease) in net assets</th><td className="px-3 py-2 text-right">{formatCurrency(activitiesRestrictionColumns.unrestrictedChange)}</td><td className="px-3 py-2 text-right">{formatCurrency(activitiesRestrictionColumns.temporaryChange)}</td><td className="px-3 py-2 text-right">{formatCurrency(activitiesRestrictionColumns.permanentChange)}</td><td className="px-3 py-2 text-right">{formatCurrency(fNetIncome)}</td></tr>
+                      <tr><th className="px-3 py-2 text-left">Net assets at beginning of year</th><td className="px-3 py-2 text-right">{formatCurrency(activitiesRestrictionColumns.beginning.unrestricted)}</td><td className="px-3 py-2 text-right">{formatCurrency(activitiesRestrictionColumns.beginning.temporary)}</td><td className="px-3 py-2 text-right">{formatCurrency(activitiesRestrictionColumns.beginning.permanent)}</td><td className="px-3 py-2 text-right">{formatCurrency(activitiesRestrictionColumns.beginning.unrestricted + activitiesRestrictionColumns.beginning.temporary + activitiesRestrictionColumns.beginning.permanent)}</td></tr>
+                      <tr><th className="px-3 py-2 text-left">Net assets at end of year</th><td className="px-3 py-2 text-right">{formatCurrency(activitiesRestrictionColumns.beginning.unrestricted + activitiesRestrictionColumns.unrestrictedChange)}</td><td className="px-3 py-2 text-right">{formatCurrency(activitiesRestrictionColumns.beginning.temporary + activitiesRestrictionColumns.temporaryChange)}</td><td className="px-3 py-2 text-right">{formatCurrency(activitiesRestrictionColumns.beginning.permanent + activitiesRestrictionColumns.permanentChange)}</td><td className="px-3 py-2 text-right">{formatCurrency(activitiesRestrictionColumns.beginning.unrestricted + activitiesRestrictionColumns.unrestrictedChange + activitiesRestrictionColumns.beginning.temporary + activitiesRestrictionColumns.temporaryChange + activitiesRestrictionColumns.beginning.permanent + activitiesRestrictionColumns.permanentChange)}</td></tr>
+                    </tfoot>
+                  </table>
                 </div>
 
                 {/* Program Services is deliberately a single linked amount: its detail belongs in the Statement of Functional Expenses. */}

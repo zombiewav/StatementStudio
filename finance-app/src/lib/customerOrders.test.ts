@@ -143,4 +143,25 @@ describe('customer pre-orders and deliveries', () => {
     expect(net(lines, '1200')).toBe(400);
     expect(customerOrderReversalBlock(carried, next)).toMatch(/previous semester/);
   });
+
+  it('carries unsold stock even when it is not linked to a customer order', () => {
+    const stockOnly: JournalEntry = {
+      ...purchase,
+      id: 'stock-only',
+      reference: 'JE-0003',
+      transactionDetails: {
+        ...purchase.transactionDetails!,
+        merchandiseItem: 'Sticker',
+        merchandiseBatch: 'Batch 2',
+        merchandiseQuantity: 25,
+      },
+    };
+    const next = carryForwardCustomerOrders([stockOnly], '2027-01-01');
+
+    expect(next).toHaveLength(1);
+    expect(next[0]).toMatchObject({ id: 'stock-only', date: '2027-01-01', lines: [] });
+    expect(buildMerchandiseBatchBalances(next)).toEqual([expect.objectContaining({
+      entryId: 'stock-only', remainingQuantity: 25, netInventoryBalance: 700,
+    })]);
+  });
 });

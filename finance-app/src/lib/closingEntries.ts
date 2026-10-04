@@ -17,6 +17,8 @@ export interface ClosingEntryResult {
 }
 
 export const INCOME_SUMMARY_ACCOUNT_CODE = '3000';
+const PERMANENTLY_RESTRICTED_REVENUE_CODE = '4036';
+const PERMANENTLY_RESTRICTED_FUND_BALANCE_CODE = '3030';
 
 export function computeClosingStageLines(accountBalances: Record<string, number>, accounts: Account[], stage: 'revenue' | 'expense' | 'income-summary', fundBalanceAccountCode: string): JournalLine[] {
   const lines: JournalLine[] = [];
@@ -24,6 +26,10 @@ export function computeClosingStageLines(accountBalances: Record<string, number>
     let total = 0;
     accounts.filter(account => account.type === 'Revenue').forEach(account => {
       const balance = accountBalances[account.code] || 0;
+      if (account.code === PERMANENTLY_RESTRICTED_REVENUE_CODE && balance > 0) {
+        lines.push({ accountCode: account.code, debit: balance, credit: 0 }, { accountCode: PERMANENTLY_RESTRICTED_FUND_BALANCE_CODE, debit: 0, credit: balance });
+        return;
+      }
       if (balance > 0) { lines.push({ accountCode: account.code, debit: balance, credit: 0 }); total += balance; }
     });
     if (total) lines.push({ accountCode: INCOME_SUMMARY_ACCOUNT_CODE, debit: 0, credit: total });

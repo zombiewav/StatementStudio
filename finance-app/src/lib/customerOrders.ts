@@ -65,9 +65,8 @@ export function carryForwardCustomerOrders(entries: JournalEntry[], date: string
     if (state.remainingSales <= 0 && state.receivable <= 0 && state.refundable <= 0) return [];
     return [{ ...root, date, lines: [], transactionDetails: { ...root.transactionDetails!, carriedForward: true, customerOrderOpening: state } }];
   });
-  const neededBatches = buildMerchandiseBatchBalances(entries).filter(batch => orders.some(order =>
-    sameMerchandise(batch.item, order.transactionDetails.merchandiseItem || '') && sameMerchandise(batch.batch, order.transactionDetails.merchandiseBatch || '')));
-  return [...orders, ...neededBatches.map(batch => {
+  const remainingBatches = buildMerchandiseBatchBalances(entries);
+  return [...orders, ...remainingBatches.map(batch => {
     const original = entries.find(e => e.id === batch.entryId)!;
     return { ...original, date, lines: [], description: `Beginning Balances — inventory detail: ${batch.item} — ${batch.batch}`, transactionDetails: {
       ...original.transactionDetails!, carriedForward: true, merchandiseQuantity: batch.remainingQuantity, carriedInventoryCost: batch.netInventoryBalance,

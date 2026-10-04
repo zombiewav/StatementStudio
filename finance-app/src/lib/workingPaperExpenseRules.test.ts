@@ -8,7 +8,7 @@ const expected = [
   ['Load Given as Prize to Event Participants', '5120', 'Award and Prizes Expense'],
   ['Printing/Bookbinding of Accomplishment Reports and Other Documents', '5140', 'Printing Expense'],
   ['Mass Offerings/Donations', '5230', 'Donations and Contributions Expense'],
-  ['Purchase of Meals consumed by participants, speakers and organizers', '5080', 'Food and Meals Expense'],
+  ['Purchase of Meals consumed by participants, speakers and organizers', '5080', 'Meals and Refreshments Expense'],
   ['Transportation Fare', '5050', 'Transportation Expense'],
   ['Transportation Allowance to hosts, speaker and guests', '5050', 'Transportation Expense'],
   ['Purchase/Printing of Tarpaulin, banners, brochures and other promotional materials', '5250', 'Promotional and Advertising Expense'],

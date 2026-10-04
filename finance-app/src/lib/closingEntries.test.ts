@@ -5,8 +5,10 @@ import { Account, ClosingRecord, JournalEntry } from '../types';
 const accounts: Account[] = [
   { code: '1010', name: 'Cash on Hand', type: 'Assets', normalBalance: 'Debit', description: '', isActive: true },
   { code: '3010', name: 'General Fund Balance', type: 'Fund Balance', normalBalance: 'Credit', description: '', isActive: true },
+  { code: '3030', name: 'Permanently Restricted Fund Balance', type: 'Fund Balance', normalBalance: 'Credit', description: '', isActive: true },
   { code: '4010', name: 'Organization Income', type: 'Revenue', normalBalance: 'Credit', description: '', isActive: true },
   { code: '4040', name: 'Membership Dues', type: 'Revenue', normalBalance: 'Credit', description: '', isActive: true },
+  { code: '4036', name: 'Contributions Revenue - Permanently Restricted', type: 'Revenue', normalBalance: 'Credit', description: '', isActive: true },
   { code: '5020', name: 'Rent Expense', type: 'Expenses', normalBalance: 'Debit', description: '', isActive: true },
 ];
 
@@ -84,6 +86,13 @@ describe('staged closing entries', () => {
     expect(computeClosingStageLines({ '4010': 1000 }, accounts, 'revenue', '3010')).toEqual([{ accountCode: '4010', debit: 1000, credit: 0 }, { accountCode: '3000', debit: 0, credit: 1000 }]);
     expect(computeClosingStageLines({ '5020': 400 }, accounts, 'expense', '3010')).toEqual([{ accountCode: '3000', debit: 400, credit: 0 }, { accountCode: '5020', debit: 0, credit: 400 }]);
     expect(computeClosingStageLines({ '3000': 600 }, accounts, 'income-summary', '3010')).toEqual([{ accountCode: '3000', debit: 600, credit: 0 }, { accountCode: '3010', debit: 0, credit: 600 }]);
+  });
+
+  it('closes permanently restricted contribution revenue directly into permanently restricted fund balance', () => {
+    expect(computeClosingStageLines({ '4036': 1000 }, accounts, 'revenue', '3010')).toEqual([
+      { accountCode: '4036', debit: 1000, credit: 0 },
+      { accountCode: '3030', debit: 0, credit: 1000 },
+    ]);
   });
 });
 

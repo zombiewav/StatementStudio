@@ -55,7 +55,7 @@ export interface TransactionDetails {
   sponsorshipKind?: 'cash' | 'food' | 'supplies';
   counterpartyName?: string;
   eventRelated: boolean;
-  donorRestriction?: 'none' | 'satisfied-in-period' | 'temporary';
+  donorRestriction?: 'none' | 'satisfied-in-period' | 'temporary' | 'permanent';
   restrictionEventPeriod?: 'same-period' | 'future';
   membershipUnpaidAmount?: number;
   membershipTotalFees?: number;

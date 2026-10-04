@@ -7,7 +7,7 @@ interface PrepaidAssetCategoryConfig { label: string; assetCode: string; expense
 
 export const PREPAID_ASSET_CATEGORIES: Record<PrepaidAssetCategory, PrepaidAssetCategoryConfig> = {
   awards: { label: 'Awards and Prizes', assetCode: '1280', expenseCode: '5120' },
-  supplies: { label: 'Supplies and Materials', assetCode: '1285', expenseCode: '5160' },
+  supplies: { label: 'Supplies and Materials', assetCode: '1285', expenseCode: '5290' },
   wifi: { label: 'Prepaid Wifi', assetCode: '1290', expenseCode: '5030' },
   rent: { label: 'Prepaid Rent', assetCode: '1295', expenseCode: '5020', depositCode: '1340' },
   uniform: { label: 'Clothing/Uniform', assetCode: '1298', expenseCode: '5180', depositCode: '1345' },
@@ -52,7 +52,7 @@ export interface PrepaidAssetPurchaseInput {
   availableAdvance?: number;
 }
 
-export function buildPrepaidAssetPurchasePosting(input: PrepaidAssetPurchaseInput): { lines: JournalLine[]; payable: number; paid: number } {
+export function buildPrepaidAssetPurchasePosting(input: PrepaidAssetPurchaseInput): { lines: JournalLine[]; payable: number; receivableFromSupplier: number; paid: number } {
   const config = PREPAID_ASSET_CATEGORIES[input.category];
   const price = cents(Number(input.purchasePrice));
   if (price <= 0) throw new Error('Purchase price must be greater than zero.');
@@ -66,23 +66,46 @@ export function buildPrepaidAssetPurchasePosting(input: PrepaidAssetPurchaseInpu
   const downpayment = cents(Number(input.downpaymentAmount || 0));
   const paid = cents(organizationTotal + officerTotal + advanceTotal + downpayment);
 
-  if (paid > price) throw new Error('Total payments and applied downpayment cannot exceed the purchase price.');
   if (organizationTotal > cents(Number(input.availableCash ?? Number.POSITIVE_INFINITY))) throw new Error('Organization cash payments cannot exceed the available cash balance.');
   if (advanceTotal > cents(Number(input.availableAdvance || 0))) throw new Error('Payments through an officer advance cannot exceed that officer’s available advance balance.');
   if (downpayment > 0 && !config.depositCode) throw new Error('Recorded downpayments are only available for Prepaid Rent and Clothing/Uniform.');
 
-  const datedCreditLines = (rows: DatedAmountRecord[], accountCode: string): JournalLine[] => rows
-    .filter(row => Number(row.amount) > 0)
-    .map(row => ({ accountCode, debit: 0, credit: cents(Number(row.amount)), ...(row.date ? { date: row.date } : {}) }));
+  const datedSources = [
+    { rows: organization, accountCode: '1010' },
+    { rows: officer, accountCode: '2050' },
+    { rows: advance, accountCode: '1250' },
+  ].map(source => ({
+    ...source,
+    rows: source.rows.filter(row => Number(row.amount) > 0).map(row => ({ ...row, date: row.date || input.purchaseDate, amount: cents(Number(row.amount)) })),
+  }));
+  const addCreditLines = (lines: JournalLine[], sources: typeof datedSources, date: string) => {
+    sources.forEach(source => source.rows.filter(row => row.date === date).forEach(row => lines.push({ accountCode: source.accountCode, debit: 0, credit: row.amount, date })));
+  };
+  const paymentOn = (date: string) => cents(datedSources.reduce((sum, source) => sum + total(source.rows.filter(row => row.date === date)), 0));
 
   const lines: JournalLine[] = [{ accountCode: config.assetCode, debit: price, credit: 0, date: input.purchaseDate }];
+  const initialPaid = cents(paymentOn(input.purchaseDate) + downpayment);
+  let remainingPayable = Math.max(0, cents(price - initialPaid));
+  let receivableFromSupplier = Math.max(0, cents(initialPaid - price));
   if (downpayment > 0 && config.depositCode) lines.push({ accountCode: config.depositCode, debit: 0, credit: downpayment, date: input.purchaseDate });
-  lines.push(...datedCreditLines(organization, '1010'));
-  lines.push(...datedCreditLines(officer, '2050'));
-  lines.push(...datedCreditLines(advance, '1250'));
-  const payable = cents(price - paid);
-  if (payable > 0) lines.push({ accountCode: '2060', debit: 0, credit: payable, date: input.purchaseDate });
-  return { lines, payable, paid };
+  addCreditLines(lines, datedSources, input.purchaseDate);
+  if (remainingPayable > 0) lines.push({ accountCode: '2060', debit: 0, credit: remainingPayable, date: input.purchaseDate });
+  if (receivableFromSupplier > 0) lines.push({ accountCode: '1360', debit: receivableFromSupplier, credit: 0, date: input.purchaseDate });
+
+  [...new Set(datedSources.flatMap(source => source.rows.map(row => row.date)).filter(date => date !== input.purchaseDate))].sort().forEach(date => {
+    const payment = paymentOn(date);
+    const payableSettlement = Math.min(remainingPayable, payment);
+    const excess = cents(payment - payableSettlement);
+    if (payableSettlement > 0) lines.push({ accountCode: '2060', debit: payableSettlement, credit: 0, date });
+    if (excess > 0) {
+      lines.push({ accountCode: '1360', debit: excess, credit: 0, date });
+      receivableFromSupplier = cents(receivableFromSupplier + excess);
+    }
+    addCreditLines(lines, datedSources, date);
+    remainingPayable = cents(remainingPayable - payableSettlement);
+  });
+
+  return { lines, payable: remainingPayable, receivableFromSupplier, paid };
 }
 
 export function buildPrepaidAssetDownpaymentPosting(category: PrepaidAssetCategory, amount: number, date: string): JournalLine[] {

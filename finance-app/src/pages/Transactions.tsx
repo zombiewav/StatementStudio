@@ -57,6 +57,7 @@ const GENERAL_FUND_PROJECT = 'General Fund Operations';
 // Working paper's Situation 5.1/5.2/5.3 branch: a donor-restricted
 // contribution whose event hasn't happened yet this period.
 const RESTRICTED_REVENUE_CODE = '4035';
+const PERMANENTLY_RESTRICTED_REVENUE_CODE = '4036';
 const UNRESTRICTED_REVENUE_CODE = '4030';
 const MEMBERSHIP_DUES_RECEIVABLE_CODE = '1300';
 const MERCHANDISE_ITEM_OPTIONS = ['Lanyard', 'Pins', 'Tote Bag', 'Mug', 'Shirt', 'Stickers', 'Others'] as const;
@@ -75,7 +76,7 @@ interface TransactionFormSnapshot {
   pendingReceipts: ReceiptAttachmentDraft[];
   fundingSourceId: string;
   counterpartyName: string;
-  restrictionAnswer: '' | 'no' | 'yes';
+  restrictionAnswer: '' | 'no' | 'yes' | 'permanent';
   samePeriodAnswer: '' | 'yes' | 'no';
   contributionPurpose: '' | 'donations' | 'sponsorships';
   membershipCollections: DatedAmountInputRow[];
@@ -199,7 +200,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   // ("restricted?") is asked whenever the question applies; the second
   // ("same period?") only branches out once the first is answered "yes" —
   // both must be answered before the transaction can post.
-  const [restrictionAnswer, setRestrictionAnswer] = useState<'' | 'no' | 'yes'>('');
+  const [restrictionAnswer, setRestrictionAnswer] = useState<'' | 'no' | 'yes' | 'permanent'>('');
   const [samePeriodAnswer, setSamePeriodAnswer] = useState<'' | 'yes' | 'no'>('');
   const [contributionPurpose, setContributionPurpose] = useState<'' | 'donations' | 'sponsorships'>('');
 
@@ -289,8 +290,11 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   const showRestrictionQuestion = !!classificationPreview?.sponsorshipKind && (creditCode === UNRESTRICTED_REVENUE_CODE || isCashSponsorshipDonation);
   const showSamePeriodQuestion = showRestrictionQuestion && restrictionAnswer === 'yes';
   const isRestricted = showRestrictionQuestion && restrictionAnswer === 'yes' && samePeriodAnswer === 'no';
+  const isPermanentlyRestricted = showRestrictionQuestion && restrictionAnswer === 'permanent';
   const isMembershipRefundStatus = classificationPreview?.defaultDesc === 'Excess Membership Fee Collection - Status';
-  const effectiveCreditCode = isRestricted
+  const effectiveCreditCode = isPermanentlyRestricted
+    ? PERMANENTLY_RESTRICTED_REVENUE_CODE
+    : isRestricted
     ? RESTRICTED_REVENUE_CODE
     : isCashSponsorshipDonation
       ? contributionPurpose === 'sponsorships' ? '4110' : '4100'
@@ -1087,7 +1091,9 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
             donorRestriction: showRestrictionQuestion
               ? restrictionAnswer === 'no'
                 ? 'none'
-                : samePeriodAnswer === 'yes'
+                : restrictionAnswer === 'permanent'
+                  ? 'permanent'
+                  : samePeriodAnswer === 'yes'
                   ? 'satisfied-in-period'
                   : 'temporary'
               : undefined,
@@ -1595,13 +1601,14 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                   <label className="block text-[11px] font-bold text-amber-900 dark:text-amber-300 mb-1.5">Did the donor impose a strict restriction that this sponsorship be used only for a specific event? <span className="text-amber-600">*required</span></label>
                   <select
                     value={restrictionAnswer}
-                    onChange={(e) => { setRestrictionAnswer(e.target.value as '' | 'no' | 'yes'); setSamePeriodAnswer(''); }}
+                    onChange={(e) => { setRestrictionAnswer(e.target.value as '' | 'no' | 'yes' | 'permanent'); setSamePeriodAnswer(''); }}
                     className="w-full bg-white border border-amber-200 text-slate-900 rounded-lg text-xs font-semibold p-2.5 outline-none dark:bg-slate-800 dark:border-amber-500/30 dark:text-slate-100"
                     required
                   >
                     <option value="" disabled>Select an answer…</option>
                     <option value="no">No</option>
                     <option value="yes">Yes</option>
+                    <option value="permanent">Yes — permanently restricted</option>
                   </select>
                 </div>
 
@@ -1622,7 +1629,9 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                 )}
 
                 <p className="text-[10px] text-amber-700 dark:text-amber-400 font-medium">
-                  {isRestricted
+                  {isPermanentlyRestricted
+                    ? 'Recorded as permanently restricted contribution revenue and closed into Permanently Restricted Fund Balance.'
+                    : isRestricted
                     ? 'Recorded against Contributions Revenue - Temporarily Restricted. Once the event happens, complete it in REVIEW to reclassify it as Unrestricted.'
                     : isCashSponsorshipDonation
                       ? `Recorded against ${contributionPurpose === 'sponsorships' ? 'Sponsorships' : 'Donations'}.`

@@ -23,7 +23,7 @@ import { deleteSemesterRecords, precedingSemester } from '../lib/semesterDeletio
 import { validateBackupPayload } from '../lib/backupValidation';
 import { computeAccountBalances, computeTypeTotals } from '../lib/accountTotals';
 import { combineOpeningAndPeriodBalances, carryForwardOpeningBalances, OpeningBalances } from '../lib/reportingPeriodBalances';
-import { computeClosingEntryLines, computeClosingStageLines, findFiscalCloseBlockers } from '../lib/closingEntries';
+import { computeClosingStageLines, findFiscalCloseBlockers } from '../lib/closingEntries';
 import { linkReceiptIdsToEntry } from '../lib/receiptAttachments';
 import { getEffectiveClassificationRules, validateCustomTransactionRule } from '../lib/customTransactionRules';
 import { ActivityFeeFollowUp, ActivityFeeSchedule, buildActivityFeeFollowUp, buildActivityFeeReceivableCollections, buildInitialActivityFeeSchedule, buildScheduledActivityFeeRecognition } from '../lib/activityFees';
@@ -111,6 +111,9 @@ export const INITIAL_ACCOUNTS: Account[] = [
   { code: '1010', name: 'Cash on Hand', type: 'Assets', normalBalance: 'Debit', description: 'Physical cash held directly by the organization (petty cash, cash box)', isActive: true },
   { code: '1015', name: 'Cash in Bank', type: 'Assets', normalBalance: 'Debit', description: 'Funds held in bank accounts, GCash, Maya, and other e-wallets', isActive: true },
   { code: '1200', name: 'Accounts Receivable', type: 'Assets', normalBalance: 'Debit', description: 'Amounts earned or billed but not yet collected from customers, sponsors, or partners', isActive: true },
+  { code: '1210', name: 'Rent Receivable', type: 'Assets', normalBalance: 'Debit', description: 'Rent income earned but not yet collected', isActive: true },
+  { code: '1220', name: 'Advances to Members', type: 'Assets', normalBalance: 'Debit', description: 'Advances issued to members and pending settlement', isActive: true },
+  { code: '1230', name: 'Advances to Others', type: 'Assets', normalBalance: 'Debit', description: 'Advances issued to parties other than officers or members and pending settlement', isActive: true },
   { code: '1250', name: 'Advances to Officers', type: 'Assets', normalBalance: 'Debit', description: 'Cash advances given to officers for organization expenses, pending liquidation', isActive: true },
   // The matching principle, generalized: whenever a transaction's own
   // classification rule allows it (mayDeferPortion — see DEFAULT_RULES),
@@ -154,6 +157,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
   { code: '1345', name: 'Deposit for Uniform/Clothing', type: 'Assets', normalBalance: 'Debit', description: 'Downpayments made for uniforms or clothing before purchase recognition', isActive: true },
   { code: '1350', name: 'Loans to Other Organization', type: 'Assets', normalBalance: 'Debit', description: 'Running balance of loans receivable from other organizations', isActive: true },
   { code: '1360', name: 'Receivable from Supplier', type: 'Assets', normalBalance: 'Debit', description: 'Merchandise payments made to a supplier in excess of the related batch cost', isActive: true },
+  { code: '1370', name: 'Due from Other Organizations', type: 'Assets', normalBalance: 'Debit', description: 'Amounts recoverable from other organizations', isActive: true },
 
   // Liabilities (Normal: Credit)
   // Renamed from the generic "Accounts Payable" to match the working
@@ -165,6 +169,8 @@ export const INITIAL_ACCOUNTS: Account[] = [
   { code: '2030', name: 'Accounts Payable-PPE', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid purchases of property, plant, and equipment', isActive: true },
   { code: '2040', name: 'Accounts Payable-Furniture & Fixture', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid purchases of furniture and fixtures', isActive: true },
   { code: '2060', name: 'Accounts Payable-Prepaid Assets', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid purchases of prepaid assets carried into the following reporting period', isActive: true },
+  { code: '2070', name: 'Due to Members', type: 'Liabilities', normalBalance: 'Credit', description: 'Amounts owed to members', isActive: true },
+  { code: '2080', name: 'Due to Others', type: 'Liabilities', normalBalance: 'Credit', description: 'Amounts owed to parties other than officers, members, or suppliers', isActive: true },
   { code: '2050', name: 'Due to Officers', type: 'Liabilities', normalBalance: 'Credit', description: 'Amounts owed to officers who paid organization expenses out of their own money, pending reimbursement', isActive: true },
   { code: '2110', name: 'Unearned Activity Fees', type: 'Liabilities', normalBalance: 'Credit', description: 'Activity or event fees collected before the event date', isActive: true },
   { code: '2120', name: 'Refund Liability - Activity Fees', type: 'Liabilities', normalBalance: 'Credit', description: 'Activity fee collections received in excess of the required amount and still refundable', isActive: true },
@@ -178,6 +184,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
   { code: '3000', name: 'Income Summary', type: 'Fund Balance', normalBalance: 'Credit', description: 'Temporary year-end clearing account used only by Closing Entries', isActive: true },
   { code: '3010', name: 'General Fund Balance', type: 'Fund Balance', normalBalance: 'Credit', description: 'Unrestricted accumulated fund balances', isActive: true },
   { code: '3020', name: 'Restricted Fund Balance', type: 'Fund Balance', normalBalance: 'Credit', description: 'Donor-restricted capital or specific reserves', isActive: true },
+  { code: '3030', name: 'Permanently Restricted Fund Balance', type: 'Fund Balance', normalBalance: 'Credit', description: 'Donor-restricted funds that must be maintained permanently', isActive: true },
   
   // Revenue (Normal: Credit)
   { code: '4010', name: 'Organization Income', type: 'Revenue', normalBalance: 'Credit', description: 'Income earned through the organization’s programs and services', isActive: true },
@@ -193,6 +200,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
   // Situation 5.3, whose G-column literally reads "Contribution Revenue -
   // Restricted", a Revenue account, not an equity/fund-balance one.
   { code: '4035', name: 'Contributions Revenue - Temporarily Restricted', type: 'Revenue', normalBalance: 'Credit', description: 'Donor-restricted contributions whose triggering event has not yet occurred this period', isActive: true },
+  { code: '4036', name: 'Contributions Revenue - Permanently Restricted', type: 'Revenue', normalBalance: 'Credit', description: 'Donor-restricted contributions that must remain permanently restricted', isActive: true },
   { code: '4040', name: 'Membership Dues', type: 'Revenue', normalBalance: 'Credit', description: 'Dues collected from members', isActive: true },
   { code: '4050', name: 'Other Income', type: 'Revenue', normalBalance: 'Credit', description: 'Miscellaneous income not covered by another revenue account (cashback, advertising revenue, cash prizes received, ticket sales, etc.)', isActive: true },
   // Split out from Other Income per the client's revised note sheet: renting
@@ -221,7 +229,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
   // Added to support the "meal(s)" classification rule below, the concrete
   // example (working paper Sheet2, "Payment for Meals") that demonstrates
   // the purpose question (Question A) — see purposeOptions on that rule.
-  { code: '5080', name: 'Food and Meals Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Food and meals for meetings, events, participants, speakers, and organizers', isActive: true },
+  { code: '5080', name: 'Meals and Refreshments Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Meals and refreshments for meetings, events, participants, speakers, and organizers', isActive: true },
   { code: '5090', name: 'Depreciation Expense - Equipment', type: 'Expenses', normalBalance: 'Debit', description: 'Periodic depreciation charged against Equipment & Tools', isActive: true },
   { code: '5095', name: 'Depreciation Expense - Furniture & Fixtures', type: 'Expenses', normalBalance: 'Debit', description: 'Periodic depreciation charged against Furniture & Fixtures', isActive: true },
   { code: '5100', name: 'Bank Charges', type: 'Expenses', normalBalance: 'Debit', description: 'Bank fees, service charges, and transaction fees', isActive: true },
@@ -230,7 +238,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
   { code: '5130', name: 'Communication Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Phone, mobile load, and other communication costs', isActive: true },
   { code: '5140', name: 'Printing Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Printing, photocopying, and reproduction costs', isActive: true },
   { code: '5150', name: 'Delivery Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Freight, shipping, and delivery costs', isActive: true },
-  { code: '5160', name: 'Supplies Expense', type: 'Expenses', normalBalance: 'Debit', description: 'General event and operational supplies (distinct from administrative Office Supplies)', isActive: true },
+  { code: '5160', name: 'Event Supplies Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Supplies consumed specifically for an event or program', isActive: true },
   { code: '5170', name: 'Loss from Spoilage', type: 'Expenses', normalBalance: 'Debit', description: 'Donated food or supplies that expired, spoiled, or became unusable', isActive: true },
   { code: '5180', name: 'Uniform Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Uniforms and organization apparel for members and officers', isActive: true },
   { code: '5190', name: 'Tokens & Recognition Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Tokens, certificates, and recognition items for volunteers and participants', isActive: true },
@@ -241,6 +249,12 @@ export const INITIAL_ACCOUNTS: Account[] = [
   { code: '5240', name: 'Cost of Sales - Merchandise', type: 'Expenses', normalBalance: 'Debit', description: 'Cost carried in inventory for merchandise that has been sold', isActive: true },
   { code: '5250', name: 'Promotional and Advertising Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Tarpaulins, banners, brochures, and other promotional materials', isActive: true },
   { code: '5260', name: 'Recording and Production Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Recording sessions, station IDs, and production fees', isActive: true },
+  { code: '5270', name: 'Food Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Food costs that are distinct from meals and refreshments', isActive: true },
+  { code: '5280', name: 'Printing Supplies Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Paper, ink, and other supplies consumed for printing work', isActive: true },
+  { code: '5290', name: 'Supplies and Materials Expense', type: 'Expenses', normalBalance: 'Debit', description: 'General supplies and materials consumed outside a specific event', isActive: true },
+  { code: '5300', name: 'Professional Fee Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Professional fees paid for specialized services', isActive: true },
+  { code: '5310', name: 'Logistics and Venue Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Venue, logistics, and event coordination costs', isActive: true },
+  { code: '5320', name: 'Assistance Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Financial or in-kind assistance provided by the organization', isActive: true },
 ];
 
 // Sample Projects — fabricated demo programs and budgets, opt-in only via
@@ -713,7 +727,6 @@ interface FinanceContextType {
   finalizeJournalEntry: (id: string) => void;
   reverseJournalEntry: (id: string) => void;
   deleteJournalEntry: (id: string) => void;
-  closeFiscalYear: (fiscalYear: string, closingDate: string) => void;
   postClosingStage: (fiscalYear: string, closingDate: string, stage: 'revenue' | 'expense' | 'income-summary') => void;
   attachReceiptsToEntry: (entryId: string, receipts: ReceiptAttachmentDraft[]) => void;
   addCustomClassificationRule: (description: string, debitAccountCode: string, creditAccountCode: string) => void;
@@ -788,7 +801,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       if (account.code === '4035' && account.name === 'Contributions Revenue - Restricted') return { ...account, name: 'Contributions Revenue - Temporarily Restricted' };
       if (account.code === '1200' && account.name === 'Receivables') return { ...account, name: 'Accounts Receivable', description: 'Amounts earned or billed but not yet collected from customers, sponsors, or partners' };
       if (account.code === '2110' && account.name === 'Deferred Activity Fees') return { ...account, name: 'Unearned Activity Fees', description: 'Activity or event fees collected before the event date' };
-      const workingPaperExpense = INITIAL_ACCOUNTS.find(defaultAccount => defaultAccount.code === account.code && ['1350', '2010', '5050', '5070', '5080', '5120', '5150', '5230'].includes(account.code));
+      const workingPaperExpense = INITIAL_ACCOUNTS.find(defaultAccount => defaultAccount.code === account.code && ['1350', '2010', '5050', '5070', '5080', '5120', '5150', '5160', '5230'].includes(account.code));
       if (workingPaperExpense) return { ...account, name: workingPaperExpense.name, description: workingPaperExpense.description };
       return account;
     });
@@ -985,7 +998,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
           setWorkspaceError('Your saved workspace could not be read safely.');
           return;
         }
-        setAccounts([...saved.accounts, ...INITIAL_ACCOUNTS.filter(a => ['1280', '1285', '1290', '1295', '1298', '1330', '1340', '1345', '1360', '2030', '2040', '2060', '2140', '2150', '4100', '4110'].includes(a.code) && !saved.accounts.some(existing => existing.code === a.code))]);
+        setAccounts([...saved.accounts, ...INITIAL_ACCOUNTS.filter(a => ['1210', '1220', '1230', '1280', '1285', '1290', '1295', '1298', '1330', '1340', '1345', '1360', '1370', '2030', '2040', '2060', '2070', '2080', '2140', '2150', '4100', '4110'].includes(a.code) && !saved.accounts.some(existing => existing.code === a.code))]);
         setJournalEntries(saved.journalEntries);
         setProjects(saved.projects || []);
         setAuditLogs(saved.auditLogs || []);
@@ -1409,43 +1422,6 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     logAudit('Attach Receipt', `Added ${receipts.length} receipt image${receipts.length === 1 ? '' : 's'} to ${entry?.reference || entryId}.`);
   };
 
-  // Closes a fiscal year: zeroes Revenue/Expenses as of closingDate into
-  // General Fund Balance via one real journal entry, exactly like a
-  // traditional closing entry. Nothing else needs to "carry forward" —
-  // permanent accounts (Assets/Liabilities/Fund Balance) already are
-  // running totals across every entry, so the next period picks up
-  // wherever this one leaves off automatically.
-  const closeFiscalYear = (fiscalYear: string, closingDate: string) => {
-    if (closedFiscalYears.some(c => c.fiscalYear === fiscalYear)) {
-      throw new Error(`${fiscalYear} has already been closed.`);
-    }
-    const blockers = findFiscalCloseBlockers(journalEntries, accounts);
-    if (blockers.length > 0) {
-      throw new Error(`Cannot close the fiscal year while ${blockers.length} transaction${blockers.length === 1 ? '' : 's'} remain incomplete in Review.`);
-    }
-
-    const entriesToDate = journalEntries.filter(je => je.date <= closingDate);
-    const balancesToDate = computeAccountBalances(entriesToDate, accounts);
-    const { lines, netIncome } = computeClosingEntryLines(balancesToDate, accounts, GENERAL_FUND_BALANCE_CODE);
-
-    if (lines.length === 0) {
-      throw new Error('Nothing to close — no Revenue or Expense activity as of this date.');
-    }
-
-    const entry = addJournalEntry(closingDate, `Closing Entries — ${fiscalYear}`, GENERAL_FUND_PROJECT, lines);
-
-    const record: ClosingRecord = {
-      id: `closing-${Date.now()}`,
-      fiscalYear,
-      closingDate,
-      netIncome,
-      journalEntryId: entry.id,
-      closedAt: new Date().toISOString(),
-    };
-    setClosedFiscalYears(prev => [...prev, record]);
-    logAudit('Close Fiscal Year', `Closed ${fiscalYear} as of ${closingDate}: net ${netIncome >= 0 ? 'surplus' : 'deficit'} of ${settings.currencySymbol}${Math.abs(netIncome).toLocaleString()} posted to Fund Balance via ${entry.reference}.`);
-  };
-
   const postClosingStage = (fiscalYear: string, closingDate: string, stage: 'revenue' | 'expense' | 'income-summary') => {
     const current = closedFiscalYears.find(record => record.fiscalYear === fiscalYear);
     if (current?.completed) throw new Error(`${fiscalYear} has already been closed.`);
@@ -1723,7 +1699,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       user: settings.organizationName,
     };
 
-    setAccounts([...payload.accounts, ...INITIAL_ACCOUNTS.filter(a => ['1280', '1285', '1290', '1295', '1298', '1330', '1340', '1345', '1360', '2030', '2040', '2060', '2140', '2150', '4100', '4110'].includes(a.code) && !payload.accounts.some(existing => existing.code === a.code))]);
+    setAccounts([...payload.accounts, ...INITIAL_ACCOUNTS.filter(a => ['1210', '1220', '1230', '1280', '1285', '1290', '1295', '1298', '1330', '1340', '1345', '1360', '1370', '2030', '2040', '2060', '2070', '2080', '2140', '2150', '4100', '4110'].includes(a.code) && !payload.accounts.some(existing => existing.code === a.code))]);
     setJournalEntries(payload.journalEntries);
     setProjects(Array.isArray(payload.projects) ? payload.projects : []);
     setAuditLogs([restoreLogEntry, ...restoredLogs].slice(0, 100));
@@ -1794,7 +1770,6 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       finalizeJournalEntry,
       reverseJournalEntry,
       deleteJournalEntry,
-      closeFiscalYear,
       postClosingStage,
       attachReceiptsToEntry,
       addCustomClassificationRule,

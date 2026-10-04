@@ -20,16 +20,34 @@ describe('prepaid assets', () => {
       expect.objectContaining({ accountCode: '1010', credit: 200 }),
       expect.objectContaining({ accountCode: '2050', credit: 100 }),
       expect.objectContaining({ accountCode: '1250', credit: 250 }),
-      expect.objectContaining({ accountCode: '2060', credit: 450 }),
+      expect.objectContaining({ accountCode: '2060', credit: 800, date: '2026-10-03' }),
+      expect.objectContaining({ accountCode: '2060', debit: 100, date: '2026-10-04' }),
+      expect.objectContaining({ accountCode: '2060', debit: 250, date: '2026-10-05' }),
     ]));
   });
 
-  it('applies rent deposits and rejects overpayment or unavailable advances', () => {
+  it('applies rent deposits, records supplier overpayments, and rejects unavailable advances', () => {
     const posting = buildPrepaidAssetPurchasePosting({ category: 'rent', purchasePrice: 500, purchaseDate: '2026-10-03', paymentMethod: 'organization-funds', organizationPayments: [{ date: '', amount: 300 }], downpaymentAmount: 200, availableCash: 300 });
     expect(posting.payable).toBe(0);
     expect(posting.lines).toContainEqual(expect.objectContaining({ accountCode: '1340', credit: 200 }));
     expect(() => buildPrepaidAssetPurchasePosting({ category: 'wifi', purchasePrice: 100, purchaseDate: '2026-10-03', paymentMethod: 'officer-advance', advancePayments: [{ date: '', amount: 100 }], availableAdvance: 50 })).toThrow(/advance balance/i);
-    expect(() => buildPrepaidAssetPurchasePosting({ category: 'awards', purchasePrice: 100, purchaseDate: '2026-10-03', paymentMethod: 'organization-funds', organizationPayments: [{ date: '', amount: 101 }], availableCash: 101 })).toThrow(/cannot exceed/i);
+    const overpayment = buildPrepaidAssetPurchasePosting({ category: 'awards', purchasePrice: 100, purchaseDate: '2026-10-03', paymentMethod: 'organization-funds', organizationPayments: [{ date: '', amount: 101 }], availableCash: 101 });
+    expect(overpayment.receivableFromSupplier).toBe(1);
+    expect(overpayment.lines).toContainEqual(expect.objectContaining({ accountCode: '1360', debit: 1, credit: 0 }));
+  });
+
+  it('uses later payments to clear the related payable before recording supplier receivable', () => {
+    const posting = buildPrepaidAssetPurchasePosting({
+      category: 'supplies', purchasePrice: 100, purchaseDate: '2026-10-03', paymentMethod: 'organization-funds',
+      organizationPayments: [{ date: '', amount: 40 }, { date: '2026-10-04', amount: 70 }], availableCash: 110,
+    });
+    expect(posting.payable).toBe(0);
+    expect(posting.receivableFromSupplier).toBe(10);
+    expect(posting.lines).toEqual(expect.arrayContaining([
+      expect.objectContaining({ accountCode: '2060', debit: 60, credit: 0, date: '2026-10-04' }),
+      expect.objectContaining({ accountCode: '1360', debit: 10, credit: 0, date: '2026-10-04' }),
+      expect.objectContaining({ accountCode: '1010', debit: 0, credit: 70, date: '2026-10-04' }),
+    ]));
   });
 
   it('posts deposits and consumption to the category-specific accounts', () => {
