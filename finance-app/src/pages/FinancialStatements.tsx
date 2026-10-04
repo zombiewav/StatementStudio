@@ -12,7 +12,7 @@ import { useFinance } from '../context/FinanceContext';
 import { computeActivitiesExpenseBreakdown } from '../lib/activitiesBreakdown';
 import { computeAccountBalances, computeTypeTotals, isContraAccount } from '../lib/accountTotals';
 import { computeTransactionReviewStates } from '../lib/reviewEngine';
-import { computeCashFlowDetails } from '../lib/cashFlow';
+import { CASH_FLOW_EXPENSE_ROWS, CASH_FLOW_OPERATING_ROWS, computeCashFlowDetails } from '../lib/cashFlow';
 import { excludeClosingEntries } from '../lib/closingEntries';
 import { periodForSemester } from '../lib/reportingPeriod';
 import { combineOpeningAndPeriodBalances } from '../lib/reportingPeriodBalances';
@@ -261,15 +261,28 @@ export function FinancialStatements(): React.ReactElement {
         csvContent += `"Net Surplus/(Deficit)",${fNetIncome}\n`;
       } else if (activeTab === 'cashflow') {
         csvContent += "CASH FLOWS FROM OPERATING ACTIVITIES\n";
-        csvContent += `"Cash Inflows from Operations",${cashFlowDetails.cashInflows}\n`;
-        csvContent += `"Cash Outflows for Operations",${cashFlowDetails.cashOutflows}\n`;
-        csvContent += `"Net Cash from Operating",${cashFlowDetails.netOperating}\n\n`;
+        csvContent += "Cash received from:\n";
+        CASH_FLOW_OPERATING_ROWS.forEach(row => {
+          csvContent += `"${row.label}",${cashFlowDetails.operatingInflows[row.key]}\n`;
+        });
+        csvContent += `"Other Receipts",${cashFlowDetails.otherReceipts}\n`;
+        csvContent += "Cash paid for:\n";
+        CASH_FLOW_EXPENSE_ROWS.forEach(row => {
+          csvContent += `"${row.label}",${cashFlowDetails.operatingOutflows[row.key]}\n`;
+        });
+        csvContent += `"Other Expenses",${cashFlowDetails.otherExpenses}\n`;
+        csvContent += `"Net Cash Provided by Operating Activities",${cashFlowDetails.netOperating}\n\n`;
 
         csvContent += "CASH FLOWS FROM INVESTING ACTIVITIES\n";
-        csvContent += `"Net Cash from Investing",${cashFlowDetails.netInvesting}\n\n`;
+        csvContent += `"Sale of Equipment",${cashFlowDetails.equipmentSales}\n`;
+        csvContent += `"Purchase of Equipment",${cashFlowDetails.equipmentPurchases}\n`;
+        csvContent += `"Sale of Furniture and Fixtures",${cashFlowDetails.furnitureSales}\n`;
+        csvContent += `"Purchase of Furniture and Fixtures",${cashFlowDetails.furniturePurchases}\n`;
+        csvContent += `"Net Cash Provided by Investing Activities",${cashFlowDetails.netInvesting}\n\n`;
 
         csvContent += "CASH FLOWS FROM FINANCING ACTIVITIES\n";
-        csvContent += `"Net Cash from Financing",${cashFlowDetails.netFinancing}\n\n`;
+        csvContent += `"Financing Cash Flows",${cashFlowDetails.financingCashFlows}\n`;
+        csvContent += `"Net Cash Provided by Financing Activities",${cashFlowDetails.netFinancing}\n\n`;
 
         csvContent += `"Net Increase/(Decrease) in Cash",${cashFlowDetails.netChange}\n`;
         csvContent += `"Cash at Beginning of Period",${cashFlowDetails.beginningCash}\n`;
@@ -302,6 +315,9 @@ export function FinancialStatements(): React.ReactElement {
     () => computeCashFlowDetails(journalEntries, accounts, startDate, endDate, openingBalances['1010'] || 0),
     [journalEntries, accounts, startDate, endDate, openingBalances]
   );
+  const formatOutflow = (amount: number) => amount === 0
+    ? formatCurrency(0)
+    : `(${formatCurrency(Math.abs(amount))})`;
 
   return (
     <div className="space-y-6 bg-slate-50 dark:bg-slate-950">
@@ -694,14 +710,28 @@ export function FinancialStatements(): React.ReactElement {
                 {/* OPERATING ACTIVITIES */}
                 <div>
                   <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wider text-[10px]">Cash Flows from Operating Activities</h3>
-                  <div className="space-y-1.5 px-4">
-                    <div className="flex justify-between rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                      <span>Cash Collected from Operations & Clients</span>
-                      <span>{formatCurrency(cashFlowDetails.cashInflows)}</span>
+                  <div className="space-y-1 px-4">
+                    <p className="font-semibold">Cash received from:</p>
+                    {CASH_FLOW_OPERATING_ROWS.map(row => (
+                      <div key={row.key} className="flex justify-between rounded-md pl-4 hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                        <span>{row.label}</span>
+                        <span>{formatCurrency(cashFlowDetails.operatingInflows[row.key])}</span>
+                      </div>
+                    ))}
+                    <div className="flex justify-between rounded-md pl-4 hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                      <span>Other Receipts</span>
+                      <span>{formatCurrency(cashFlowDetails.otherReceipts)}</span>
                     </div>
-                    <div className="flex justify-between rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                      <span>Cash Paid to Employees & Vendors</span>
-                      <span>({formatCurrency(Math.abs(cashFlowDetails.cashOutflows))})</span>
+                    <p className="pt-2 font-semibold">Less: Cash paid for:</p>
+                    {CASH_FLOW_EXPENSE_ROWS.map(row => (
+                      <div key={row.key} className="flex justify-between rounded-md pl-4 hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                        <span>{row.label}</span>
+                        <span>{formatOutflow(cashFlowDetails.operatingOutflows[row.key])}</span>
+                      </div>
+                    ))}
+                    <div className="flex justify-between rounded-md pl-4 hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                      <span>Other Expenses</span>
+                      <span>{formatOutflow(cashFlowDetails.otherExpenses)}</span>
                     </div>
                   </div>
                   <div className="flex justify-between py-1.5 border-t border-slate-200 dark:border-slate-700 font-semibold text-slate-900 dark:text-slate-100 mt-2 px-4">
@@ -715,12 +745,24 @@ export function FinancialStatements(): React.ReactElement {
                   <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wider text-[10px]">Cash Flows from Investing Activities</h3>
                   <div className="space-y-1 px-4">
                     <div className="flex justify-between rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                      <span>Purchase of Equipment & Hardware</span>
-                      <span>{cashFlowDetails.netInvesting !== 0 ? `(${formatCurrency(Math.abs(cashFlowDetails.netInvesting))})` : `${settings.currencySymbol}0.00`}</span>
+                      <span>Sale of Equipment</span>
+                      <span>{formatCurrency(cashFlowDetails.equipmentSales)}</span>
+                    </div>
+                    <div className="flex justify-between rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                      <span>Purchase of Equipment</span>
+                      <span>{formatOutflow(cashFlowDetails.equipmentPurchases)}</span>
+                    </div>
+                    <div className="flex justify-between rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                      <span>Sale of Furniture and Fixtures</span>
+                      <span>{formatCurrency(cashFlowDetails.furnitureSales)}</span>
+                    </div>
+                    <div className="flex justify-between rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                      <span>Purchase of Furniture and Fixtures</span>
+                      <span>{formatOutflow(cashFlowDetails.furniturePurchases)}</span>
                     </div>
                   </div>
                   <div className="flex justify-between py-1.5 border-t border-slate-200 dark:border-slate-700 font-semibold text-slate-900 dark:text-slate-100 mt-2 px-4">
-                    <span>Net Cash Used in Investing Activities</span>
+                    <span>Net Cash Provided by Investing Activities</span>
                     <span className="font-bold">{formatCurrency(cashFlowDetails.netInvesting)}</span>
                   </div>
                 </div>
@@ -730,8 +772,8 @@ export function FinancialStatements(): React.ReactElement {
                   <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wider text-[10px]">Cash Flows from Financing Activities</h3>
                   <div className="space-y-1 px-4">
                     <div className="flex justify-between rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                      <span>Proceeds from Bank Borrowings & Loans</span>
-                      <span>{formatCurrency(cashFlowDetails.netFinancing)}</span>
+                      <span>Financing Cash Flows</span>
+                      <span>{cashFlowDetails.financingCashFlows < 0 ? formatOutflow(cashFlowDetails.financingCashFlows) : formatCurrency(cashFlowDetails.financingCashFlows)}</span>
                     </div>
                   </div>
                   <div className="flex justify-between py-1.5 border-t border-slate-200 dark:border-slate-700 font-semibold text-slate-900 dark:text-slate-100 mt-2 px-4">

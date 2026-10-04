@@ -47,4 +47,29 @@ describe('computeCashFlowDetails', () => {
     expect(result.netFinancing).toBe(2500);
     expect(result.endingCash).toBe(1700);
   });
+
+  it('breaks direct-method operating cash flows into the statement rows', () => {
+    const result = computeCashFlowDetails([
+      entry('JE-1', '2026-02-01', [{ accountCode: '1010', debit: 500, credit: 0 }, { accountCode: '4040', debit: 0, credit: 500 }]),
+      entry('JE-2', '2026-02-02', [{ accountCode: '5080', debit: 125, credit: 0 }, { accountCode: '1010', debit: 0, credit: 125 }]),
+      entry('JE-3', '2026-02-03', [{ accountCode: '1010', debit: 50, credit: 0 }, { accountCode: '1200', debit: 0, credit: 50 }]),
+    ], accounts, '2026-01-01', '2026-12-31');
+
+    expect(result.operatingInflows.membershipFees).toBe(500);
+    expect(result.operatingOutflows.mealsAndRefreshments).toBe(-125);
+    expect(result.otherReceipts).toBe(50);
+    expect(result.netOperating).toBe(425);
+  });
+
+  it('shows equipment and furniture purchases and sales separately', () => {
+    const furnitureAccount = { code: '1650', name: 'Furniture', type: 'Assets' as const, normalBalance: 'Debit' as const, description: '', isActive: true };
+    const result = computeCashFlowDetails([
+      entry('JE-1', '2026-02-01', [{ accountCode: '1500', debit: 500, credit: 0 }, { accountCode: '1010', debit: 0, credit: 500 }]),
+      entry('JE-2', '2026-02-02', [{ accountCode: '1010', debit: 150, credit: 0 }, { accountCode: '1650', debit: 0, credit: 150 }]),
+    ], [...accounts, furnitureAccount], '2026-01-01', '2026-12-31');
+
+    expect(result.equipmentPurchases).toBe(-500);
+    expect(result.furnitureSales).toBe(150);
+    expect(result.netInvesting).toBe(-350);
+  });
 });
