@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { buildMerchandiseAcquisitionPosting, buildMerchandisePrepaymentPosting } from './merchandiseAcquisition';
+import { aggregateAvailableMerchandisePrepayments, buildMerchandiseAcquisitionPosting, buildMerchandisePrepaymentPosting, buildSupplierReceivableCollectionPosting } from './merchandiseAcquisition';
 
 describe('merchandise acquisition posting', () => {
-  it('records an organization payment and leaves the unpaid cost in Merchandise Payable', () => {
+  it('records an organization payment and leaves the unpaid cost in Accounts Payable - Merchandise', () => {
     expect(buildMerchandiseAcquisitionPosting({
       totalCost: 1000,
       paymentMethod: 'organization-funds',
@@ -22,17 +22,14 @@ describe('merchandise acquisition posting', () => {
     });
   });
 
-  it('separates an officer payment, reimbursement, and unpaid supplier balance', () => {
+  it('records officer payments as Due to Officers and leaves reimbursement separate', () => {
     expect(buildMerchandiseAcquisitionPosting({
       totalCost: 1000,
       paymentMethod: 'officer-personal',
       officerPayment: 700,
-      reimbursement: 200,
     }).lines).toEqual([
       { accountCode: '1700', debit: 1000, credit: 0 },
       { accountCode: '2050', debit: 0, credit: 700 },
-      { accountCode: '2050', debit: 200, credit: 0 },
-      { accountCode: '1010', debit: 0, credit: 200 },
       { accountCode: '2020', debit: 0, credit: 300 },
     ]);
   });
@@ -50,21 +47,21 @@ describe('merchandise acquisition posting', () => {
     ]);
   });
 
-  it('supports a combination of advance, personal money, reimbursement, and payable', () => {
+  it('supports a combination of organization funds, officer money, and officer advance', () => {
     expect(buildMerchandiseAcquisitionPosting({
       totalCost: 1200,
       paymentMethod: 'advance-and-personal',
+      organizationPayment: 200,
       advancePayment: 400,
       officerPayment: 500,
-      reimbursement: 100,
+      availableCash: 200,
       availableAdvance: 400,
     }).lines).toEqual([
       { accountCode: '1700', debit: 1200, credit: 0 },
+      { accountCode: '1010', debit: 0, credit: 200 },
       { accountCode: '1250', debit: 0, credit: 400 },
       { accountCode: '2050', debit: 0, credit: 500 },
-      { accountCode: '2050', debit: 100, credit: 0 },
-      { accountCode: '1010', debit: 0, credit: 100 },
-      { accountCode: '2020', debit: 0, credit: 300 },
+      { accountCode: '2020', debit: 0, credit: 100 },
     ]);
   });
 
@@ -78,24 +75,16 @@ describe('merchandise acquisition posting', () => {
     ]);
   });
 
-  it('keeps each supplier payment and reimbursement on its actual posting date', () => {
+  it('keeps each supplier payment on its actual posting date and reimbursement separate', () => {
     expect(buildMerchandiseAcquisitionPosting({
       totalCost: 1000,
       paymentMethod: 'officer-personal',
       transactionDate: '2026-01-10',
       officerPayments: [{ date: '2026-01-12', amount: 700 }],
-      reimbursements: [
-        { date: '2026-01-20', amount: 100 },
-        { date: '2026-01-25', amount: 100 },
-      ],
     }).lines).toEqual([
       { accountCode: '1700', debit: 1000, credit: 0, date: '2026-01-10' },
       { accountCode: '2020', debit: 700, credit: 0, date: '2026-01-12' },
       { accountCode: '2050', debit: 0, credit: 700, date: '2026-01-12' },
-      { accountCode: '2050', debit: 100, credit: 0, date: '2026-01-20' },
-      { accountCode: '1010', debit: 0, credit: 100, date: '2026-01-20' },
-      { accountCode: '2050', debit: 100, credit: 0, date: '2026-01-25' },
-      { accountCode: '1010', debit: 0, credit: 100, date: '2026-01-25' },
       { accountCode: '2020', debit: 0, credit: 1000, date: '2026-01-10' },
     ]);
   });
@@ -149,10 +138,10 @@ describe('merchandise acquisition posting', () => {
       paymentMethod: 'organization-funds',
       transactionDate: '2026-02-10',
       organizationPayments: [{ date: '2026-02-09', amount: 50 }],
-    })).toThrow(/earlier than the Date of Purchase/i);
+    })).toThrow(/earlier than the Date Merchandise Was Received/i);
   });
 
-  it('posts merchandise overpayments to Receivable from Supplier after settling Merchandise Payable', () => {
+  it('posts merchandise overpayments to Accounts Receivable - Suppliers after settling the merchandise payable', () => {
     expect(buildMerchandiseAcquisitionPosting({
       totalCost: 1000,
       paymentMethod: 'organization-funds',
@@ -178,9 +167,29 @@ describe('merchandise acquisition posting', () => {
     ]));
   });
 
-  it('continues to reject excessive reimbursements and unavailable advances', () => {
-    expect(() => buildMerchandiseAcquisitionPosting({ totalCost: 100, paymentMethod: 'officer-personal', officerPayment: 50, reimbursement: 51 })).toThrow(/reimbursement/i);
+  it('rejects unavailable organization cash and officer advances', () => {
+    expect(() => buildMerchandiseAcquisitionPosting({ totalCost: 100, paymentMethod: 'organization-funds', organizationPayment: 50, availableCash: 49 })).toThrow(/cash balance/i);
     expect(() => buildMerchandiseAcquisitionPosting({ totalCost: 100, paymentMethod: 'organization-advance', advancePayment: 50, availableAdvance: 49 })).toThrow(/advance used/i);
+  });
+
+  it('collects supplier receivables without exceeding the outstanding balance', () => {
+    expect(buildSupplierReceivableCollectionPosting(250, '2026-10-06', 300)).toEqual([
+      { accountCode: '1010', debit: 250, credit: 0, date: '2026-10-06' },
+      { accountCode: '1360', debit: 0, credit: 250, date: '2026-10-06' },
+    ]);
+    expect(() => buildSupplierReceivableCollectionPosting(301, '2026-10-06', 300)).toThrow(/cannot exceed/i);
+  });
+
+  it('combines every unused downpayment for the same merchandise and batch', () => {
+    const base = { reference: 'JE-1', date: '2026-10-01', description: 'Downpayment', project: 'General Fund Operations' };
+    const result = aggregateAvailableMerchandisePrepayments([
+      { ...base, id: 'dp-1', transactionDetails: { eventRelated: false, receiptAttachmentIds: [], merchandiseItem: 'Lanyard', merchandiseBatch: 'Batch 1' }, lines: [{ accountCode: '1270', debit: 100, credit: 0 }] },
+      { ...base, id: 'dp-2', transactionDetails: { eventRelated: false, receiptAttachmentIds: [], merchandiseItem: 'Lanyard', merchandiseBatch: 'Batch 1' }, lines: [{ accountCode: '1270', debit: 150, credit: 0 }] },
+      { ...base, id: 'dp-other', transactionDetails: { eventRelated: false, receiptAttachmentIds: [], merchandiseItem: 'Mug', merchandiseBatch: 'Batch 1' }, lines: [{ accountCode: '1270', debit: 500, credit: 0 }] },
+      { ...base, id: 'acquisition', transactionDetails: { eventRelated: false, receiptAttachmentIds: [], merchandisePrepaymentEntryIds: ['dp-used'] }, lines: [{ accountCode: '1700', debit: 50, credit: 0 }] },
+      { ...base, id: 'dp-used', transactionDetails: { eventRelated: false, receiptAttachmentIds: [], merchandiseItem: 'Lanyard', merchandiseBatch: 'Batch 1' }, lines: [{ accountCode: '1270', debit: 50, credit: 0 }] },
+    ], 'Lanyard', 'Batch 1');
+    expect(result).toEqual({ entryIds: ['dp-1', 'dp-2'], amount: 250 });
   });
 });
 

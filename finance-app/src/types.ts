@@ -81,6 +81,7 @@ export interface TransactionDetails {
   merchandiseBatch?: string;
   merchandisePurchaseDate?: string;
   merchandisePrepaymentEntryId?: string;
+  merchandisePrepaymentEntryIds?: string[];
   merchandisePrepaymentAmount?: number;
   merchandiseQuantity?: number;
   merchandisePaymentMethod?: 'organization-funds' | 'officer-personal' | 'organization-advance' | 'advance-and-personal' | 'not-yet-paid';
@@ -102,6 +103,7 @@ export interface TransactionDetails {
   merchandiseRemittances?: DatedAmountRecord[];
   merchandiseAccountsReceivable?: number;
   merchandiseDueFromOfficer?: number;
+  supplierReceivableCollectionAmount?: number;
   receiptAttachmentIds: string[];
 }
 

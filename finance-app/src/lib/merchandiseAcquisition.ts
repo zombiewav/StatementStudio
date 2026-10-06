@@ -1,4 +1,4 @@
-import { DatedAmountRecord, JournalLine } from '../types';
+import { DatedAmountRecord, JournalEntry, JournalLine } from '../types';
 
 export const MERCHANDISE_INVENTORY_ACCOUNT_CODE = '1700';
 export const MERCHANDISE_PAYABLE_ACCOUNT_CODE = '2020';
@@ -23,11 +23,10 @@ export interface MerchandiseAcquisitionInput {
   organizationPayments?: DatedAmountRecord[];
   officerPayment?: number;
   officerPayments?: DatedAmountRecord[];
-  reimbursement?: number;
-  reimbursements?: DatedAmountRecord[];
   advancePayment?: number;
   advancePayments?: DatedAmountRecord[];
   availableAdvance?: number;
+  availableCash?: number;
   prepaymentAmount?: number;
 }
 
@@ -51,6 +50,11 @@ export interface MerchandisePrepaymentInput {
   availableCash?: number;
   availableAdvance?: number;
   cashAccountCode?: string;
+}
+
+export interface MerchandisePrepaymentTotal {
+  entryIds: string[];
+  amount: number;
 }
 
 const cents = (value: number): number => Math.round(value * 100) / 100;
@@ -90,6 +94,21 @@ function addLine(lines: JournalLine[], accountCode: string, debit: number, credi
   lines.push({ accountCode, debit: normalizedDebit, credit: normalizedCredit, ...(date ? { date } : {}) });
 }
 
+export function aggregateAvailableMerchandisePrepayments(entries: JournalEntry[], item: string, batch: string): MerchandisePrepaymentTotal {
+  if (!item.trim() || !batch.trim()) return { entryIds: [], amount: 0 };
+  const used = new Set(entries.flatMap(entry => [
+    entry.transactionDetails?.merchandisePrepaymentEntryId,
+    ...(entry.transactionDetails?.merchandisePrepaymentEntryIds || []),
+  ]).filter((id): id is string => Boolean(id)));
+  const matching = entries.filter(entry => !entry.isDraft && !entry.reversalOfEntryId && !entry.reversedByEntryId && !used.has(entry.id)
+    && entry.transactionDetails?.merchandiseItem === item
+    && entry.transactionDetails?.merchandiseBatch === batch);
+  return {
+    entryIds: matching.map(entry => entry.id),
+    amount: cents(matching.reduce((sum, entry) => sum + entry.lines.filter(line => line.accountCode === ADVANCES_TO_SUPPLIERS_ACCOUNT_CODE).reduce((lineSum, line) => lineSum + line.debit - line.credit, 0), 0)),
+  };
+}
+
 /** Records a supplier downpayment for pre-ordered merchandise. */
 export function buildMerchandisePrepaymentPosting(input: MerchandisePrepaymentInput): JournalLine[] {
   const prepayment = requireNonNegative('Supplier downpayment', input.amount);
@@ -127,13 +146,12 @@ export function buildMerchandiseAcquisitionPosting(input: MerchandiseAcquisition
 
   const organizationPayments = datedAmounts('Organization payment', input.organizationPayments, input.organizationPayment || 0, input.transactionDate);
   const officerPayments = datedAmounts('Officer payment', input.officerPayments, input.officerPayment || 0, input.transactionDate);
-  const reimbursements = datedAmounts('Officer reimbursement', input.reimbursements, input.reimbursement || 0, input.transactionDate);
   const advancePayments = datedAmounts('Advance used', input.advancePayments, input.advancePayment || 0, input.transactionDate);
   const organizationPayment = total(organizationPayments);
   const officerPayment = total(officerPayments);
-  const reimbursement = total(reimbursements);
   const advancePayment = total(advancePayments);
   const availableAdvance = requireNonNegative('Available officer advance', input.availableAdvance || 0);
+  const availableCash = input.availableCash === undefined ? Number.POSITIVE_INFINITY : requireNonNegative('Available cash', input.availableCash);
   const prepaymentAmount = requireNonNegative('Linked supplier prepayment', input.prepaymentAmount || 0);
   const cashAccountCode = input.cashAccountCode || '1010';
   const purchaseDate = input.transactionDate || '';
@@ -141,31 +159,25 @@ export function buildMerchandiseAcquisitionPosting(input: MerchandiseAcquisition
   const ensureNotBeforePurchase = (label: string, records: DatedAmountRecord[]) => {
     if (!purchaseDate) return;
     if (records.some(record => record.date && record.date < purchaseDate)) {
-      throw new Error(`${label} date cannot be earlier than the Date of Purchase.`);
+      throw new Error(`${label} date cannot be earlier than the Date Merchandise Was Received.`);
     }
   };
   ensureNotBeforePurchase('Supplier payment', organizationPayments);
   ensureNotBeforePurchase('Officer payment', officerPayments);
   ensureNotBeforePurchase('Advance payment', advancePayments);
-  ensureNotBeforePurchase('Reimbursement', reimbursements);
+  const allowedOrganization = input.paymentMethod === 'organization-funds' || input.paymentMethod === 'advance-and-personal';
+  const allowedOfficer = input.paymentMethod === 'officer-personal' || input.paymentMethod === 'advance-and-personal';
+  const allowedAdvance = input.paymentMethod === 'organization-advance' || input.paymentMethod === 'advance-and-personal';
+  if (!allowedOrganization && organizationPayment > 0) throw new Error('Only enter organization payments for a payment method that includes organization funds.');
+  if (!allowedOfficer && officerPayment > 0) throw new Error('Only enter officer-personal payments for a payment method that includes officer funds.');
+  if (!allowedAdvance && advancePayment > 0) throw new Error('Only enter advance payments for a payment method that includes an officer cash advance.');
 
-  let cashPaid = 0;
-  let dueToOfficer = 0;
-  let advanceUsed = 0;
+  const cashPaid = allowedOrganization ? organizationPayment : 0;
+  const dueToOfficer = allowedOfficer ? officerPayment : 0;
+  const advanceUsed = allowedAdvance ? advancePayment : 0;
 
-  if (input.paymentMethod === 'organization-funds') {
-    cashPaid = organizationPayment;
-  } else if (input.paymentMethod === 'officer-personal') {
-    cashPaid = reimbursement;
-    if (reimbursement > officerPayment) throw new Error('The reimbursement cannot exceed what the officer paid personally.');
-    dueToOfficer = cents(officerPayment - reimbursement);
-  } else if (input.paymentMethod === 'organization-advance') {
-    advanceUsed = advancePayment;
-  } else if (input.paymentMethod === 'advance-and-personal') {
-    advanceUsed = advancePayment;
-    cashPaid = reimbursement;
-    if (reimbursement > officerPayment) throw new Error('The reimbursement cannot exceed what the officer paid personally.');
-    dueToOfficer = cents(officerPayment - reimbursement);
+  if (cashPaid > availableCash) {
+    throw new Error('Organization payments cannot exceed the available cash balance.');
   }
 
   if (advanceUsed > availableAdvance) {
@@ -178,13 +190,13 @@ export function buildMerchandiseAcquisitionPosting(input: MerchandiseAcquisition
   const purchaseDatePayments = (records: DatedAmountRecord[]) => records.filter(record => !purchaseDate || !record.date || record.date === purchaseDate);
   const laterPayments = (records: DatedAmountRecord[]) => records.filter(record => purchaseDate && record.date && record.date > purchaseDate);
 
-  if (input.paymentMethod === 'organization-funds') {
+  if (allowedOrganization) {
     purchaseDatePayments(organizationPayments).forEach(payment => addLine(lines, cashAccountCode, 0, payment.amount, payment.date));
   }
-  if (input.paymentMethod === 'organization-advance' || input.paymentMethod === 'advance-and-personal') {
+  if (allowedAdvance) {
     purchaseDatePayments(advancePayments).forEach(payment => addLine(lines, ADVANCES_TO_OFFICERS_ACCOUNT_CODE, 0, payment.amount, payment.date));
   }
-  if (input.paymentMethod === 'officer-personal' || input.paymentMethod === 'advance-and-personal') {
+  if (allowedOfficer) {
     purchaseDatePayments(officerPayments).forEach(payment => addLine(lines, DUE_TO_OFFICERS_ACCOUNT_CODE, 0, payment.amount, payment.date));
   }
   const purchaseDateSupplierPayments = cents(
@@ -208,15 +220,9 @@ export function buildMerchandiseAcquisitionPosting(input: MerchandiseAcquisition
       supplierReceivable = cents(supplierReceivable + excessPayment);
     });
   };
-  if (input.paymentMethod === 'organization-funds') applyLaterPayment(organizationPayments, cashAccountCode);
-  if (input.paymentMethod === 'organization-advance' || input.paymentMethod === 'advance-and-personal') applyLaterPayment(advancePayments, ADVANCES_TO_OFFICERS_ACCOUNT_CODE);
-  if (input.paymentMethod === 'officer-personal' || input.paymentMethod === 'advance-and-personal') applyLaterPayment(officerPayments, DUE_TO_OFFICERS_ACCOUNT_CODE);
-  if (input.paymentMethod === 'officer-personal' || input.paymentMethod === 'advance-and-personal') {
-    reimbursements.forEach(payment => {
-      addLine(lines, DUE_TO_OFFICERS_ACCOUNT_CODE, payment.amount, 0, payment.date);
-      addLine(lines, cashAccountCode, 0, payment.amount, payment.date);
-    });
-  }
+  if (allowedOrganization) applyLaterPayment(organizationPayments, cashAccountCode);
+  if (allowedAdvance) applyLaterPayment(advancePayments, ADVANCES_TO_OFFICERS_ACCOUNT_CODE);
+  if (allowedOfficer) applyLaterPayment(officerPayments, DUE_TO_OFFICERS_ACCOUNT_CODE);
   addLine(lines, MERCHANDISE_PAYABLE_ACCOUNT_CODE, 0, payableAtPurchase, input.transactionDate);
   addLine(lines, RECEIVABLE_FROM_SUPPLIER_ACCOUNT_CODE, supplierReceivableAtPurchase, 0, input.transactionDate);
 
@@ -225,4 +231,15 @@ export function buildMerchandiseAcquisitionPosting(input: MerchandiseAcquisition
   if (debits !== credits) throw new Error('The merchandise acquisition entry is not balanced.');
 
   return { lines, merchandisePayable: remainingPayable, dueToOfficer, advanceUsed, cashPaid, prepaymentApplied: prepaymentAmount, supplierReceivable };
+}
+
+export function buildSupplierReceivableCollectionPosting(amount: number, date: string, availableReceivable: number): JournalLine[] {
+  const collected = requireNonNegative('Supplier receivable collection', amount);
+  const available = requireNonNegative('Available supplier receivable', availableReceivable);
+  if (collected <= 0) throw new Error('Amount collected must be greater than zero.');
+  if (collected > available) throw new Error('Collection cannot exceed the outstanding Accounts Receivable - Suppliers balance.');
+  return [
+    { accountCode: '1010', debit: collected, credit: 0, ...(date ? { date } : {}) },
+    { accountCode: RECEIVABLE_FROM_SUPPLIER_ACCOUNT_CODE, debit: 0, credit: collected, ...(date ? { date } : {}) },
+  ];
 }

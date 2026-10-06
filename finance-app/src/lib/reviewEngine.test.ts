@@ -18,7 +18,7 @@ const accounts: Account[] = [
   { code: '1250', name: 'Advances to Officers', type: 'Assets', normalBalance: 'Debit', description: '', isActive: true },
   { code: '1260', name: 'Prepaid Expenses', type: 'Assets', normalBalance: 'Debit', description: '', isActive: true },
   { code: '2010', name: 'Due to Supplier', type: 'Liabilities', normalBalance: 'Credit', description: '', isActive: true },
-  { code: '2020', name: 'Merchandise Payable', type: 'Liabilities', normalBalance: 'Credit', description: '', isActive: true },
+  { code: '2020', name: 'Accounts Payable - Merchandise', type: 'Liabilities', normalBalance: 'Credit', description: '', isActive: true },
   { code: '2050', name: 'Due to Officers', type: 'Liabilities', normalBalance: 'Credit', description: '', isActive: true },
   { code: '5020', name: 'Rent Expense', type: 'Expenses', normalBalance: 'Debit', description: '', isActive: true },
   { code: '5080', name: 'Meals & Refreshments', type: 'Expenses', normalBalance: 'Debit', description: '', isActive: true },

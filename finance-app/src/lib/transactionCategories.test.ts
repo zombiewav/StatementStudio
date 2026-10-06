@@ -11,6 +11,7 @@ describe('transaction categories', () => {
   it('groups inventory purchases and merchandise sales together', () => {
     expect(categorizeTransactionRule(rule('1700', '1010', 'Merchandise Inventory Purchase'))).toBe('merchandise');
     expect(categorizeTransactionRule(rule('1010', '4070', 'Merchandise Sales Revenue'))).toBe('merchandise');
+    expect(categorizeTransactionRule(rule('1010', '1360', 'Collection of Receivables from Suppliers'))).toBe('merchandise');
   });
 
   it('groups current and prior-period membership collections together', () => {

@@ -35,6 +35,8 @@ import { merchandiseSaleCostError } from '../lib/transactionHistory';
 import {
   buildMerchandiseAcquisitionPosting,
   buildMerchandisePrepaymentPosting,
+  buildSupplierReceivableCollectionPosting,
+  aggregateAvailableMerchandisePrepayments,
   MerchandisePaymentMethod,
 } from '../lib/merchandiseAcquisition';
 import {
@@ -93,7 +95,6 @@ interface TransactionFormSnapshot {
   merchandiseOrganizationPayments: DatedAmountInputRow[];
   merchandiseOfficerPayments: DatedAmountInputRow[];
   merchandiseAdvancePayments: DatedAmountInputRow[];
-  merchandiseReimbursements: DatedAmountInputRow[];
   merchandiseSaleItem: string;
   merchandiseSaleBatchId: string;
   merchandiseQuantitySold: string;
@@ -171,7 +172,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   const [merchandiseOrganizationPayments, setMerchandiseOrganizationPayments] = useState<DatedAmountInputRow[]>([{ id: 'org-payment-1', date, amount: '' }]);
   const [merchandiseOfficerPayments, setMerchandiseOfficerPayments] = useState<DatedAmountInputRow[]>([{ id: 'officer-payment-1', date, amount: '' }]);
   const [merchandiseAdvancePayments, setMerchandiseAdvancePayments] = useState<DatedAmountInputRow[]>([{ id: 'advance-payment-1', date, amount: '' }]);
-  const [merchandiseReimbursements, setMerchandiseReimbursements] = useState<DatedAmountInputRow[]>([{ id: 'reimbursement-1', date, amount: '' }]);
   const [merchandiseSaleItem, setMerchandiseSaleItem] = useState('');
   const [merchandiseSaleBatchId, setMerchandiseSaleBatchId] = useState('');
   const [merchandiseQuantitySold, setMerchandiseQuantitySold] = useState('');
@@ -187,6 +187,17 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   const [outrightOfficer, setOutrightOfficer] = useState('');
   const [expenseEvent, setExpenseEvent] = useState<'' | 'yes' | 'no'>('');
   const [expenseEventName, setExpenseEventName] = useState('');
+
+  const changeMerchandisePaymentMethod = (next: MerchandisePaymentMethod) => {
+    setMerchandisePaymentMethod(next);
+    if (next !== 'organization-funds' && next !== 'advance-and-personal') setMerchandiseOrganizationPayments([{ id: `org-payment-${Date.now()}`, date: '', amount: '' }]);
+    if (next !== 'officer-personal' && next !== 'advance-and-personal') setMerchandiseOfficerPayments([{ id: `officer-payment-${Date.now()}`, date: '', amount: '' }]);
+    if (next !== 'organization-advance' && next !== 'advance-and-personal') setMerchandiseAdvancePayments([{ id: `advance-payment-${Date.now()}`, date: '', amount: '' }]);
+    if (next === 'organization-funds' || next === 'not-yet-paid') {
+      setCounterpartyName('');
+      setOutrightOfficer('');
+    }
+  };
 
   // "Whose money paid for it?" (Question B from the posting-engine build
   // plan). Only meaningful when the credit side is a cash account — for a
@@ -302,7 +313,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     : isMembershipRefundStatus && membershipRefundStatus === 'nonrefundable'
       ? '4050'
       : creditCode;
-  const merchandiseUsesOfficer = isMerchandiseAcquisition && (merchandisePaymentMethod === 'officer-personal' || merchandisePaymentMethod === 'advance-and-personal');
+  const isSupplierReceivableCollection = selectedCategory === 'merchandise' && debitCode === '1010' && effectiveCreditCode === '1360';
+  const merchandiseUsesOfficer = isMerchandiseAcquisition && (merchandisePaymentMethod === 'officer-personal' || merchandisePaymentMethod === 'organization-advance' || merchandisePaymentMethod === 'advance-and-personal');
   const isOfficerAdvance = debitCode === '1250';
   const isOfficerReimbursement = debitCode === '2050';
   const isLoanToOrganization = debitCode === '1350';
@@ -370,7 +382,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       setMerchandiseOrganizationPayments([{ id: `org-payment-${Date.now()}`, date, amount: '' }]);
       setMerchandiseOfficerPayments([{ id: `officer-payment-${Date.now()}`, date, amount: '' }]);
       setMerchandiseAdvancePayments([{ id: `advance-payment-${Date.now()}`, date, amount: '' }]);
-      setMerchandiseReimbursements([{ id: `reimbursement-${Date.now()}`, date, amount: '' }]);
       setMerchandiseSaleItem('');
       setMerchandiseSaleBatchId('');
       setMerchandiseQuantitySold('');
@@ -428,7 +439,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       setMerchandiseOrganizationPayments([{ id: `org-payment-${Date.now()}`, date, amount: '' }]);
       setMerchandiseOfficerPayments([{ id: `officer-payment-${Date.now()}`, date, amount: '' }]);
       setMerchandiseAdvancePayments([{ id: `advance-payment-${Date.now()}`, date, amount: '' }]);
-      setMerchandiseReimbursements([{ id: `reimbursement-${Date.now()}`, date, amount: '' }]);
       setOutrightOfficer('');
       setMerchandiseSaleItem('');
       setMerchandiseSaleBatchId('');
@@ -492,7 +502,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     setMerchandiseOrganizationPayments(snapshot.merchandiseOrganizationPayments?.length ? snapshot.merchandiseOrganizationPayments : [{ id: `org-payment-${Date.now()}`, date: fallbackDate, amount: '' }]);
     setMerchandiseOfficerPayments(snapshot.merchandiseOfficerPayments?.length ? snapshot.merchandiseOfficerPayments : [{ id: `officer-payment-${Date.now()}`, date: fallbackDate, amount: '' }]);
     setMerchandiseAdvancePayments(snapshot.merchandiseAdvancePayments?.length ? snapshot.merchandiseAdvancePayments : [{ id: `advance-payment-${Date.now()}`, date: fallbackDate, amount: '' }]);
-    setMerchandiseReimbursements(snapshot.merchandiseReimbursements?.length ? snapshot.merchandiseReimbursements : [{ id: `reimbursement-${Date.now()}`, date: fallbackDate, amount: '' }]);
     setMerchandiseSaleItem(snapshot.merchandiseSaleItem || '');
     setMerchandiseSaleBatchId(snapshot.merchandiseSaleBatchId || '');
     setMerchandiseQuantitySold(snapshot.merchandiseQuantitySold || '');
@@ -540,7 +549,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   const officerPayableBalances = useMemo(() => counterpartyBalances(journalEntries, '2050', 'Credit'), [journalEntries]);
   const organizationLoanBalances = useMemo(() => counterpartyBalances(journalEntries, '1350', 'Debit'), [journalEntries]);
   const supplierPayableBalances = useMemo(() => counterpartyBalances(journalEntries, '2010', 'Credit'), [journalEntries]);
-  const selectedOfficerAdvanceBalance = counterpartyBalance(journalEntries, '1250', 'Debit', outrightOfficer);
+  const merchandiseOfficerName = isMerchandiseAcquisition ? counterpartyName : outrightOfficer;
+  const selectedOfficerAdvanceBalance = counterpartyBalance(journalEntries, '1250', 'Debit', merchandiseOfficerName);
   const selectedOfficerPayableBalance = counterpartyBalance(journalEntries, '2050', 'Credit', counterpartyName);
   const selectedOrganizationLoanBalance = counterpartyBalance(journalEntries, '1350', 'Debit', counterpartyName);
   const selectedSupplierPayableBalance = counterpartyBalance(journalEntries, '2010', 'Credit', counterpartyName);
@@ -570,22 +580,14 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   const showMembershipReceivableWarning = isPriorMembershipCollection && membershipCollectionTotal > membershipReceivableOutstanding;
   const isMerchandiseSale = effectiveCreditCode === '4070';
   const merchandiseBatches = useMemo(() => buildMerchandiseBatchBalances(journalEntries), [journalEntries]);
-  const availableMerchandisePrepayments = useMemo(() => {
-    const used = new Set(journalEntries.map(entry => entry.transactionDetails?.merchandisePrepaymentEntryId).filter(Boolean));
-    return journalEntries.filter(entry => !entry.reversalOfEntryId && !entry.reversedByEntryId && !used.has(entry.id))
-      .map(entry => ({
-        entry,
-        amount: entry.lines.filter(line => line.accountCode === '1270').reduce((sum, line) => sum + line.debit - line.credit, 0),
-      }))
-      .filter(candidate => candidate.amount > 0);
-  }, [journalEntries]);
-  const matchingMerchandisePrepayments = availableMerchandisePrepayments.filter(candidate => {
-    const details = candidate.entry.transactionDetails;
-    const selectedItem = merchandiseItem === 'Others' ? merchandiseOtherTitle.trim() : merchandiseItem;
-    return (!selectedItem || details?.merchandiseItem === selectedItem)
-      && (!merchandiseBatch.trim() || details?.merchandiseBatch === merchandiseBatch.trim());
-  });
-  const selectedMerchandisePrepayment = matchingMerchandisePrepayments.find(candidate => candidate.entry.id === merchandisePrepaymentEntryId);
+  const merchandiseItemLabel = merchandiseItem === 'Others' ? merchandiseOtherTitle.trim() : merchandiseItem;
+  const matchingMerchandisePrepayment = useMemo(
+    () => aggregateAvailableMerchandisePrepayments(journalEntries, merchandiseItemLabel, merchandiseBatch.trim()),
+    [journalEntries, merchandiseItemLabel, merchandiseBatch]
+  );
+  const selectedMerchandisePrepayment = merchandisePrepaymentEntryId && matchingMerchandisePrepayment.entryIds.length > 0
+    ? matchingMerchandisePrepayment
+    : undefined;
   const selectedMerchandiseBatch = merchandiseBatches.find(batch => batch.entryId === merchandiseSaleBatchId);
   const merchandiseSaleItems = useMemo(() => [...new Set(merchandiseBatches.map(batch => batch.item))].sort((a, b) => a.localeCompare(b)), [merchandiseBatches]);
   const effectiveMerchandiseSaleItem = merchandiseSaleItem || selectedMerchandiseBatch?.item || '';
@@ -593,11 +595,12 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   const merchandiseSaleTotal = Math.round((Number(merchandiseQuantitySold) || 0) * (Number(merchandiseSellingPrice) || 0) * 100) / 100;
   const merchandiseCollectionTotal = sumDatedAmounts(merchandiseCollections);
   const merchandiseRemittanceTotal = sumDatedAmounts(merchandiseRemittances);
-  const merchandiseItemLabel = merchandiseItem === 'Others' ? merchandiseOtherTitle.trim() : merchandiseItem;
   const merchandiseOrganizationPaymentTotal = sumDatedAmounts(merchandiseOrganizationPayments);
   const merchandiseOfficerPaymentTotal = sumDatedAmounts(merchandiseOfficerPayments);
   const merchandiseAdvancePaymentTotal = sumDatedAmounts(merchandiseAdvancePayments);
-  const merchandiseReimbursementTotal = sumDatedAmounts(merchandiseReimbursements);
+  const draftSupplierReceivable = journalEntries.filter(entry => entry.isDraft)
+    .reduce((sum, entry) => sum + entry.lines.filter(line => line.accountCode === '1360').reduce((lineSum, line) => lineSum + line.debit - line.credit, 0), 0);
+  const supplierReceivableOutstanding = Math.max(0, Math.round(((accountBalances['1360'] || 0) - draftSupplierReceivable) * 100) / 100);
 
   useEffect(() => {
     if (isPriorMembershipCollection) setAmount(membershipCollectionTotal);
@@ -651,9 +654,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
           officerPayments: merchandiseOfficerPayments.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })),
           advancePayment: merchandiseAdvancePaymentTotal,
           advancePayments: merchandiseAdvancePayments.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })),
-          reimbursement: merchandiseReimbursementTotal,
-          reimbursements: merchandiseReimbursements.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })),
-          availableAdvance: advancesOutstanding,
+          availableAdvance: selectedOfficerAdvanceBalance,
+          availableCash: cashAvailable,
           prepaymentAmount: selectedMerchandisePrepayment?.amount || 0,
           cashAccountCode: '1010',
         }),
@@ -662,7 +664,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     } catch (error) {
       return { posting: null, error: error instanceof Error ? error.message : 'The acquisition amounts are invalid.' };
     }
-  }, [isMerchandiseAcquisition, amount, merchandisePaymentMethod, date, merchandiseOrganizationPaymentTotal, merchandiseOrganizationPayments, merchandiseOfficerPaymentTotal, merchandiseOfficerPayments, merchandiseAdvancePaymentTotal, merchandiseAdvancePayments, merchandiseReimbursementTotal, merchandiseReimbursements, advancesOutstanding, selectedMerchandisePrepayment]);
+  }, [isMerchandiseAcquisition, amount, merchandisePaymentMethod, date, merchandiseOrganizationPaymentTotal, merchandiseOrganizationPayments, merchandiseOfficerPaymentTotal, merchandiseOfficerPayments, merchandiseAdvancePaymentTotal, merchandiseAdvancePayments, selectedOfficerAdvanceBalance, cashAvailable, selectedMerchandisePrepayment]);
 
   const merchandisePrepaymentResult = useMemo(() => {
     if (!isMerchandisePrepayment || amount <= 0 || merchandisePaymentMethod === 'not-yet-paid') return { lines: [] as JournalLine[], error: '' };
@@ -740,6 +742,9 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     if (amount <= 0) return [];
     if (isMerchandiseAcquisition) return merchandiseAcquisitionResult.posting?.lines || [];
     if (isMerchandisePrepayment) return merchandisePrepaymentResult.lines;
+    if (isSupplierReceivableCollection) {
+      try { return buildSupplierReceivableCollectionPosting(amount, date, supplierReceivableOutstanding); } catch { return []; }
+    }
     if (isGuidedPurchase) return outrightExpenseResult.posting?.lines || [];
     const deferredAmount = showDeferPortionQuestion ? (Number(notYetUsedAmount) || 0) : 0;
     if (requiresAccrualCompletion || isPriorMembershipCollection) return membershipPostingResult.posting?.lines || [];
@@ -753,7 +758,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       ]);
     }
     return buildJournalLines(debitCode, effectiveCreditCode, amount);
-  }, [classificationPreview, amount, debitCode, effectiveCreditCode, isMembershipRefundStatus, membershipRefundResolutionResult, isMerchandiseAcquisition, merchandiseAcquisitionResult, isMerchandisePrepayment, merchandisePrepaymentResult, isGuidedPurchase, outrightExpenseResult, requiresAccrualCompletion, isPriorMembershipCollection, membershipPostingResult, isMerchandiseSale, merchandiseSaleResult, showDeferPortionQuestion, notYetUsedAmount]);
+  }, [classificationPreview, amount, date, debitCode, effectiveCreditCode, isMembershipRefundStatus, membershipRefundResolutionResult, isMerchandiseAcquisition, merchandiseAcquisitionResult, isMerchandisePrepayment, merchandisePrepaymentResult, isSupplierReceivableCollection, supplierReceivableOutstanding, isGuidedPurchase, outrightExpenseResult, requiresAccrualCompletion, isPriorMembershipCollection, membershipPostingResult, isMerchandiseSale, merchandiseSaleResult, showDeferPortionQuestion, notYetUsedAmount]);
 
   const projectedImpacts = useMemo(
     () => projectJournalLineImpacts(previewLines, activeAccounts, accountBalances),
@@ -812,7 +817,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     merchandiseOrganizationPayments,
     merchandiseOfficerPayments,
     merchandiseAdvancePayments,
-    merchandiseReimbursements,
     merchandiseSaleItem,
     merchandiseSaleBatchId,
     merchandiseQuantitySold,
@@ -891,8 +895,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       setErrorMessage('Please enter the merchandise batch or pre-order reference.');
       return;
     }
-    if (isMerchandiseAcquisition && (!Number.isInteger(Number(merchandiseQuantity)) || Number(merchandiseQuantity) <= 0)) {
-      setErrorMessage('Please enter a whole-number quantity greater than zero for this merchandise batch.');
+    if (isMerchandiseAcquisition && merchandiseQuantity.trim() && (!Number.isInteger(Number(merchandiseQuantity)) || Number(merchandiseQuantity) <= 0)) {
+      setErrorMessage('If entered, quantity must be a whole number greater than zero.');
       return;
     }
     if (isMerchandiseAcquisition && merchandiseAcquisitionResult.error) {
@@ -905,6 +909,10 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     }
     if (isMerchandisePrepayment && (merchandisePaymentMethod === 'officer-personal' || merchandisePaymentMethod === 'organization-advance' || merchandisePaymentMethod === 'advance-and-personal') && !outrightOfficer.trim()) {
       setErrorMessage('Please enter the accountable officer for this supplier downpayment.');
+      return;
+    }
+    if (isSupplierReceivableCollection && amount > supplierReceivableOutstanding) {
+      setErrorMessage('Collection cannot exceed the outstanding Accounts Receivable - Suppliers balance.');
       return;
     }
     if (isGuidedPurchase && outrightExpenseResult.error) {
@@ -1027,6 +1035,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
         ? `${description || txName} - ${merchandiseItemLabel} - ${merchandiseBatch.trim()}`
         : isMerchandisePrepayment
           ? `${description || txName} - ${merchandiseItemLabel} - ${merchandiseBatch.trim()}`
+        : isSupplierReceivableCollection
+          ? 'Collection of Receivables from Suppliers'
         : isMerchandiseSale
           ? `Sale of Merchandise - ${selectedMerchandiseBatch?.item || 'Merchandise'}`
         : isMembershipRefundStatus
@@ -1088,10 +1098,11 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
             deferredAmount: showDeferPortionQuestion ? deferredAmount : undefined,
             expectedUsePeriod: deferredAmount > 0 ? expectedUsePeriod : undefined,
             inventoryCost: isMerchandiseSale ? Number(merchandiseCost) : undefined,
-            merchandiseQuantity: isMerchandiseAcquisition ? Number(merchandiseQuantity) : undefined,
+            merchandiseQuantity: isMerchandiseAcquisition && merchandiseQuantity.trim() ? Number(merchandiseQuantity) : undefined,
             merchandiseBatch: (isMerchandiseAcquisition || isMerchandisePrepayment) ? merchandiseBatch.trim() : undefined,
             merchandisePurchaseDate: isMerchandiseAcquisition ? date : undefined,
             merchandisePrepaymentEntryId: isMerchandiseAcquisition ? merchandisePrepaymentEntryId || undefined : undefined,
+            merchandisePrepaymentEntryIds: isMerchandiseAcquisition ? selectedMerchandisePrepayment?.entryIds : undefined,
             merchandisePrepaymentAmount: isMerchandiseAcquisition ? selectedMerchandisePrepayment?.amount : undefined,
             merchandisePaymentMethod: (isMerchandiseAcquisition || isMerchandisePrepayment) ? merchandisePaymentMethod : undefined,
             merchandiseOrganizationPayment: (isMerchandiseAcquisition || isMerchandisePrepayment) ? merchandiseOrganizationPaymentTotal : undefined,
@@ -1100,8 +1111,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
             merchandiseOfficerPayments: (isMerchandiseAcquisition || isMerchandisePrepayment) ? merchandiseOfficerPayments.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })) : undefined,
             merchandiseAdvancePayment: (isMerchandiseAcquisition || isMerchandisePrepayment) ? merchandiseAdvancePaymentTotal : undefined,
             merchandiseAdvancePayments: (isMerchandiseAcquisition || isMerchandisePrepayment) ? merchandiseAdvancePayments.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })) : undefined,
-            merchandiseReimbursement: isMerchandiseAcquisition ? merchandiseReimbursementTotal : undefined,
-            merchandiseReimbursements: isMerchandiseAcquisition ? merchandiseReimbursements.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })) : undefined,
             merchandisePayableAmount: isMerchandiseAcquisition ? merchandiseAcquisitionResult.posting?.merchandisePayable : undefined,
             merchandiseItem: isMerchandiseSale ? selectedMerchandiseBatch?.item : (isMerchandiseAcquisition || isMerchandisePrepayment) ? merchandiseItemLabel : undefined,
             merchandiseBatchEntryId: isMerchandiseSale ? merchandiseSaleBatchId : undefined,
@@ -1113,6 +1122,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
             merchandiseRemittances: isMerchandiseSale ? merchandiseRemittances.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })) : undefined,
             merchandiseAccountsReceivable: isMerchandiseSale ? merchandiseSaleResult.posting?.accountsReceivable : undefined,
             merchandiseDueFromOfficer: isMerchandiseSale ? merchandiseSaleResult.posting?.dueFromOfficer : undefined,
+            supplierReceivableCollectionAmount: isSupplierReceivableCollection ? amount : undefined,
             receiptAttachmentIds: [],
           },
         },
@@ -1176,7 +1186,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       setMerchandiseOrganizationPayments([{ id: `org-payment-${Date.now()}`, date, amount: '' }]);
       setMerchandiseOfficerPayments([{ id: `officer-payment-${Date.now()}`, date, amount: '' }]);
       setMerchandiseAdvancePayments([{ id: `advance-payment-${Date.now()}`, date, amount: '' }]);
-      setMerchandiseReimbursements([{ id: `reimbursement-${Date.now()}`, date, amount: '' }]);
       setMerchandiseSaleItem('');
       setMerchandiseSaleBatchId('');
       setMerchandiseQuantitySold('');
@@ -1451,7 +1460,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                 {merchandiseItem === 'Others' && <div><label className="block text-[10px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Other merchandise title</label><input type="text" value={merchandiseOtherTitle} onChange={event => setMerchandiseOtherTitle(event.target.value)} placeholder="Enter the merchandise name" className="mt-1.5 w-full rounded-lg border border-violet-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-violet-500/30 dark:bg-slate-800 dark:text-slate-100" required /></div>}
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Payment method</label>
-                  <select value={merchandisePaymentMethod} onChange={event => setMerchandisePaymentMethod(event.target.value as MerchandisePaymentMethod)} className="mt-1.5 w-full rounded-lg border border-violet-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-violet-500/30 dark:bg-slate-800 dark:text-slate-100">
+                  <select value={merchandisePaymentMethod} onChange={event => changeMerchandisePaymentMethod(event.target.value as MerchandisePaymentMethod)} className="mt-1.5 w-full rounded-lg border border-violet-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-violet-500/30 dark:bg-slate-800 dark:text-slate-100">
                     <option value="organization-funds">Paid directly by the organization</option>
                     <option value="officer-personal">Paid by an officer using personal money</option>
                     <option value="organization-advance">Paid using a cash advance previously given to the officer</option>
@@ -1481,9 +1490,9 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
             {isMerchandiseAcquisition && (
               <div className="sm:col-span-2 space-y-4 rounded-xl border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-500/20 dark:bg-indigo-500/10">
                 <div>
-                  <h4 className="flex items-center gap-2 text-xs font-black text-violet-700 dark:text-violet-300">Merchandise batch information <NewFeatureBadge /></h4>
-                  <p className="mt-1 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Record each purchase batch separately so its item, quantity, cost, and settlement remain traceable.</p>
-                  <p className="mt-1 text-[10px] font-semibold text-indigo-800 dark:text-indigo-200"><strong>Date of Purchase:</strong> use the date when the organization actually received the purchased goods.</p>
+                  <h4 className="flex items-center gap-2 text-xs font-black text-violet-700 dark:text-violet-300">Acquisition of Merchandise for Sale - Goods Received and On Hand <NewFeatureBadge /></h4>
+                  <p className="mt-1 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Record each received batch separately so its item, optional quantity, full cost, downpayments, and supplier settlement remain traceable.</p>
+                  <p className="mt-1 text-[10px] font-semibold text-indigo-800 dark:text-indigo-200"><strong>Date Merchandise Was Received:</strong> use the transaction date entered above.</p>
                 </div>
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -1495,8 +1504,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Quantity purchased</label>
-                    <input type="number" min="1" step="1" value={merchandiseQuantity} onChange={event => setMerchandiseQuantity(event.target.value)} placeholder="Number of units" className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-bold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required />
+                    <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Quantity purchased (optional)</label>
+                    <input type="number" min="1" step="1" value={merchandiseQuantity} onChange={event => setMerchandiseQuantity(event.target.value)} placeholder="Number of units, if applicable" className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-bold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" />
                   </div>
                 </div>
 
@@ -1516,9 +1525,9 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                   <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Previously recorded downpayment (if applicable)</label>
                   <select value={merchandisePrepaymentEntryId} onChange={event => setMerchandisePrepaymentEntryId(event.target.value)} className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100">
                     <option value="">No linked downpayment</option>
-                    {matchingMerchandisePrepayments.map(candidate => <option key={candidate.entry.id} value={candidate.entry.id}>{candidate.entry.reference} — {candidate.entry.transactionDetails?.merchandiseItem || candidate.entry.description} — {candidate.entry.transactionDetails?.merchandiseBatch} — {formatCurrency(candidate.amount)}</option>)}
+                    {matchingMerchandisePrepayment.entryIds.length > 0 && <option value={matchingMerchandisePrepayment.entryIds[0]}>{merchandiseItemLabel || 'Merchandise'} — {merchandiseBatch.trim() || 'Batch'} — Total downpayments {formatCurrency(matchingMerchandisePrepayment.amount)}</option>}
                   </select>
-                  <p className="mt-1 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Only downpayments recorded separately under Merchandise Transactions appear here.</p>
+                  <p className="mt-1 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">All unused downpayment transactions matching this merchandise and batch are combined into one total.</p>
                 </div>
 
                 <div>
@@ -1531,36 +1540,51 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
 
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">How will the merchandise be paid?</label>
-                  <select value={merchandisePaymentMethod} onChange={event => setMerchandisePaymentMethod(event.target.value as MerchandisePaymentMethod)} className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100">
-                    <option value="organization-funds">Paid directly from organization funds</option>
-                    <option value="officer-personal">Paid by an officer using personal money</option>
-                    <option value="organization-advance">Paid using an organization advance</option>
-                    <option value="not-yet-paid">Not yet paid</option>
+                  <select value={merchandisePaymentMethod} onChange={event => changeMerchandisePaymentMethod(event.target.value as MerchandisePaymentMethod)} className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100">
+                    <option value="organization-funds">Paid directly by the organization</option>
+                    <option value="officer-personal">Paid by an officer using personal money - to be reimbursed</option>
+                    <option value="organization-advance">Paid using a cash advance previously given to the officer</option>
+                    <option value="advance-and-personal">Combination of organization funds, officer personal money, and/or cash advance</option>
+                    <option value="not-yet-paid">Not yet paid (payment will be made next period/semester/year)</option>
                   </select>
                 </div>
 
-                {merchandisePaymentMethod === 'organization-funds' && (
-                  <DatedAmountRows label="How much was paid by the organization to the supplier?" rows={merchandiseOrganizationPayments} onChange={setMerchandiseOrganizationPayments} currencySymbol={settings.currencySymbol} defaultDate={date} addLabel="Add payment" />
+                {(merchandisePaymentMethod === 'organization-funds' || merchandisePaymentMethod === 'advance-and-personal') && (
+                  <DatedAmountRows label={`Organization payments to supplier (available cash: ${formatCurrency(cashAvailable)})`} rows={merchandiseOrganizationPayments} onChange={setMerchandiseOrganizationPayments} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={cashAvailable} addLabel="Add payment" allowBlankDates blankDateHelp="Date can be cleared and is optional. A blank date uses the Date Merchandise Was Received." />
                 )}
 
                 {(merchandisePaymentMethod === 'organization-advance' || merchandisePaymentMethod === 'advance-and-personal') && (
-                  <div>
-                    <DatedAmountRows label="How much was paid using the organization advance?" rows={merchandiseAdvancePayments} onChange={setMerchandiseAdvancePayments} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={Math.min(amount || advancesOutstanding, advancesOutstanding)} addLabel="Add advance payment" />
-                    <p className="mt-1 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Available recorded advance: {formatCurrency(advancesOutstanding)}.</p>
+                  <div className="space-y-2">
+                    <DatedAmountRows label={`Payments using ${counterpartyName.trim() || 'the selected officer'}'s cash advance`} rows={merchandiseAdvancePayments} onChange={setMerchandiseAdvancePayments} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={selectedOfficerAdvanceBalance} addLabel="Add advance payment" allowBlankDates blankDateHelp="Date can be cleared and is optional. A blank date uses the Date Merchandise Was Received." />
+                    <p className="text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Available advance for this officer: {formatCurrency(selectedOfficerAdvanceBalance)}.</p>
+                    {officerAdvanceBalances.length > 0 ? <div className="overflow-hidden rounded-lg border border-indigo-200 bg-white/70 text-[10px] dark:border-indigo-500/30 dark:bg-slate-900/40"><p className="px-3 py-2 font-black uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Available advances by officer</p>{officerAdvanceBalances.map(record => <div key={record.name} className="flex items-center justify-between border-t border-indigo-100 px-3 py-2 dark:border-indigo-500/20"><span className="font-semibold text-slate-700 dark:text-slate-200">{record.name}</span><span className="font-black text-indigo-800 dark:text-indigo-200">{formatCurrency(record.balance)}</span></div>)}</div> : <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[10px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">No accountable officer has an available cash advance. Record the advance first under Advances to Officers.</p>}
                   </div>
                 )}
 
                 {(merchandisePaymentMethod === 'officer-personal' || merchandisePaymentMethod === 'advance-and-personal') && (
-                  <div className="space-y-4">
-                    <DatedAmountRows label="How much was paid personally by the officer?" rows={merchandiseOfficerPayments} onChange={setMerchandiseOfficerPayments} currencySymbol={settings.currencySymbol} defaultDate={date} addLabel="Add officer payment" />
-                    <DatedAmountRows label="How much was reimbursed to the officer?" rows={merchandiseReimbursements} onChange={setMerchandiseReimbursements} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={merchandiseOfficerPaymentTotal} addLabel="Add reimbursement" />
+                  <div className="space-y-2">
+                    <DatedAmountRows label="Payments made personally by the officer" rows={merchandiseOfficerPayments} onChange={setMerchandiseOfficerPayments} currencySymbol={settings.currencySymbol} defaultDate={date} addLabel="Add officer payment" allowBlankDates blankDateHelp="Date can be cleared and is optional. A blank date uses the Date Merchandise Was Received." />
+                    <p className="text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Record any reimbursement separately under Reimbursement to Officers.</p>
                   </div>
                 )}
 
-                {merchandisePaymentMethod === 'not-yet-paid' && <p className="rounded-lg bg-white/80 p-3 text-[10px] font-semibold text-indigo-800 dark:bg-slate-900/60 dark:text-indigo-200">The full batch cost will remain in Merchandise Payable and appear in Review until settled.</p>}
-                {merchandiseAcquisitionResult.posting && merchandiseAcquisitionResult.posting.merchandisePayable > 0 && <p className="rounded-lg bg-amber-50 p-3 text-[10px] font-semibold text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">The unpaid {formatCurrency(merchandiseAcquisitionResult.posting.merchandisePayable)} will be recorded in Merchandise Payable for Review.</p>}
+                {merchandisePaymentMethod === 'not-yet-paid' && <p className="rounded-lg bg-white/80 p-3 text-[10px] font-semibold text-indigo-800 dark:bg-slate-900/60 dark:text-indigo-200">The full batch cost will remain in Accounts Payable - Merchandise and appear in Review until settled.</p>}
+                {merchandisePaymentMethod !== 'not-yet-paid' && <p className="rounded-lg bg-white/80 p-3 text-[10px] font-semibold text-indigo-800 dark:bg-slate-900/60 dark:text-indigo-200">Record only payments made on or after the merchandise was received and is already on hand. Exclude downpayments made before receipt.</p>}
+                {merchandiseAcquisitionResult.posting && merchandiseAcquisitionResult.posting.merchandisePayable > 0 && <p className="rounded-lg bg-amber-50 p-3 text-[10px] font-semibold text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">The unpaid {formatCurrency(merchandiseAcquisitionResult.posting.merchandisePayable)} will be recorded in Accounts Payable - Merchandise for Review.</p>}
                 {merchandiseAcquisitionResult.posting && merchandiseAcquisitionResult.posting.supplierReceivable > 0 && <p className="rounded-lg bg-amber-50 p-3 text-[10px] font-semibold text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">The excess {formatCurrency(merchandiseAcquisitionResult.posting.supplierReceivable)} will be recorded in Accounts Receivable - Suppliers.</p>}
                 {merchandiseAcquisitionResult.error && amount > 0 && <p className="text-[10px] font-bold text-rose-700 dark:text-rose-300">{merchandiseAcquisitionResult.error}</p>}
+              </div>
+            )}
+
+            {isSupplierReceivableCollection && (
+              <div className="sm:col-span-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-500/20 dark:bg-emerald-500/10">
+                <h4 className="text-xs font-black text-emerald-900 dark:text-emerald-200">Collection of Receivables from Suppliers</h4>
+                <p className="mt-1 text-[10px] font-medium text-emerald-800 dark:text-emerald-300">Record cash returned or collected from suppliers against prior excess payments.</p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <div className="rounded-lg bg-white/80 p-3 dark:bg-slate-900/50"><span className="text-[9px] font-bold uppercase text-slate-500">Outstanding receivable</span><p className="mt-1 text-sm font-black text-emerald-800 dark:text-emerald-200">{formatCurrency(supplierReceivableOutstanding)}</p></div>
+                  <div className="rounded-lg bg-white/80 p-3 text-[10px] font-semibold text-slate-600 dark:bg-slate-900/50 dark:text-slate-300">Journal entry: Debit Cash on Hand, Credit Accounts Receivable - Suppliers. The collection cannot exceed the outstanding balance.</div>
+                </div>
+                {supplierReceivableOutstanding <= 0 && <p className="mt-3 text-[10px] font-bold text-amber-700 dark:text-amber-300">No Accounts Receivable - Suppliers balance is available to collect.</p>}
               </div>
             )}
 
@@ -1902,7 +1926,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
             )}
 
             {!isGuidedPurchase && !isMerchandiseAcquisition && !isMerchandiseSale && !requiresAccrualCompletion && !isPriorMembershipCollection && !isMembershipRefundStatus && <div>
-              <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">{isMerchandisePrepayment ? 'Payment' : 'Amount'}</label>
+              <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">{isMerchandisePrepayment ? 'Payment' : isSupplierReceivableCollection ? 'Amount collected' : 'Amount'}</label>
               <div className="relative">
                 <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 dark:text-slate-400">{settings.currencySymbol}</span>
                 <input
@@ -1919,7 +1943,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
             </div>}
 
             {!requiresAccrualCompletion && !isPriorMembershipCollection && !isMembershipRefundStatus && <div>
-              <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Date</label>
+              <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">{isMerchandiseAcquisition ? 'Date Merchandise Was Received' : isSupplierReceivableCollection ? 'Collection date' : 'Date'}</label>
               <input
                 type="date"
                 value={date}

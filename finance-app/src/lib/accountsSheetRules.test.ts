@@ -37,6 +37,7 @@ describe('Accounts spreadsheet mappings', () => {
     expect(PREPAID_ASSET_ITEMS.Load).toBeUndefined();
     expect(INITIAL_ACCOUNTS.find(account => account.code === '1270')?.name).toBe('Advances to Suppliers');
     expect(INITIAL_ACCOUNTS.find(account => account.code === '1360')?.name).toBe('Accounts Receivable - Suppliers');
+    expect(INITIAL_ACCOUNTS.find(account => account.code === '2020')?.name).toBe('Accounts Payable - Merchandise');
     expect(INITIAL_ACCOUNTS.some(account => ['1290', '1340', '1345', '2060'].includes(account.code))).toBe(false);
   });
 });

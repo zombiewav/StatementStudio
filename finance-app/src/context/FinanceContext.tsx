@@ -210,7 +210,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
   // to a supplier/vendor) from Due to Officers (owed to a person) in the
   // REVIEW settlement mechanism, which asks a different question for each.
   { code: '2010', name: 'Account Payable-Expense', type: 'Liabilities', normalBalance: 'Credit', description: 'Outstanding expense payables tracked separately for each supplier or payee', isActive: true },
-  { code: '2020', name: 'Merchandise Payable', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid cost of merchandise acquired for resale', isActive: true },
+  { code: '2020', name: 'Accounts Payable - Merchandise', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid cost of merchandise acquired for resale', isActive: true },
   { code: '2030', name: 'Accounts Payable-PPE', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid purchases of property, plant, and equipment', isActive: true },
   { code: '2040', name: 'Accounts Payable-Furniture & Fixture', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid purchases of furniture and fixtures', isActive: true },
   { code: '2061', name: 'Accounts Payable-Awards and Prizes', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid awards and prizes acquired for later distribution', isActive: true },
@@ -568,10 +568,11 @@ export const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   { keyword: 'receivable from custodian', debitAccountCode: '1330', creditAccountCode: '1010', description: 'Receivable from Custodian' },
 
   // --- Inventory (goods for resale) ---------------------------------------------
-  { keyword: 'acquisition of merchandise', debitAccountCode: '1700', creditAccountCode: '1010', description: 'Acquisition of Merchandise for Sale' },
+  { keyword: 'acquisition of merchandise', debitAccountCode: '1700', creditAccountCode: '1010', description: 'Acquisition of Merchandise for Sale - Goods Received and On Hand' },
   { keyword: 'downpayment for pre-ordered merchandise', debitAccountCode: '1270', creditAccountCode: '1010', description: 'Downpayment for Pre-ordered Merchandise' },
   { keyword: 'payment for unpaid merchandise', debitAccountCode: '2020', creditAccountCode: '1010', description: 'Payment for Unpaid Merchandise Purchased and Received in Previous Period/Semester' },
-  { keyword: 'inventory', debitAccountCode: '1700', creditAccountCode: '1010', description: 'Acquisition of Merchandise for Sale' },
+  { keyword: 'collection of receivables from suppliers', debitAccountCode: '1010', creditAccountCode: '1360', description: 'Collection of Receivables from Suppliers' },
+  { keyword: 'inventory', debitAccountCode: '1700', creditAccountCode: '1010', description: 'Acquisition of Merchandise for Sale - Goods Received and On Hand' },
 
   // --- Inter-organization loans (working paper row 20) ---------------------------
   // Checked before bare 'loan' below (money the org itself borrows) — this
@@ -874,6 +875,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     const saved: Account[] = (JSON.parse(local) as Account[]).filter(account => !RETIRED_ACCOUNT_CODES.has(account.code)).map(account => {
       if (account.code === '1270') return { ...account, name: 'Advances to Suppliers', description: 'Downpayments and advances made to suppliers before related goods, services, or other assets are received' };
       if (account.code === '1360') return { ...account, name: 'Accounts Receivable - Suppliers', description: 'Payments made to suppliers in excess of the related merchandise, service, or asset cost' };
+      if (account.code === '2020') return { ...account, name: 'Accounts Payable - Merchandise', description: 'Unpaid cost of merchandise acquired for resale' };
       if (account.code === '4035' && account.name === 'Contributions Revenue - Restricted') return { ...account, name: 'Contributions Revenue - Temporarily Restricted' };
       if (account.code === '1200' && account.name === 'Receivables') return { ...account, name: 'Accounts Receivable', description: 'Amounts earned or billed but not yet collected from customers, sponsors, or partners' };
       if (account.code === '2110' && account.name === 'Deferred Activity Fees') return { ...account, name: 'Unearned Activity Fees', description: 'Activity or event fees collected before the event date' };
@@ -1075,10 +1077,10 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
           return;
         }
         const activeSavedAccounts = saved.accounts.filter(account => !RETIRED_ACCOUNT_CODES.has(account.code)).map(account => {
-          const current = INITIAL_ACCOUNTS.find(defaultAccount => defaultAccount.code === account.code && ['1270', '1360'].includes(account.code));
+          const current = INITIAL_ACCOUNTS.find(defaultAccount => defaultAccount.code === account.code && ['1270', '1360', '2020'].includes(account.code));
           return current ? { ...account, name: current.name, description: current.description } : account;
         });
-        setAccounts([...activeSavedAccounts, ...INITIAL_ACCOUNTS.filter(a => ['1210', '1220', '1230', '1270', '1280', '1285', '1295', '1298', '1330', '1360', '1370', '2030', '2040', '2061', '2062', '2063', '2064', '2070', '2080', '2140', '2150', '4100', '4110'].includes(a.code) && !activeSavedAccounts.some(existing => existing.code === a.code))]);
+        setAccounts([...activeSavedAccounts, ...INITIAL_ACCOUNTS.filter(a => ['1210', '1220', '1230', '1270', '1280', '1285', '1295', '1298', '1330', '1360', '1370', '2020', '2030', '2040', '2061', '2062', '2063', '2064', '2070', '2080', '2140', '2150', '4100', '4110'].includes(a.code) && !activeSavedAccounts.some(existing => existing.code === a.code))]);
         setJournalEntries(migrateRetiredAccountLines(saved.journalEntries));
         setProjects(saved.projects || []);
         setAuditLogs(saved.auditLogs || []);
@@ -1805,10 +1807,10 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     };
 
     const restoredAccounts = payload.accounts.filter(account => !RETIRED_ACCOUNT_CODES.has(account.code)).map(account => {
-      const current = INITIAL_ACCOUNTS.find(defaultAccount => defaultAccount.code === account.code && ['1270', '1360'].includes(account.code));
+      const current = INITIAL_ACCOUNTS.find(defaultAccount => defaultAccount.code === account.code && ['1270', '1360', '2020'].includes(account.code));
       return current ? { ...account, name: current.name, description: current.description } : account;
     });
-    setAccounts([...restoredAccounts, ...INITIAL_ACCOUNTS.filter(a => ['1210', '1220', '1230', '1270', '1280', '1285', '1295', '1298', '1330', '1360', '1370', '2030', '2040', '2061', '2062', '2063', '2064', '2070', '2080', '2140', '2150', '4100', '4110'].includes(a.code) && !restoredAccounts.some(existing => existing.code === a.code))]);
+    setAccounts([...restoredAccounts, ...INITIAL_ACCOUNTS.filter(a => ['1210', '1220', '1230', '1270', '1280', '1285', '1295', '1298', '1330', '1360', '1370', '2020', '2030', '2040', '2061', '2062', '2063', '2064', '2070', '2080', '2140', '2150', '4100', '4110'].includes(a.code) && !restoredAccounts.some(existing => existing.code === a.code))]);
     setJournalEntries(migrateRetiredAccountLines(payload.journalEntries));
     setProjects(Array.isArray(payload.projects) ? payload.projects : []);
     setAuditLogs([restoreLogEntry, ...restoredLogs].slice(0, 100));

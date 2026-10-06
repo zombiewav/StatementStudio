@@ -36,7 +36,7 @@ const PURCHASE_ASSET_CODES = new Set(['1500', '1650']);
 export function categorizeTransactionRule(rule: Pick<ClassificationRule, 'debitAccountCode' | 'creditAccountCode' | 'description'>): Exclude<TransactionCategoryId, 'activity-fees'> {
   const description = rule.description.toLowerCase();
 
-  if (rule.debitAccountCode === '1700' || rule.creditAccountCode === '4070' || description.includes('merchandise')) {
+  if (rule.debitAccountCode === '1700' || rule.creditAccountCode === '4070' || rule.creditAccountCode === '1360' || description.includes('merchandise')) {
     return 'merchandise';
   }
 
