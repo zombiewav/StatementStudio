@@ -117,6 +117,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   const {
     accounts,
     journalEntries,
+    draftTransactions,
     addJournalEntry,
     attachReceiptsToEntry,
     reverseJournalEntry,
@@ -245,7 +246,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     purposeOptions?: PurposeOption[];
     requiresAccrualCompletion?: boolean;
     mayDeferPortion?: boolean;
-    sponsorshipKind?: 'cash' | 'food' | 'supplies';
+    sponsorshipKind?: 'cash';
     accrualAudience?: 'all' | 'new';
   } | null>(null);
 
@@ -822,31 +823,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     merchandiseCollectionOfficer,
   });
 
-  const handleSaveDraft = () => {
-    setErrorMessage('');
-    setSuccessMessage('');
-    if (!selectedCategory) {
-      setErrorMessage('Choose a transaction category before saving a draft.');
-      return;
-    }
-    if (selectedCategory === 'activity-fees') {
-      setErrorMessage('Drafts aren’t available yet for Activity Fees — please complete that form in one sitting for now.');
-      return;
-    }
-    if (!txName.trim() && amount <= 0) {
-      setErrorMessage('Enter at least a transaction type or an amount before saving as a draft.');
-      return;
-    }
-    const label = txName.trim() || description.trim() || 'Untitled draft';
-    const id = saveDraftTransaction({
-      id: editingDraftId || undefined,
-      category: selectedCategory,
-      label,
-      formState: buildFormSnapshot() as unknown as Record<string, unknown>,
-    });
-    setEditingDraftId(id);
-    onDraftSaved?.();
-  };
+  const handleSaveDraft = () => handlePost(undefined, true);
 
   const handleDiscardDraft = () => {
     if (!editingDraftId) return;
@@ -855,8 +832,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     appliedDraftIdRef.current = null;
   };
 
-  const handlePost = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handlePost = (e?: React.FormEvent, savingDraft = false) => {
+    e?.preventDefault();
     setErrorMessage('');
     setSuccessMessage('');
     setLastPostedEntry(null);
@@ -1063,7 +1040,11 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       const journalDate = isPriorMembershipCollection
         ? membershipPostingResult.posting?.collections[0]?.date || date
         : date;
-      const je = addJournalEntry(
+      const draftEntryId = editingDraftId
+        ? draftTransactions.find(draft => draft.id === editingDraftId)?.journalEntryId
+        : undefined;
+      const draftEntry = draftEntryId ? journalEntries.find(entry => entry.id === draftEntryId) : undefined;
+      const posted = addJournalEntry(
         journalDate,
         entryDescription,
         GENERAL_FUND_PROJECT,
@@ -1134,9 +1115,27 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
             merchandiseDueFromOfficer: isMerchandiseSale ? merchandiseSaleResult.posting?.dueFromOfficer : undefined,
             receiptAttachmentIds: [],
           },
-        }
+        },
+        savingDraft,
+        editingDraftId || undefined,
+        draftEntry?.id,
       );
+      const je = posted;
       attachReceiptsToEntry(je.id, pendingReceipts);
+
+      if (savingDraft) {
+        const id = saveDraftTransaction({
+          id: editingDraftId || undefined,
+          category: selectedCategory,
+          label: txName.trim() || description.trim() || 'Untitled draft',
+          formState: buildFormSnapshot() as unknown as Record<string, unknown>,
+          journalEntryId: je.id,
+        });
+        setEditingDraftId(id);
+        onDraftSaved?.();
+        setSuccessMessage(`${je.reference} saved as a draft. Its debit and credit are visible in the ledger and excluded from Financial Statements.`);
+        return;
+      }
 
       if (editingDraftId) {
         deleteDraftTransaction(editingDraftId);
@@ -1283,7 +1282,10 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       )}
 
       {selectedCategory === 'activity-fees' && <ActivityFeeEntry defaultOpen draftToResume={draftToResume} onDraftResumed={onDraftResumed} onDraftSaved={onDraftSaved} />}
-      {selectedCategory === 'prepaid-assets' && <PrepaidAssetEntry />}
+      {selectedCategory === 'prepaid-assets' && <div className="space-y-5">
+        <PrepaidAssetEntry />
+        <PayablesEntry allowedPayableCodes={['2061', '2062', '2063', '2064']} title="Payment of Prepaid and Other Asset Payables" />
+      </div>}
       {selectedCategory === 'payables' && <PayablesEntry />}
 
       {selectedCategory === 'merchandise' && <InventorySummaryCard compact />}
@@ -1557,7 +1559,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
 
                 {merchandisePaymentMethod === 'not-yet-paid' && <p className="rounded-lg bg-white/80 p-3 text-[10px] font-semibold text-indigo-800 dark:bg-slate-900/60 dark:text-indigo-200">The full batch cost will remain in Merchandise Payable and appear in Review until settled.</p>}
                 {merchandiseAcquisitionResult.posting && merchandiseAcquisitionResult.posting.merchandisePayable > 0 && <p className="rounded-lg bg-amber-50 p-3 text-[10px] font-semibold text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">The unpaid {formatCurrency(merchandiseAcquisitionResult.posting.merchandisePayable)} will be recorded in Merchandise Payable for Review.</p>}
-                {merchandiseAcquisitionResult.posting && merchandiseAcquisitionResult.posting.supplierReceivable > 0 && <p className="rounded-lg bg-amber-50 p-3 text-[10px] font-semibold text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">The excess {formatCurrency(merchandiseAcquisitionResult.posting.supplierReceivable)} will be recorded in Receivable from Supplier.</p>}
+                {merchandiseAcquisitionResult.posting && merchandiseAcquisitionResult.posting.supplierReceivable > 0 && <p className="rounded-lg bg-amber-50 p-3 text-[10px] font-semibold text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">The excess {formatCurrency(merchandiseAcquisitionResult.posting.supplierReceivable)} will be recorded in Accounts Receivable - Suppliers.</p>}
                 {merchandiseAcquisitionResult.error && amount > 0 && <p className="text-[10px] font-bold text-rose-700 dark:text-rose-300">{merchandiseAcquisitionResult.error}</p>}
               </div>
             )}

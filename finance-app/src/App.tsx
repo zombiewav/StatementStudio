@@ -51,7 +51,7 @@ function DashboardLayout() {
       case 'review':
         return <Review onContinueDraft={(draftId) => { setResumeDraftId(draftId); setActivePage('transactions'); }} />;
       case 'journals':
-        return <JournalEntries />;
+        return <JournalEntries searchTerm={searchTerm} onSearchTermChange={setSearchTerm} />;
       case 'ledger':
         return <GeneralLedger />;
       case 'trial-balance':
@@ -96,6 +96,7 @@ function DashboardLayout() {
           onMenuToggle={() => setIsMobileMenuOpen(!isMobileMenuOpen)} 
           searchTerm={searchTerm}
           setSearchTerm={setSearchTerm}
+          onSearchSubmit={() => setActivePage('journals')}
         />
 
         {/* Scrollable Content Container */}

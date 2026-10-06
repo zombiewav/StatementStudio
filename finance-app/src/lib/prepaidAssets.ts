@@ -1,16 +1,15 @@
 import { DatedAmountRecord, JournalLine } from '../types';
 
-export type PrepaidAssetCategory = 'awards' | 'supplies' | 'wifi' | 'rent' | 'uniform';
+export type PrepaidAssetCategory = 'awards' | 'supplies' | 'rent' | 'uniform';
 export type PrepaidAssetPaymentMethod = 'organization-funds' | 'officer-personal' | 'officer-advance' | 'combination' | 'not-yet-paid';
 
-interface PrepaidAssetCategoryConfig { label: string; assetCode: string; expenseCode: string; depositCode?: string }
+interface PrepaidAssetCategoryConfig { label: string; assetCode: string; expenseCode: string; payableCode: string; depositCode?: string }
 
 export const PREPAID_ASSET_CATEGORIES: Record<PrepaidAssetCategory, PrepaidAssetCategoryConfig> = {
-  awards: { label: 'Awards and Prizes', assetCode: '1280', expenseCode: '5120' },
-  supplies: { label: 'Supplies and Materials', assetCode: '1285', expenseCode: '5290' },
-  wifi: { label: 'Prepaid Wifi', assetCode: '1290', expenseCode: '5030' },
-  rent: { label: 'Prepaid Rent', assetCode: '1295', expenseCode: '5020', depositCode: '1340' },
-  uniform: { label: 'Clothing/Uniform', assetCode: '1298', expenseCode: '5180', depositCode: '1345' },
+  awards: { label: 'Awards and Prizes', assetCode: '1280', expenseCode: '5120', payableCode: '2061' },
+  supplies: { label: 'Supplies and Materials', assetCode: '1285', expenseCode: '5290', payableCode: '2062' },
+  rent: { label: 'Prepaid Rent', assetCode: '1295', expenseCode: '5020', payableCode: '2063', depositCode: '1270' },
+  uniform: { label: 'Clothing/Uniform', assetCode: '1298', expenseCode: '5180', payableCode: '2064', depositCode: '1270' },
 } as const;
 
 export const PREPAID_ASSET_ACCOUNT_CODES: string[] = Object.values(PREPAID_ASSET_CATEGORIES).map(category => category.assetCode);
@@ -24,8 +23,6 @@ export const PREPAID_ASSET_ITEMS: Record<string, PrepaidAssetCategory[]> = {
   'Decoration Materials': ['supplies'],
   'Booth Materials': ['supplies'],
   'First Aid Kit': ['supplies'],
-  Wifi: ['wifi'],
-  Load: ['wifi'],
   'Projector Rental': ['rent'],
   'Chairs and Tables Rental': ['rent'],
   'Booth Rental': ['rent'],
@@ -89,14 +86,14 @@ export function buildPrepaidAssetPurchasePosting(input: PrepaidAssetPurchaseInpu
   let receivableFromSupplier = Math.max(0, cents(initialPaid - price));
   if (downpayment > 0 && config.depositCode) lines.push({ accountCode: config.depositCode, debit: 0, credit: downpayment, date: input.purchaseDate });
   addCreditLines(lines, datedSources, input.purchaseDate);
-  if (remainingPayable > 0) lines.push({ accountCode: '2060', debit: 0, credit: remainingPayable, date: input.purchaseDate });
+  if (remainingPayable > 0) lines.push({ accountCode: config.payableCode, debit: 0, credit: remainingPayable, date: input.purchaseDate });
   if (receivableFromSupplier > 0) lines.push({ accountCode: '1360', debit: receivableFromSupplier, credit: 0, date: input.purchaseDate });
 
   [...new Set(datedSources.flatMap(source => source.rows.map(row => row.date)).filter(date => date !== input.purchaseDate))].sort().forEach(date => {
     const payment = paymentOn(date);
     const payableSettlement = Math.min(remainingPayable, payment);
     const excess = cents(payment - payableSettlement);
-    if (payableSettlement > 0) lines.push({ accountCode: '2060', debit: payableSettlement, credit: 0, date });
+    if (payableSettlement > 0) lines.push({ accountCode: config.payableCode, debit: payableSettlement, credit: 0, date });
     if (excess > 0) {
       lines.push({ accountCode: '1360', debit: excess, credit: 0, date });
       receivableFromSupplier = cents(receivableFromSupplier + excess);

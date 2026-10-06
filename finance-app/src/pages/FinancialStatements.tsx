@@ -63,7 +63,7 @@ export function FinancialStatements(): React.ReactElement {
 
   // Apply Date Range Filter on Entries
   const filteredEntries = useMemo(() => {
-    return journalEntries.filter(je => je.date >= startDate && je.date <= endDate);
+    return journalEntries.filter(je => !je.isDraft && je.date >= startDate && je.date <= endDate);
   }, [journalEntries, startDate, endDate]);
 
   // Closing entries stay in the ledger and point-in-time Balance Sheet, but
@@ -83,7 +83,7 @@ export function FinancialStatements(): React.ReactElement {
   // the period's own numbers (a receivable, a prepaid balance) aren't
   // final yet either.
   const incompleteReviewItems = useMemo(
-    () => computeTransactionReviewStates(journalEntries, accounts).filter(item => item.status === 'incomplete'),
+    () => computeTransactionReviewStates(journalEntries.filter(entry => !entry.isDraft), accounts).filter(item => item.status === 'incomplete'),
     [journalEntries, accounts]
   );
   const activeClose = closedFiscalYears.find(record => record.fiscalYear === settings.fiscalYear);
@@ -120,7 +120,7 @@ export function FinancialStatements(): React.ReactElement {
   // range — e.g. prior years' closing entries — not just activity within
   // it. Point-in-time balances, unlike Revenue/Expenses.
   const cumulativeToEndEntries = useMemo(
-    () => journalEntries.filter(je => je.date <= endDate),
+    () => journalEntries.filter(je => !je.isDraft && je.date <= endDate),
     [journalEntries, endDate]
   );
   const cumulativeToEndBalances = useMemo(
@@ -136,11 +136,11 @@ export function FinancialStatements(): React.ReactElement {
   // different point in time — as of just before the range began, not its
   // end — so it needs its own cumulative snapshot.
   const beginningFundBalance = useMemo(() => {
-    const priorEntries = journalEntries.filter(je => je.date < startDate);
+    const priorEntries = journalEntries.filter(je => !je.isDraft && je.date < startDate);
     return computeTypeTotals(computeAccountBalances(priorEntries, accounts), accounts)['Fund Balance'];
   }, [journalEntries, startDate, accounts]);
   const beginningNetAssetsByRestriction = useMemo(() => {
-    const priorEntries = journalEntries.filter(je => je.date < startDate);
+    const priorEntries = journalEntries.filter(je => !je.isDraft && je.date < startDate);
     const balances = combineOpeningAndPeriodBalances(openingBalances, computeAccountBalances(priorEntries, accounts), accounts);
     return { unrestricted: balances['3010'] || 0, temporary: balances['3020'] || 0, permanent: balances['3030'] || 0 };
   }, [journalEntries, startDate, accounts, openingBalances]);
@@ -160,14 +160,14 @@ export function FinancialStatements(): React.ReactElement {
   );
   const positionAssetGroups = useMemo(() => {
     const groups: Array<[string, string[]]> = [
-      ['Cash and Cash Equivalents', ['1010', '1015']], ['Receivables', ['1200', '1210', '1300', '1310', '1330', '1360', '1370']], ['Advances and Dues', ['1220', '1230', '1250', '1270', '1320']], ['Inventories', ['1700']], ['Prepaid Assets', ['1260', '1280', '1285', '1290', '1295', '1298']], ['Donated Assets', ['1710', '1720']], ['Deposits', ['1340', '1345']], ['Property and Equipment', ['1500', '1550', '1600', '1650', '1660']],
+      ['Cash and Cash Equivalents', ['1010', '1015']], ['Receivables', ['1200', '1210', '1300', '1310', '1330', '1360', '1370']], ['Advances and Dues', ['1220', '1230', '1250', '1270', '1320']], ['Inventories', ['1700']], ['Prepaid Expenses and Other Assets', ['1260', '1280', '1285', '1295', '1298']], ['Property and Equipment', ['1500', '1550', '1600', '1650', '1660']],
     ];
     const assigned = new Set(groups.flatMap(([, codes]) => codes));
     return [...groups.map(([label, codes]) => [label, accounts.filter(account => codes.includes(account.code))] as const), ['Other Assets', accounts.filter(account => account.type === 'Assets' && !assigned.has(account.code))] as const];
   }, [accounts]);
   const positionLiabilityGroups = useMemo(() => {
     const groups: Array<[string, string[]]> = [
-      ['Dues and Payables', ['2010', '2020', '2030', '2040', '2050', '2060', '2070', '2080']], ['Unearned Revenues', ['2110', '2140']], ['Refund Liabilities', ['2120', '2130', '2150']], ['Loans and Accrued Liabilities', ['2200', '2300']],
+      ['Dues and Payables', ['2010', '2020', '2030', '2040', '2050', '2061', '2062', '2063', '2064', '2070', '2080']], ['Unearned Revenues', ['2110', '2140']], ['Refund Liabilities', ['2120', '2130', '2150']], ['Loans and Accrued Liabilities', ['2200', '2300']],
     ];
     const assigned = new Set(groups.flatMap(([, codes]) => codes));
     const grouped = groups.map(([label, codes]) => [label, accounts.filter(account => codes.includes(account.code))] as const);
@@ -386,7 +386,7 @@ export function FinancialStatements(): React.ReactElement {
   };
 
   const cashFlowDetails = useMemo(
-    () => computeCashFlowDetails(journalEntries, accounts, startDate, endDate, openingBalances['1010'] || 0),
+    () => computeCashFlowDetails(journalEntries.filter(entry => !entry.isDraft), accounts, startDate, endDate, openingBalances['1010'] || 0),
     [journalEntries, accounts, startDate, endDate, openingBalances]
   );
   const formatOutflow = (amount: number) => amount === 0

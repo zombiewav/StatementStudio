@@ -7,11 +7,13 @@ import {
   buildPrepaidAssetDownpaymentPosting,
   buildPrepaidAssetPurchasePosting,
   PREPAID_ASSET_CATEGORIES,
+  PREPAID_ASSET_ACCOUNT_CODES,
   PREPAID_ASSET_ITEMS,
   PrepaidAssetCategory,
   PrepaidAssetPaymentMethod,
 } from '../lib/prepaidAssets';
 import { DatedAmountRecord } from '../types';
+import { reportingPeriodBounds } from '../lib/reportingPeriod';
 
 type Mode = 'purchase' | 'consumption' | 'downpayment';
 const GENERAL_FUND = 'General Fund Operations';
@@ -25,6 +27,10 @@ const paymentMethods: { value: PrepaidAssetPaymentMethod; label: string }[] = [
 
 const money = (value: string) => Number(value) || 0;
 const rowsTotal = (rows: DatedAmountRecord[]) => rows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+const localToday = () => {
+  const now = new Date();
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
+};
 
 function PaymentRows({ label, rows, setRows, defaultDate }: { label: string; rows: DatedAmountRecord[]; setRows: (rows: DatedAmountRecord[]) => void; defaultDate: string }) {
   return <div className="space-y-2">
@@ -34,7 +40,8 @@ function PaymentRows({ label, rows, setRows, defaultDate }: { label: string; row
       <input type="number" min="0" step="0.01" value={row.amount || ''} onChange={event => setRows(rows.map((item, itemIndex) => itemIndex === index ? { ...item, amount: money(event.target.value) } : item))} placeholder="Amount" className="rounded-lg border border-slate-200 bg-white p-2 text-xs dark:border-slate-700 dark:bg-slate-800" />
       <button type="button" onClick={() => setRows(rows.filter((_, itemIndex) => itemIndex !== index))} className="px-2 text-xs font-bold text-rose-600" aria-label={`Remove ${label} row ${index + 1}`}>×</button>
     </div>)}
-    <button type="button" onClick={() => setRows([...rows, { date: defaultDate, amount: 0 }])} className="text-[10px] font-bold text-blue-700 dark:text-blue-300">+ Add payment</button>
+    <button type="button" onClick={() => setRows([...rows, { date: defaultDate, amount: 0 }])} className="inline-flex items-center rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-[10px] font-black text-blue-800 shadow-sm transition-colors hover:bg-blue-100 dark:border-blue-500/40 dark:bg-blue-500/10 dark:text-blue-200">+ Add payment</button>
+    <p className="text-[10px] font-medium text-slate-500 dark:text-slate-400">Use this to record another payment with its own date and amount.</p>
   </div>;
 }
 
@@ -64,6 +71,12 @@ export function PrepaidAssetEntry(): React.ReactElement {
   const availableAdvance = officer ? counterpartyBalance(journalEntries, '1250', 'Debit', officer) : 0;
   const availableCash = Math.max(0, accountBalances['1010'] || 0);
   const config = category ? PREPAID_ASSET_CATEGORIES[category] : null;
+  const automaticPostingDate = useMemo(() => {
+    const today = localToday();
+    if (!settings.semester || !settings.reportingYear) return today;
+    const bounds = reportingPeriodBounds(settings.semester, settings.reportingYear);
+    return today >= bounds.startDate && today <= bounds.endDate ? today : bounds.endDate;
+  }, [settings.reportingYear, settings.semester]);
 
   const downpayments = useMemo(() => journalEntries.flatMap(entry => {
     const entryCategory = entry.transactionDetails?.prepaidAssetCategory;
@@ -80,7 +93,7 @@ export function PrepaidAssetEntry(): React.ReactElement {
   const selectedDownpayment = matchingDownpayments.find(record => record.id === selectedDownpaymentId);
 
   const prepaidPurchases = useMemo(() => computePendingObligations(journalEntries, accounts)
-    .filter(obligation => ['1280', '1285', '1290', '1295', '1298'].includes(obligation.accountCode))
+    .filter(obligation => PREPAID_ASSET_ACCOUNT_CODES.includes(obligation.accountCode))
     .map(obligation => ({ obligation, entry: journalEntries.find(entry => entry.id === obligation.entryId) }))
     .filter(record => !!record.entry), [accounts, journalEntries]);
   const selectedPurchase = prepaidPurchases.find(record => record.obligation.entryId === selectedPurchaseId);
@@ -101,7 +114,7 @@ export function PrepaidAssetEntry(): React.ReactElement {
   const submit = (event: React.FormEvent) => {
     event.preventDefault(); setError(''); setMessage('');
     if (!settings.semester || !settings.reportingYear) return setError('Set the organization Semester and Year before posting.');
-    if (!date) return setError('Enter the transaction date.');
+    if (mode !== 'consumption' && !date) return setError('Enter the transaction date.');
     try {
       if (mode === 'consumption') {
         if (!selectedPurchase?.entry) throw new Error('Select a prepaid-asset purchase with an unused balance.');
@@ -110,7 +123,8 @@ export function PrepaidAssetEntry(): React.ReactElement {
         if (!selectedCategory) throw new Error('The selected purchase has no prepaid-asset category.');
         const value = money(amount);
         if (value > selectedPurchase.obligation.remainingAmount) throw new Error('Consumption cannot exceed the remaining prepaid-asset balance.');
-        addJournalEntry(date, `Consumption of ${details.prepaidAssetItem || 'Prepaid Asset'}`, GENERAL_FUND, buildPrepaidAssetConsumptionPosting(selectedCategory, value, date), selectedPurchase.entry.eventName, selectedPurchase.entry.id, {
+        const postingDate = date || automaticPostingDate;
+        addJournalEntry(postingDate, `Consumption of ${details.prepaidAssetItem || 'Prepaid Asset'}`, GENERAL_FUND, buildPrepaidAssetConsumptionPosting(selectedCategory, value, postingDate), selectedPurchase.entry.eventName, selectedPurchase.entry.id, {
           transactionType: 'Consumption of Prepaid Assets', details: { eventRelated: !!selectedPurchase.entry.eventName, receiptAttachmentIds: [], prepaidAssetCategory: selectedCategory, prepaidAssetItem: details.prepaidAssetItem, prepaidAssetExpenseAccountCode: PREPAID_ASSET_CATEGORIES[selectedCategory].expenseCode, prepaidAssetPurpose: details.prepaidAssetPurpose },
         });
       } else {
@@ -123,12 +137,12 @@ export function PrepaidAssetEntry(): React.ReactElement {
           });
         } else {
           if (purpose === 'event' && !eventName.trim()) throw new Error('Enter the event name.');
-          if ((category === 'awards' || category === 'supplies') && (!Number.isInteger(money(quantity)) || money(quantity) <= 0)) throw new Error('Enter a whole-number quantity greater than zero.');
+          if (quantity && (!Number.isInteger(money(quantity)) || money(quantity) <= 0)) throw new Error('If entered, quantity must be a whole number greater than zero.');
           const needsOfficer = paymentMethod === 'officer-personal' || paymentMethod === 'officer-advance' || paymentMethod === 'combination';
           if (needsOfficer && !officer.trim()) throw new Error('Select or enter the accountable officer.');
           const posting = buildPrepaidAssetPurchasePosting({ category, purchasePrice: value, purchaseDate: date, paymentMethod, organizationPayments, officerPayments, advancePayments, downpaymentAmount: selectedDownpayment?.remaining || 0, availableCash, availableAdvance });
           addJournalEntry(date, `Purchase of ${item}`, GENERAL_FUND, posting.lines, purpose === 'event' ? eventName : undefined, undefined, {
-            transactionType: 'Purchase of Prepaid Assets', details: { eventRelated: purpose === 'event', receiptAttachmentIds: [], prepaidAssetCategory: category, prepaidAssetItem: item, prepaidAssetQuantity: (category === 'awards' || category === 'supplies') ? money(quantity) : undefined, prepaidAssetPurchasePrice: value, prepaidAssetPaymentMethod: paymentMethod, prepaidAssetExpenseAccountCode: config?.expenseCode, prepaidAssetDownpaymentEntryId: selectedDownpayment?.id, prepaidAssetDownpaymentAmount: selectedDownpayment?.remaining, prepaidAssetPayableAmount: posting.payable, prepaidAssetPurpose: purpose, counterpartyName: officer.trim() || item },
+            transactionType: 'Purchase of Prepaid Assets', details: { eventRelated: purpose === 'event', receiptAttachmentIds: [], prepaidAssetCategory: category, prepaidAssetItem: item, prepaidAssetQuantity: quantity ? money(quantity) : undefined, prepaidAssetPurchasePrice: value, prepaidAssetPaymentMethod: paymentMethod, prepaidAssetExpenseAccountCode: config?.expenseCode, prepaidAssetDownpaymentEntryId: selectedDownpayment?.id, prepaidAssetDownpaymentAmount: selectedDownpayment?.remaining, prepaidAssetPayableAmount: posting.payable, prepaidAssetPurpose: purpose, counterpartyName: officer.trim() || item },
           });
         }
       }
@@ -140,22 +154,41 @@ export function PrepaidAssetEntry(): React.ReactElement {
   const showOfficer = paymentMethod === 'officer-personal' || paymentMethod === 'combination';
   const showAdvance = paymentMethod === 'officer-advance' || paymentMethod === 'combination';
   const totalPaid = rowsTotal(showOrg ? organizationPayments : []) + rowsTotal(showOfficer ? officerPayments : []) + rowsTotal(showAdvance ? advancePayments : []) + (selectedDownpayment?.remaining || 0);
+  const previewLines = useMemo(() => {
+    const postingDate = date || automaticPostingDate;
+    const value = money(amount);
+    if (value <= 0) return [];
+    try {
+      if (mode === 'consumption') {
+        const selectedCategory = selectedPurchase?.entry?.transactionDetails?.prepaidAssetCategory;
+        return selectedCategory ? buildPrepaidAssetConsumptionPosting(selectedCategory, value, postingDate) : [];
+      }
+      if (!category) return [];
+      if (mode === 'downpayment') return buildPrepaidAssetDownpaymentPosting(category, value, postingDate);
+      return buildPrepaidAssetPurchasePosting({ category, purchasePrice: value, purchaseDate: postingDate, paymentMethod, organizationPayments, officerPayments, advancePayments, downpaymentAmount: selectedDownpayment?.remaining || 0, availableCash, availableAdvance }).lines;
+    } catch {
+      return [];
+    }
+  }, [advancePayments, amount, automaticPostingDate, availableAdvance, availableCash, category, date, mode, officerPayments, organizationPayments, paymentMethod, selectedDownpayment?.remaining, selectedPurchase?.entry?.transactionDetails?.prepaidAssetCategory]);
 
   return <form onSubmit={submit} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-5">
-    <div className="flex flex-wrap gap-2">
+    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Prepaid Expenses and Other Assets</h3>
+    <p className="mt-1 text-[10px] font-medium text-slate-500">(Record assets acquired in advance, whether paid or unpaid, that will be used or consumed later.)</p>
+    <div className="mt-4 flex flex-wrap gap-2">
       {([['purchase', 'Purchase'], ['consumption', 'Consumption'], ['downpayment', 'Downpayment']] as const).map(([value, label]) => <button key={value} type="button" onClick={() => { setMode(value); setItem(''); setCategory(''); setAmount(''); setSelectedDownpaymentId(''); setSelectedPurchaseId(''); setError(''); setMessage(''); }} className={`rounded-lg px-4 py-2 text-xs font-bold ${mode === value ? 'bg-blue-700 text-white' : 'border border-slate-300 text-slate-700 dark:border-slate-600 dark:text-slate-200'}`}>{label}</button>)}
     </div>
     <p className="mt-3 text-[10px] font-medium text-slate-500">Record purchases now so they affect the ledger and financial statements. Unused balances remain open for Consumption in this category or in Review.</p>
-    {mode === 'consumption' ? <div className="mt-4 grid gap-3 sm:grid-cols-2">
+    <div className="mt-4 grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(300px,0.75fr)]">
+    <div>{mode === 'consumption' ? <div className="grid gap-3 sm:grid-cols-2">
       <label className="text-[10px] font-bold uppercase text-slate-600 sm:col-span-2">Prepaid asset purchase<select value={selectedPurchaseId} onChange={event => setSelectedPurchaseId(event.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white p-2.5 text-xs dark:border-slate-700 dark:bg-slate-800"><option value="">Select a purchase…</option>{prepaidPurchases.map(({ obligation, entry }) => <option key={obligation.entryId} value={obligation.entryId}>{entry?.transactionDetails?.prepaidAssetItem || obligation.description} — {formatCurrency(obligation.remainingAmount)} remaining</option>)}</select></label>
-      <label className="text-[10px] font-bold uppercase text-slate-600">Date<input type="date" value={date} onChange={event => setDate(event.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white p-2.5 text-xs dark:border-slate-700 dark:bg-slate-800" /></label>
+      <label className="text-[10px] font-bold uppercase text-slate-600">Date (optional - set automatically)<input type="date" value={date} onChange={event => setDate(event.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white p-2.5 text-xs dark:border-slate-700 dark:bg-slate-800" /></label>
       <label className="text-[10px] font-bold uppercase text-slate-600">Amount consumed<input type="number" min="0" step="0.01" max={selectedPurchase?.obligation.remainingAmount} value={amount} onChange={event => setAmount(event.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white p-2.5 text-xs dark:border-slate-700 dark:bg-slate-800" /></label>
-    </div> : <div className="mt-4 grid gap-3 sm:grid-cols-2">
+    </div> : <div className="grid gap-3 sm:grid-cols-2">
       <label className="text-[10px] font-bold uppercase text-slate-600">Item<select value={item} onChange={event => chooseItem(event.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white p-2.5 text-xs dark:border-slate-700 dark:bg-slate-800"><option value="">Select an item…</option>{availableItems.map(value => <option key={value}>{value}</option>)}</select></label>
       <label className="text-[10px] font-bold uppercase text-slate-600">Category<select value={category} onChange={event => { setCategory(event.target.value as PrepaidAssetCategory); setSelectedDownpaymentId(''); }} disabled={!item} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white p-2.5 text-xs disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800"><option value="">Select a category…</option>{allowedCategories.map(value => <option key={value} value={value}>{PREPAID_ASSET_CATEGORIES[value].label}</option>)}</select></label>
       <label className="text-[10px] font-bold uppercase text-slate-600">Date<input type="date" value={date} onChange={event => setDate(event.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white p-2.5 text-xs dark:border-slate-700 dark:bg-slate-800" /></label>
       <label className="text-[10px] font-bold uppercase text-slate-600">{mode === 'purchase' ? 'Purchase price' : 'Initial downpayment'}<input type="number" min="0" step="0.01" value={amount} onChange={event => setAmount(event.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white p-2.5 text-xs dark:border-slate-700 dark:bg-slate-800" /></label>
-      {mode === 'purchase' && (category === 'awards' || category === 'supplies') && <label className="text-[10px] font-bold uppercase text-slate-600">Quantity<input type="number" min="1" step="1" value={quantity} onChange={event => setQuantity(event.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white p-2.5 text-xs dark:border-slate-700 dark:bg-slate-800" /></label>}
+      {mode === 'purchase' && (category === 'awards' || category === 'supplies') && <label className="text-[10px] font-bold uppercase text-slate-600">Quantity (optional)<input type="number" min="1" step="1" value={quantity} onChange={event => setQuantity(event.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white p-2.5 text-xs dark:border-slate-700 dark:bg-slate-800" /></label>}
       <label className="text-[10px] font-bold uppercase text-slate-600">Purpose<select value={purpose} onChange={event => setPurpose(event.target.value as 'event' | 'general')} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white p-2.5 text-xs dark:border-slate-700 dark:bg-slate-800"><option value="event">For an event</option><option value="general">For a general purpose</option></select></label>
       {purpose === 'event' && <label className="text-[10px] font-bold uppercase text-slate-600">Event name<input value={eventName} onChange={event => setEventName(event.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white p-2.5 text-xs dark:border-slate-700 dark:bg-slate-800" /></label>}
       {mode === 'purchase' && <>
@@ -165,10 +198,24 @@ export function PrepaidAssetEntry(): React.ReactElement {
         {showOfficer && <PaymentRows label="Officer personal payments" rows={officerPayments} setRows={setOfficerPayments} defaultDate={date} />}
         {showAdvance && <PaymentRows label="Payments through officer advance" rows={advancePayments} setRows={setAdvancePayments} defaultDate={date} />}
         {(category === 'rent' || category === 'uniform') && <label className="text-[10px] font-bold uppercase text-slate-600 sm:col-span-2">Previously recorded downpayment<select value={selectedDownpaymentId} onChange={event => setSelectedDownpaymentId(event.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white p-2.5 text-xs dark:border-slate-700 dark:bg-slate-800"><option value="">None</option>{matchingDownpayments.map(record => <option key={record.id} value={record.id}>{record.reference} — {record.item} — {formatCurrency(record.remaining)}</option>)}</select></label>}
-        <div className="rounded-lg bg-slate-50 p-3 text-[10px] font-semibold text-slate-600 dark:bg-slate-800 sm:col-span-2">Total payments and applied downpayment: {formatCurrency(totalPaid)}{money(amount) > totalPaid && <span className="ml-2 text-amber-700">Unpaid balance: {formatCurrency(money(amount) - totalPaid)} will be recorded as Accounts Payable-Prepaid Assets and can be settled later under Payables.</span>}{totalPaid > money(amount) && <span className="ml-2 text-blue-700">Excess payment: {formatCurrency(totalPaid - money(amount))} will be recorded as Receivable from Supplier.</span>}</div>
+        <div className="rounded-lg bg-slate-50 p-3 text-[10px] font-semibold text-slate-600 dark:bg-slate-800 sm:col-span-2">Total payments and applied downpayment: {formatCurrency(totalPaid)}{money(amount) > totalPaid && <span className="ml-2 text-amber-700">Unpaid balance: {formatCurrency(money(amount) - totalPaid)} will be recorded in {config ? `${config.payableCode} - ${accounts.find(account => account.code === config.payableCode)?.name || 'the related payable account'}` : 'the related payable account'} and can be settled later under Payables.</span>}{totalPaid > money(amount) && <span className="ml-2 text-blue-700">Excess payment: {formatCurrency(totalPaid - money(amount))} will be recorded as Accounts Receivable - Suppliers.</span>}</div>
       </>}
-    </div>}
+    </div>}</div>
+    <aside className="h-fit rounded-xl border border-blue-100 bg-blue-50/50 p-4 dark:border-blue-500/20 dark:bg-blue-500/5">
+      <h3 className="text-xs font-black uppercase tracking-wide text-blue-950 dark:text-blue-100">Journal Entry Preview</h3>
+      <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">Review the debit and credit before posting.</p>
+      {previewLines.length > 0 ? <div className="mt-3 space-y-2">
+        {previewLines.map((line, index) => {
+          const account = accounts.find(candidate => candidate.code === line.accountCode);
+          return <div key={`${line.accountCode}-${index}`} className="grid grid-cols-[1fr_auto] gap-3 rounded-lg bg-white p-2.5 text-[10px] shadow-sm dark:bg-slate-800">
+            <div><p className="font-black text-slate-800 dark:text-slate-100">{line.accountCode} - {account?.name || 'Account'}</p><p className="mt-0.5 font-semibold uppercase text-slate-400">{line.debit > 0 ? 'Debit' : 'Credit'}</p></div>
+            <p className="self-center font-black text-slate-900 dark:text-white">{formatCurrency(line.debit || line.credit)}</p>
+          </div>;
+        })}
+      </div> : <p className="mt-3 rounded-lg border border-dashed border-slate-300 p-4 text-center text-[10px] font-semibold text-slate-500 dark:border-slate-700 dark:text-slate-400">Enter the transaction details to preview the debit and credit.</p>}
+    </aside>
+    </div>
     {error && <p className="mt-3 text-xs font-semibold text-rose-600">{error}</p>}{message && <p className="mt-3 text-xs font-semibold text-emerald-600">{message}</p>}
-    <button type="submit" className="mt-4 rounded-lg bg-blue-700 px-5 py-2.5 text-xs font-bold text-white">Post Prepaid Asset Transaction</button>
+    <button type="submit" className="mt-4 rounded-lg bg-blue-700 px-5 py-2.5 text-xs font-bold text-white">Post Prepaid and Other Asset Transaction</button>
   </form>;
 }

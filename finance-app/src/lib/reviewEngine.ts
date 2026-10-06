@@ -15,11 +15,7 @@ import { PREPAID_ASSET_ACCOUNT_CODES } from './prepaidAssets';
 // REVIEW question ("did you reimburse them yet?", "have you paid the
 // supplier?", "did the officer actually use/settle the advance?", "has
 // this now been used/consumed/benefited from?").
-export const DONATED_FOOD_SUPPLIES_CODE = '1710';
-export const DONATED_EVENT_SUPPLIES_CODE = '1720';
-export const LOSS_FROM_SPOILAGE_CODE = '5170';
-export const DONATED_INVENTORY_ACCOUNT_CODES = [DONATED_FOOD_SUPPLIES_CODE, DONATED_EVENT_SUPPLIES_CODE] as const;
-export const OBLIGATION_ACCOUNT_CODES = ['2050', '2010', '2020', '2030', '2040', '2060', '1200', '1320', '1250', '1260', ...PREPAID_ASSET_ACCOUNT_CODES, ...DONATED_INVENTORY_ACCOUNT_CODES] as const;
+export const OBLIGATION_ACCOUNT_CODES = ['2050', '2010', '2020', '2030', '2040', '2061', '2062', '2063', '2064', '1200', '1320', '1250', '1260', ...PREPAID_ASSET_ACCOUNT_CODES] as const;
 export type ObligationAccountCode = typeof OBLIGATION_ACCOUNT_CODES[number];
 
 // Prepaid Expenses: the general "not yet used" holding account any
@@ -167,9 +163,6 @@ export function computeTransactionReviewStates(entries: JournalEntry[], accounts
 
       const missing = (pendingByEntry.get(entry.id) || []).map(item => {
         if (item.accountCode === PREPAID_EXPENSE_CODE || PREPAID_ASSET_ACCOUNT_CODES.includes(item.accountCode)) return `${obligationAccountLabel(item.accountCode, accounts)} still unused: ${item.remainingAmount}`;
-        if (DONATED_INVENTORY_ACCOUNT_CODES.includes(item.accountCode as typeof DONATED_INVENTORY_ACCOUNT_CODES[number])) {
-          return `${obligationAccountLabel(item.accountCode, accounts)} still unused or unresolved: ${item.remainingAmount}`;
-        }
         return `${obligationAccountLabel(item.accountCode, accounts)} still open: ${item.remainingAmount}`;
       });
 
@@ -215,31 +208,6 @@ export function buildRestrictionReleaseLines(amount: number): JournalLine[] {
     { accountCode: TEMPORARILY_RESTRICTED_REVENUE_CODE, debit: amount, credit: 0 },
     { accountCode: UNRESTRICTED_REVENUE_CODE, debit: 0, credit: amount },
   ];
-}
-
-/**
- * Moves donated food or event supplies out of their temporary holding asset
- * as the organization uses them or determines that part was spoiled. The
- * caller chooses the normal usage expense (Meals & Refreshments for food or
- * Supplies Expense for other donated supplies); spoilage always goes to its
- * dedicated loss account.
- */
-export function buildDonatedInventorySettlementLines(
-  inventoryAccountCode: string,
-  usageExpenseAccountCode: string,
-  usedAmount: number,
-  spoiledAmount: number
-): JournalLine[] {
-  const used = Math.max(0, usedAmount);
-  const spoiled = Math.max(0, spoiledAmount);
-  const total = used + spoiled;
-  if (total <= 0) return [];
-
-  const lines: JournalLine[] = [];
-  if (used > 0) lines.push({ accountCode: usageExpenseAccountCode, debit: used, credit: 0 });
-  if (spoiled > 0) lines.push({ accountCode: LOSS_FROM_SPOILAGE_CODE, debit: spoiled, credit: 0 });
-  lines.push({ accountCode: inventoryAccountCode, debit: 0, credit: total });
-  return lines;
 }
 
 /**

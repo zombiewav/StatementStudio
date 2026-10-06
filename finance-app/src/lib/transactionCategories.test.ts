@@ -27,7 +27,10 @@ describe('transaction categories', () => {
 
   it('labels the catch-all group as Miscellaneous Transactions', () => {
     expect(TRANSACTION_CATEGORIES.find(category => category.id === 'other')?.label).toBe('Miscellaneous Transactions');
-    expect(TRANSACTION_CATEGORIES.find(category => category.id === 'prepaid-assets')?.label).toBe('Prepaid Assets');
+    expect(TRANSACTION_CATEGORIES.find(category => category.id === 'prepaid-assets')).toMatchObject({
+      label: 'Prepaid Expenses and Other Assets',
+      description: 'Record assets acquired in advance, whether paid or unpaid, that will be used or consumed later.',
+    });
     expect(TRANSACTION_CATEGORIES.find(category => category.id === 'payables')?.label).toBe('Payables');
   });
 

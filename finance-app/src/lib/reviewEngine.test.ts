@@ -7,7 +7,6 @@ import {
   buildPrepaidExpenseSettlementLines,
   computeTransactionReviewStates,
   buildRestrictionReleaseLines,
-  buildDonatedInventorySettlementLines,
   AdvanceSettlementStatus,
 } from './reviewEngine';
 import { Account, JournalEntry } from '../types';
@@ -18,8 +17,6 @@ const accounts: Account[] = [
   { code: '1320', name: 'Due from Officers', type: 'Assets', normalBalance: 'Debit', description: '', isActive: true },
   { code: '1250', name: 'Advances to Officers', type: 'Assets', normalBalance: 'Debit', description: '', isActive: true },
   { code: '1260', name: 'Prepaid Expenses', type: 'Assets', normalBalance: 'Debit', description: '', isActive: true },
-  { code: '1710', name: 'Donated Food Supplies', type: 'Assets', normalBalance: 'Debit', description: '', isActive: true },
-  { code: '1720', name: 'Donated Event Supplies', type: 'Assets', normalBalance: 'Debit', description: '', isActive: true },
   { code: '2010', name: 'Due to Supplier', type: 'Liabilities', normalBalance: 'Credit', description: '', isActive: true },
   { code: '2020', name: 'Merchandise Payable', type: 'Liabilities', normalBalance: 'Credit', description: '', isActive: true },
   { code: '2050', name: 'Due to Officers', type: 'Liabilities', normalBalance: 'Credit', description: '', isActive: true },
@@ -428,60 +425,6 @@ describe('buildPrepaidExpenseSettlementLines', () => {
       { accountCode: '5160', debit: 250, credit: 0 },
       { accountCode: '1260', debit: 0, credit: 250 },
     ]);
-  });
-});
-
-describe('donated food and supplies follow-up', () => {
-  it('keeps unused donated food open and supports a combined partial usage/spoilage update', () => {
-    const original = baseEntry({ id: 'je-1', lines: [
-      { accountCode: '1710', debit: 1000, credit: 0 },
-      { accountCode: '4030', debit: 0, credit: 1000 },
-    ] });
-    const partialLines = buildDonatedInventorySettlementLines('1710', '5080', 300, 100);
-    expect(partialLines).toEqual([
-      { accountCode: '5080', debit: 300, credit: 0 },
-      { accountCode: '5170', debit: 100, credit: 0 },
-      { accountCode: '1710', debit: 0, credit: 400 },
-    ]);
-    expect(partialLines.reduce((sum, line) => sum + line.debit, 0)).toBe(
-      partialLines.reduce((sum, line) => sum + line.credit, 0)
-    );
-
-    const partial = baseEntry({ id: 'je-2', settlesEntryId: 'je-1', lines: partialLines });
-    const pending = computePendingObligations([original, partial], accounts);
-    expect(pending).toHaveLength(1);
-    expect(pending[0].accountCode).toBe('1710');
-    expect(pending[0].remainingAmount).toBe(600);
-
-    const final = baseEntry({
-      id: 'je-3',
-      settlesEntryId: 'je-1',
-      lines: buildDonatedInventorySettlementLines('1710', '5080', 600, 0),
-    });
-    expect(computePendingObligations([original, partial, final], accounts)).toHaveLength(0);
-  });
-
-  it('requires both inventory resolution and donor-restriction release before completion', () => {
-    const restrictedAccount: Account = { code: '4035', name: 'Contributions Revenue - Temporarily Restricted', type: 'Revenue', normalBalance: 'Credit', description: '', isActive: true };
-    const unrestrictedAccount: Account = { code: '4030', name: 'Contributions Revenue - Unrestricted', type: 'Revenue', normalBalance: 'Credit', description: '', isActive: true };
-    const allAccounts = [...accounts, restrictedAccount, unrestrictedAccount];
-    const original = baseEntry({ id: 'je-1', lines: [
-      { accountCode: '1720', debit: 800, credit: 0 },
-      { accountCode: '4035', debit: 0, credit: 800 },
-    ] });
-    const inventorySettlement = baseEntry({
-      id: 'je-2',
-      settlesEntryId: 'je-1',
-      lines: buildDonatedInventorySettlementLines('1720', '5160', 700, 100),
-    });
-    const release = baseEntry({ id: 'je-3', settlesEntryId: 'je-1', lines: buildRestrictionReleaseLines(800) });
-
-    const initial = computeTransactionReviewStates([original], allAccounts)[0];
-    expect(initial.status).toBe('incomplete');
-    expect(initial.missing).toHaveLength(2);
-    expect(computeTransactionReviewStates([original, inventorySettlement], allAccounts)[0].status).toBe('incomplete');
-    expect(computeTransactionReviewStates([original, release], allAccounts)[0].status).toBe('incomplete');
-    expect(computeTransactionReviewStates([original, inventorySettlement, release], allAccounts)[0].status).toBe('complete');
   });
 });
 

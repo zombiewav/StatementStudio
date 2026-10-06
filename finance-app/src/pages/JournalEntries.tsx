@@ -3,8 +3,8 @@ import {
   Search,
   ChevronDown,
   ChevronUp,
-  RotateCcw,
   Undo2,
+  Trash2,
   Calendar,
   Filter,
   ArrowUpDown
@@ -13,9 +13,16 @@ import { useFinance } from '../context/FinanceContext';
 import { customerOrderReversalBlock } from '../lib/customerOrders';
 import { ReceiptAttachments } from '../components/ReceiptAttachments';
 
-export function JournalEntries(): React.ReactElement {
-  const { journalEntries, reverseJournalEntry, accounts, formatCurrency, projects } = useFinance();
-  const [searchTerm, setSearchTerm] = useState('');
+interface JournalEntriesProps {
+  searchTerm?: string;
+  onSearchTermChange?: (value: string) => void;
+}
+
+export function JournalEntries({ searchTerm: controlledSearchTerm, onSearchTermChange }: JournalEntriesProps = {}): React.ReactElement {
+  const { journalEntries, reverseJournalEntry, deleteJournalEntry, accounts, formatCurrency, projects } = useFinance();
+  const [localSearchTerm, setLocalSearchTerm] = useState('');
+  const searchTerm = controlledSearchTerm ?? localSearchTerm;
+  const setSearchTerm = onSearchTermChange ?? setLocalSearchTerm;
   const [selectedProject, setSelectedProject] = useState('All');
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
@@ -35,6 +42,7 @@ export function JournalEntries(): React.ReactElement {
         e.description.toLowerCase().includes(q) ||
         e.transactionType?.toLowerCase().includes(q) ||
         e.customName?.toLowerCase().includes(q) ||
+        e.project.toLowerCase().includes(q) ||
         e.transactionDetails?.counterpartyName?.toLowerCase().includes(q) ||
         e.lines.some(l => {
           const accName = accounts.find(a => a.code === l.accountCode)?.name || '';
@@ -124,7 +132,7 @@ export function JournalEntries(): React.ReactElement {
                 <th className="py-4 px-4 w-40">Activity / Program</th>
                 <th className="py-4 px-4 w-32 text-right">Debit Balance</th>
                 <th className="py-4 px-4 w-32 text-right">Credit Balance</th>
-                <th className="py-4 px-6 w-16 text-right"></th>
+                <th className="py-4 px-6 w-44 text-right">Actions</th>
               </tr>
             </thead>
               <tbody className="divide-y divide-slate-200/60 dark:divide-slate-800/60">
@@ -169,24 +177,37 @@ export function JournalEntries(): React.ReactElement {
                       <td className="py-3.5 px-4 text-right font-bold text-slate-900 dark:text-slate-100">{formatCurrency(totalDebits)}</td>
                       <td className="py-3.5 px-4 text-right font-bold text-slate-900 dark:text-slate-100">{formatCurrency(totalCredits)}</td>
                       <td className="py-3.5 px-6 text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1">
                         {reversedByRef || isClosingEntry ? (
-                          <span
-                            className="inline-flex p-1.5 text-slate-300 dark:text-slate-600 rounded-lg cursor-default"
-                            title={isClosingEntry ? 'Fiscal-year closing entries are permanent' : `Already reversed via ${reversedByRef}`}
-                          >
-                            <Undo2 className="w-3.5 h-3.5" />
+                          <span className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-[10px] font-bold text-slate-300 dark:text-slate-600" title={isClosingEntry ? 'Fiscal-year closing entries are permanent' : `Already reversed via ${reversedByRef}`}>
+                            <Undo2 className="w-3.5 h-3.5" /> Undo
                           </span>
                         ) : (
                           <button
                             onClick={() => reverseJournalEntry(je.id)}
                             disabled={!!customerOrderReversalBlock(je, journalEntries)}
-                            className="p-1.5 text-slate-400 dark:text-slate-300 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-500/10 rounded-lg transition-colors"
+                            className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-[10px] font-bold text-slate-500 transition-colors hover:bg-amber-50 hover:text-amber-700 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-300 dark:hover:bg-amber-500/10"
                             title={customerOrderReversalBlock(je, journalEntries) || 'Reverse entry (posts an offsetting correction; the original stays on record)'}
                             type="button"
                           >
-                            <RotateCcw className="w-3.5 h-3.5" />
+                            <Undo2 className="w-3.5 h-3.5" /> Undo
                           </button>
                         )}
+                        {!isClosingEntry && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (window.confirm(`Delete ${je.reference} permanently? This removes it from the ledger and financial statements. Linked entries may also be removed.`)) {
+                                deleteJournalEntry(je.id);
+                              }
+                            }}
+                            className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-[10px] font-bold text-slate-500 transition-colors hover:bg-rose-50 hover:text-rose-700 dark:text-slate-300 dark:hover:bg-rose-500/10"
+                            title="Delete journal entry permanently"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" /> Delete
+                          </button>
+                        )}
+                        </div>
                       </td>
                     </tr>
 

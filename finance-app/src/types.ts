@@ -52,7 +52,7 @@ export interface TransactionDetails {
   reportingPeriod?: 'August to December' | 'January to May';
   reportingYear?: number;
   fundingSourceId?: string;
-  sponsorshipKind?: 'cash' | 'food' | 'supplies';
+  sponsorshipKind?: 'cash';
   counterpartyName?: string;
   eventRelated: boolean;
   donorRestriction?: 'none' | 'satisfied-in-period' | 'temporary' | 'permanent';
@@ -63,7 +63,7 @@ export interface TransactionDetails {
   membershipCollections?: DatedAmountRecord[];
   deferredAmount?: number;
   expectedUsePeriod?: 'within' | 'next';
-  prepaidAssetCategory?: 'awards' | 'supplies' | 'wifi' | 'rent' | 'uniform';
+  prepaidAssetCategory?: 'awards' | 'supplies' | 'rent' | 'uniform';
   prepaidAssetItem?: string;
   prepaidAssetQuantity?: number;
   prepaidAssetPurchasePrice?: number;
@@ -143,6 +143,10 @@ export interface JournalEntry {
   transactionType?: string;
   customName?: string;
   transactionDetails?: TransactionDetails;
+  // Draft entries remain visible in the ledger, but are excluded from
+  // Financial Statements until they are finalized.
+  isDraft?: boolean;
+  draftId?: string;
 }
 
 export interface Project {
@@ -230,7 +234,8 @@ export interface ActivityFeeHistoryItem {
 // missing, then resumed and finalized from Review. `formState` is a generic
 // bag rather than a strict shape here (types.ts otherwise depends on
 // nothing outside itself) — Transactions.tsx owns the real shape and casts
-// on read. Never touches the ledger/account balances until actually posted.
+// on read. A draft can have a balanced ledger entry, but it is excluded from
+// Financial Statements until it is finalized.
 export interface TransactionDraft {
   id: string;
   savedAt: string;
@@ -239,6 +244,7 @@ export interface TransactionDraft {
   category: string | null;
   label: string;
   formState: Record<string, unknown>;
+  journalEntryId?: string;
 }
 
 export interface ActivityFeeRecord {

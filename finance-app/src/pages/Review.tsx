@@ -16,9 +16,6 @@ import {
   PREPAID_EXPENSE_CODE,
   computeTransactionReviewStates,
   buildRestrictionReleaseLines,
-  buildDonatedInventorySettlementLines,
-  DONATED_FOOD_SUPPLIES_CODE,
-  DONATED_EVENT_SUPPLIES_CODE,
   ReviewStatus,
 } from '../lib/reviewEngine';
 import { PREPAID_ASSET_ACCOUNT_CODES } from '../lib/prepaidAssets';
@@ -65,50 +62,12 @@ function ObligationRow({
   const [prepaidAmount, setPrepaidAmount] = useState('');
   const [prepaidExpenseAccountCode, setPrepaidExpenseAccountCode] = useState(defaultExpenseAccountCode);
 
-  // Donated food/supplies: the asset remains open until it is used or
-  // spoiled. Those are distinct outcomes because they hit different
-  // expense accounts, but one Review update can record both portions.
-  const [donatedUsedAmount, setDonatedUsedAmount] = useState('');
-  const [donatedSpoiledAmount, setDonatedSpoiledAmount] = useState('');
-
   const expenseAccounts = accounts.filter(a => a.type === 'Expenses' && a.isActive);
   const isAdvance = obligation.accountCode === '1250';
   const isPrepaid = obligation.accountCode === PREPAID_EXPENSE_CODE || PREPAID_ASSET_ACCOUNT_CODES.includes(obligation.accountCode);
-  const isDonatedFood = obligation.accountCode === DONATED_FOOD_SUPPLIES_CODE;
-  const isDonatedInventory = isDonatedFood || obligation.accountCode === DONATED_EVENT_SUPPLIES_CODE;
-  const donatedUsageExpenseAccountCode = isDonatedFood ? '5080' : '5160';
   const cashAccountCode = '1010';
   const obligationAccount = accounts.find(account => account.code === obligation.accountCode);
-  const isReceivable = obligationAccount?.normalBalance === 'Debit' && !isAdvance && !isPrepaid && !isDonatedInventory;
-
-  const handleDonatedInventorySubmit = () => {
-    const usedAmount = Number(donatedUsedAmount) || 0;
-    const spoiledAmount = Number(donatedSpoiledAmount) || 0;
-    const total = usedAmount + spoiledAmount;
-    if (usedAmount < 0 || spoiledAmount < 0 || total <= 0 || total > obligation.remainingAmount) {
-      setRowMessage(`Enter used and/or spoiled amounts totaling more than zero and no more than ${formatCurrency(obligation.remainingAmount)}.`);
-      return;
-    }
-
-    const lines = buildDonatedInventorySettlementLines(
-      obligation.accountCode,
-      donatedUsageExpenseAccountCode,
-      usedAmount,
-      spoiledAmount
-    );
-    const postedEntry = addJournalEntry(
-      new Date().toISOString().slice(0, 10),
-      `Usage/spoilage update for ${obligation.reference}: ${obligation.description}`,
-      obligation.project,
-      lines,
-      obligation.eventName,
-      obligation.entryId
-    );
-    setRowMessage('');
-    setDonatedUsedAmount('');
-    setDonatedSpoiledAmount('');
-    finishSettlement(postedEntry);
-  };
+  const isReceivable = obligationAccount?.normalBalance === 'Debit' && !isAdvance && !isPrepaid;
 
   const handlePrepaidSubmit = () => {
     const amount = Number(prepaidAmount) || 0;
@@ -236,52 +195,7 @@ function ObligationRow({
           {rowMessage && (
             <div className="rounded-lg border border-rose-200 bg-rose-50 p-2.5 text-[10px] font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">{rowMessage}</div>
           )}
-          {isDonatedInventory ? (
-            <>
-              <p className="text-[10px] text-slate-600 dark:text-slate-400">
-                Record only what has happened so far. Any unused balance stays in Review for a later update.
-              </p>
-              <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300">
-                How much was used or consumed?
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                max={obligation.remainingAmount}
-                value={donatedUsedAmount}
-                onChange={(e) => setDonatedUsedAmount(e.target.value)}
-                placeholder={`0.00 — posts to ${isDonatedFood ? 'Meals & Refreshments' : 'Supplies Expense'}`}
-                className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold p-2.5 outline-none text-slate-900 dark:text-slate-100"
-              />
-              <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300">
-                How much was spoiled, expired, or unusable?
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                max={obligation.remainingAmount}
-                value={donatedSpoiledAmount}
-                onChange={(e) => setDonatedSpoiledAmount(e.target.value)}
-                placeholder="0.00 — posts to Loss from Spoilage"
-                className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold p-2.5 outline-none text-slate-900 dark:text-slate-100"
-              />
-              {(Number(donatedUsedAmount) > 0 || Number(donatedSpoiledAmount) > 0) && (
-                <p className="text-[10px] font-semibold text-slate-600 dark:text-slate-300">
-                  Remaining after update: {formatCurrency(Math.max(0, obligation.remainingAmount - (Number(donatedUsedAmount) || 0) - (Number(donatedSpoiledAmount) || 0)))}
-                </p>
-              )}
-              <button
-                type="button"
-                disabled={(Number(donatedUsedAmount) || 0) + (Number(donatedSpoiledAmount) || 0) <= 0}
-                onClick={handleDonatedInventorySubmit}
-                className="w-full bg-blue-700 hover:bg-blue-800 disabled:opacity-40 text-white font-bold text-xs p-2.5 rounded-lg transition-colors"
-              >
-                Post Usage Update
-              </button>
-            </>
-          ) : isPrepaid ? (
+          {isPrepaid ? (
             <>
               <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300">
                 How much of this is now used, consumed, or benefited from?
@@ -467,7 +381,7 @@ export function Review({ onContinueDraft }: ReviewProps): React.ReactElement {
   };
 
   const handleDeleteDraft = (id: string, label: string) => {
-    if (!window.confirm(`Delete the draft "${label}"? This draft has not affected the ledger.`)) return;
+    if (!window.confirm(`Delete the draft "${label}"? Its draft journal entry will also be removed from the ledger.`)) return;
     deleteDraftTransaction(id);
     setSettlementMessage(`Draft "${label}" was deleted.`);
     setLastPostedSettlement(null);

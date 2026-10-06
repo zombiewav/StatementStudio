@@ -10,6 +10,7 @@ interface NavbarProps {
   onMenuToggle: () => void;
   searchTerm: string;
   setSearchTerm: (val: string) => void;
+  onSearchSubmit: () => void;
 }
 
 interface NavActionButtonProps {
@@ -42,7 +43,7 @@ function NavActionButton({
   );
 }
 
-export function Navbar({ onMenuToggle, searchTerm, setSearchTerm }: NavbarProps): React.ReactElement {
+export function Navbar({ onMenuToggle, searchTerm, setSearchTerm, onSearchSubmit }: NavbarProps): React.ReactElement {
   const navigate = useNavigate();
   const { settings, auditLogs, reportingPeriodWorkspaces, switchReportingPeriod } = useFinance();
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false);
@@ -105,6 +106,10 @@ export function Navbar({ onMenuToggle, searchTerm, setSearchTerm }: NavbarProps)
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && searchTerm.trim()) onSearchSubmit();
+            }}
+            aria-label="Global search"
             placeholder="Search accounts, journal entries, projects..."
             className="app-input w-full pl-9 pr-4 py-1.5 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-900/10 dark:focus:ring-blue-500/20"
           />

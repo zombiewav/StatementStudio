@@ -39,6 +39,56 @@ import { reportingPeriodBounds } from '../lib/reportingPeriod';
 const GENERAL_FUND_PROJECT = 'General Fund Operations';
 const GENERAL_FUND_BALANCE_CODE = '3010';
 const INCOME_SUMMARY_ACCOUNT_CODE = '3000';
+const RETIRED_ACCOUNT_CODES = new Set(['1290', '1340', '1345', '1710', '1720', '2060']);
+
+// Retired accounts are removed from the COA, while historical journals and
+// carried balances are reclassified so prior data remains balanced and visible.
+export function migrateRetiredAccountLines(entries: JournalEntry[]): JournalEntry[] {
+  return entries.map(entry => {
+    if (!entry.lines.some(line => RETIRED_ACCOUNT_CODES.has(line.accountCode))) return entry;
+    const prepaidCategory = String(entry.transactionDetails?.prepaidAssetCategory || '');
+    const retiredPayableCode = prepaidCategory === 'awards' ? '2061'
+      : prepaidCategory === 'supplies' ? '2062'
+        : prepaidCategory === 'rent' ? '2063'
+          : prepaidCategory === 'uniform' ? '2064'
+            : '2010';
+    return {
+      ...entry,
+      lines: entry.lines.map(line => {
+        const replacement = line.accountCode === '1710' || line.accountCode === '1720' ? '1285'
+          : line.accountCode === '1290' ? '1260'
+            : line.accountCode === '1340' || line.accountCode === '1345' ? '1270'
+              : line.accountCode === '2060' ? retiredPayableCode
+                : null;
+        return replacement ? { ...line, accountCode: replacement } : line;
+      }),
+    };
+  });
+}
+
+export function migrateRetiredOpeningBalances(balances: OpeningBalances): OpeningBalances {
+  const migrated = { ...balances };
+  const move = (from: string, to: string) => {
+    if (!Object.prototype.hasOwnProperty.call(migrated, from)) return;
+    if (migrated[from]) migrated[to] = (migrated[to] || 0) + migrated[from];
+    delete migrated[from];
+  };
+  move('1710', '1285');
+  move('1720', '1285');
+  move('1290', '1260');
+  move('1340', '1270');
+  move('1345', '1270');
+  move('2060', '2010');
+  return migrated;
+}
+
+function migrateReportingPeriodWorkspaces(workspaces: ReportingPeriodWorkspace[]): ReportingPeriodWorkspace[] {
+  return workspaces.map(workspace => ({
+    ...workspace,
+    journalEntries: migrateRetiredAccountLines(workspace.journalEntries || []),
+    openingBalances: migrateRetiredOpeningBalances(workspace.openingBalances || {}),
+  }));
+}
 
 // Extended classification rule shape used by the rule-based classification
 // engine below. It builds on the base `ClassificationRule` shape from
@@ -73,7 +123,7 @@ export interface ClassificationRuleWithWorkflow extends ClassificationRule {
   // (1260) instead of expensing it immediately — see PREPAID_EXPENSE_CODE
   // in src/lib/reviewEngine.ts, which resolves it later.
   mayDeferPortion?: boolean;
-  sponsorshipKind?: 'cash' | 'food' | 'supplies';
+  sponsorshipKind?: 'cash';
 
   // Restricts this type to only when the org's currently active semester
   // (Navbar fiscal year picker, settings.semester) matches — absent when
@@ -121,10 +171,9 @@ export const INITIAL_ACCOUNTS: Account[] = [
   // instead of being expensed immediately, and REVIEW (src/lib/reviewEngine.ts)
   // reclassifies it into the real expense account once it's actually used.
   { code: '1260', name: 'Prepaid Expenses', type: 'Assets', normalBalance: 'Debit', description: 'Cash paid for goods/services not yet used, consumed, or benefited from this period', isActive: true },
-  { code: '1270', name: 'Advances to Suppliers - Prepayments', type: 'Assets', normalBalance: 'Debit', description: 'Downpayments for pre-ordered merchandise before the goods are received', isActive: true },
+  { code: '1270', name: 'Advances to Suppliers', type: 'Assets', normalBalance: 'Debit', description: 'Downpayments and advances made to suppliers before related goods, services, or other assets are received', isActive: true },
   { code: '1280', name: 'Awards and Prizes', type: 'Assets', normalBalance: 'Debit', description: 'Awards and prizes purchased in advance and still unused or undistributed', isActive: true },
   { code: '1285', name: 'Supplies and Materials', type: 'Assets', normalBalance: 'Debit', description: 'Event and operating supplies purchased in advance and still unused', isActive: true },
-  { code: '1290', name: 'Prepaid Wifi', type: 'Assets', normalBalance: 'Debit', description: 'Wifi or mobile-load service purchased before it is consumed', isActive: true },
   { code: '1295', name: 'Prepaid Rent', type: 'Assets', normalBalance: 'Debit', description: 'Rental rights paid for before the related event or rental period', isActive: true },
   { code: '1298', name: 'Clothing/Uniform', type: 'Assets', normalBalance: 'Debit', description: 'Uniforms and clothing purchased in advance and not yet issued or consumed', isActive: true },
   { code: '1500', name: 'Equipment & Tools', type: 'Assets', normalBalance: 'Debit', description: 'Laptops, computers, hardware, tools, and other equipment used by the organization', isActive: true },
@@ -139,8 +188,6 @@ export const INITIAL_ACCOUNTS: Account[] = [
   { code: '1650', name: 'Furniture & Fixtures', type: 'Assets', normalBalance: 'Debit', description: 'Desks, chairs, cabinets, and other furnishings owned by the organization', isActive: true },
   { code: '1660', name: 'Accumulated Depreciation - Furniture & Fixtures', type: 'Assets', normalBalance: 'Credit', description: 'Cumulative depreciation charged against Furniture & Fixtures to date', isActive: true },
   { code: '1700', name: 'Inventory - Merchandise', type: 'Assets', normalBalance: 'Debit', description: 'Goods purchased for resale (organization merchandise, apparel, etc.)', isActive: true },
-  { code: '1710', name: 'Donated Food Supplies', type: 'Assets', normalBalance: 'Debit', description: 'Food received from sponsors and held until consumed or distributed for an event', isActive: true },
-  { code: '1720', name: 'Donated Event Supplies', type: 'Assets', normalBalance: 'Debit', description: 'Non-cash supplies received from sponsors and held until used or distributed', isActive: true },
   // These two exist so a treasurer can post to them via "Advanced: Override
   // Accounts Manually" on the Transactions form, but deliberately carry no
   // classification rule: a keyword match would have to guess whether an
@@ -153,10 +200,8 @@ export const INITIAL_ACCOUNTS: Account[] = [
   { code: '1310', name: 'Activity Fees Receivable', type: 'Assets', normalBalance: 'Debit', description: 'Activity or event fees earned but not yet collected from participants', isActive: true },
   { code: '1320', name: 'Due from Officers', type: 'Assets', normalBalance: 'Debit', description: 'Organization collections still held by an accountable officer and not yet remitted', isActive: true },
   { code: '1330', name: 'Receivable from Custodian', type: 'Assets', normalBalance: 'Debit', description: 'Amounts entrusted to or recoverable from an organization custodian', isActive: true },
-  { code: '1340', name: 'Deposit for Rent', type: 'Assets', normalBalance: 'Debit', description: 'Downpayments made for prepaid rental arrangements before purchase recognition', isActive: true },
-  { code: '1345', name: 'Deposit for Uniform/Clothing', type: 'Assets', normalBalance: 'Debit', description: 'Downpayments made for uniforms or clothing before purchase recognition', isActive: true },
   { code: '1350', name: 'Loans to Other Organization', type: 'Assets', normalBalance: 'Debit', description: 'Running balance of loans receivable from other organizations', isActive: true },
-  { code: '1360', name: 'Receivable from Supplier', type: 'Assets', normalBalance: 'Debit', description: 'Merchandise payments made to a supplier in excess of the related batch cost', isActive: true },
+  { code: '1360', name: 'Accounts Receivable - Suppliers', type: 'Assets', normalBalance: 'Debit', description: 'Payments made to suppliers in excess of the related merchandise, service, or asset cost', isActive: true },
   { code: '1370', name: 'Due from Other Organizations', type: 'Assets', normalBalance: 'Debit', description: 'Amounts recoverable from other organizations', isActive: true },
 
   // Liabilities (Normal: Credit)
@@ -168,7 +213,10 @@ export const INITIAL_ACCOUNTS: Account[] = [
   { code: '2020', name: 'Merchandise Payable', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid cost of merchandise acquired for resale', isActive: true },
   { code: '2030', name: 'Accounts Payable-PPE', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid purchases of property, plant, and equipment', isActive: true },
   { code: '2040', name: 'Accounts Payable-Furniture & Fixture', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid purchases of furniture and fixtures', isActive: true },
-  { code: '2060', name: 'Accounts Payable-Prepaid Assets', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid purchases of prepaid assets carried into the following reporting period', isActive: true },
+  { code: '2061', name: 'Accounts Payable-Awards and Prizes', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid awards and prizes acquired for later distribution', isActive: true },
+  { code: '2062', name: 'Accounts Payable-Supplies and Materials', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid supplies and materials acquired for later use', isActive: true },
+  { code: '2063', name: 'Accounts Payable-Prepaid Rent', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid rental rights acquired before the related rental period', isActive: true },
+  { code: '2064', name: 'Accounts Payable-Clothing/Uniform', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid clothing and uniforms acquired before issue or use', isActive: true },
   { code: '2070', name: 'Due to Members', type: 'Liabilities', normalBalance: 'Credit', description: 'Amounts owed to members', isActive: true },
   { code: '2080', name: 'Due to Others', type: 'Liabilities', normalBalance: 'Credit', description: 'Amounts owed to parties other than officers, members, or suppliers', isActive: true },
   { code: '2050', name: 'Due to Officers', type: 'Liabilities', normalBalance: 'Credit', description: 'Amounts owed to officers who paid organization expenses out of their own money, pending reimbursement', isActive: true },
@@ -477,9 +525,38 @@ export const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   { keyword: 'depreciation of cabinet', debitAccountCode: '5095', creditAccountCode: '1660', description: 'Depreciation Expense - Furniture & Fixtures (Cabinet)' },
   { keyword: 'depreciation of table', debitAccountCode: '5095', creditAccountCode: '1660', description: 'Depreciation Expense - Furniture & Fixtures (Tables)' },
   { keyword: 'depreciation of desk', debitAccountCode: '5095', creditAccountCode: '1660', description: 'Depreciation Expense - Furniture & Fixtures (Desks)' },
+  { keyword: 'depreciation of laptop', debitAccountCode: '5090', creditAccountCode: '1550', description: 'Depreciation of Laptop' },
+  { keyword: 'depreciation of projector', debitAccountCode: '5090', creditAccountCode: '1550', description: 'Depreciation of Projector' },
+  { keyword: 'depreciation of printer', debitAccountCode: '5090', creditAccountCode: '1550', description: 'Depreciation of Printer' },
+  { keyword: 'depreciation of ups', debitAccountCode: '5090', creditAccountCode: '1550', description: 'Depreciation of UPS (Uninterrupted Power System)' },
+  { keyword: 'depreciation of cash box', debitAccountCode: '5090', creditAccountCode: '1550', description: 'Depreciation of Cash Box' },
+  { keyword: 'depreciation of hdmi', debitAccountCode: '5090', creditAccountCode: '1550', description: 'Depreciation of HDMI' },
+  { keyword: 'depreciation of wifi box', debitAccountCode: '5090', creditAccountCode: '1550', description: 'Depreciation of WIFI Box' },
+  { keyword: 'depreciation of microphone', debitAccountCode: '5090', creditAccountCode: '1550', description: 'Depreciation of Microphone' },
+  { keyword: 'depreciation of flash drive', debitAccountCode: '5090', creditAccountCode: '1550', description: 'Depreciation of Flash Drive' },
+  { keyword: 'depreciation of mouse', debitAccountCode: '5090', creditAccountCode: '1550', description: 'Depreciation of Mouse' },
+  { keyword: 'depreciation of speaker', debitAccountCode: '5090', creditAccountCode: '1550', description: 'Depreciation of Speaker' },
+  { keyword: 'depreciation of projector stand', debitAccountCode: '5090', creditAccountCode: '1550', description: 'Depreciation of Projector Stand' },
+  { keyword: 'depreciation of adaptor', debitAccountCode: '5090', creditAccountCode: '1550', description: 'Depreciation of Adaptor' },
   { keyword: 'depreciation', debitAccountCode: '5090', creditAccountCode: '1550', description: 'Depreciation Expense - Equipment' },
 
   // --- Equipment Expense -----------------------------------------------------
+  { keyword: 'purchase of laptop', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Purchase of Laptop' },
+  { keyword: 'purchase of projector', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Purchase of Projector' },
+  { keyword: 'purchase of printer', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Purchase of Printer' },
+  { keyword: 'purchase of ups', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Purchase of UPS (Uninterrupted Power System)' },
+  { keyword: 'purchase of cash box', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Purchase of Cash Box' },
+  { keyword: 'purchase of hdmi', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Purchase of HDMI' },
+  { keyword: 'purchase of wifi box', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Purchase of WIFI Box' },
+  { keyword: 'purchase of microphone', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Purchase of Microphone' },
+  { keyword: 'purchase of flash drive', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Purchase of Flash Drive' },
+  { keyword: 'purchase of mouse', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Purchase of Mouse' },
+  { keyword: 'purchase of speaker', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Purchase of Speaker' },
+  { keyword: 'purchase of projector stand', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Purchase of Projector Stand' },
+  { keyword: 'purchase of adaptor', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Purchase of Adaptor' },
+  { keyword: 'purchase of cabinet', debitAccountCode: '1650', creditAccountCode: '1010', description: 'Purchase of Cabinet' },
+  { keyword: 'purchase chairs', debitAccountCode: '1650', creditAccountCode: '1010', description: 'Purchase Chairs' },
+  { keyword: 'purchase of tables/desks', debitAccountCode: '1650', creditAccountCode: '1010', description: 'Purchase of Tables/Desks' },
   { keyword: 'laptop', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Developer Laptop Purchase' },
   { keyword: 'computer', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Hardware Equipment Purchase' },
   { keyword: 'monitor', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Computer Monitor Purchase' },
@@ -660,8 +737,6 @@ export const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   { keyword: 'billed', debitAccountCode: '1200', creditAccountCode: '4010', description: 'Customer Invoice Billed' },
   { keyword: 'invoice', debitAccountCode: '1200', creditAccountCode: '4010', description: 'Customer Milestone Invoice' },
   { keyword: 'grant', debitAccountCode: '1010', creditAccountCode: '4020', description: 'Public Funding Grant Receipt' },
-  { keyword: 'sponsorship donated food', debitAccountCode: '1710', creditAccountCode: '4030', description: 'Sponsorship - Donated Food', sponsorshipKind: 'food' },
-  { keyword: 'sponsorship donated supplies', debitAccountCode: '1720', creditAccountCode: '4030', description: 'Sponsorship - Donated Supplies', sponsorshipKind: 'supplies' },
   { keyword: 'sponsorships and donations', debitAccountCode: '1010', creditAccountCode: '4100', description: 'Sponsorships and Donations', sponsorshipKind: 'cash' },
   { keyword: 'donation', debitAccountCode: '1010', creditAccountCode: '4100', description: 'Sponsorships and Donations', sponsorshipKind: 'cash' },
   { keyword: 'sponsor', debitAccountCode: '1010', creditAccountCode: '4100', description: 'Sponsorships and Donations', sponsorshipKind: 'cash' },
@@ -722,8 +797,9 @@ interface FinanceContextType {
   reportingPeriodWorkspaces: ReportingPeriodWorkspace[];
   openingBalances: OpeningBalances;
 
-  addJournalEntry: (date: string, description: string, project: string, lines: JournalLine[], eventName?: string, settlesEntryId?: string, transactionMeta?: TransactionMetadata) => JournalEntry;
+  addJournalEntry: (date: string, description: string, project: string, lines: JournalLine[], eventName?: string, settlesEntryId?: string, transactionMeta?: TransactionMetadata, isDraft?: boolean, draftId?: string, replaceDraftEntryId?: string) => JournalEntry;
   updateJournalEntry: (entry: JournalEntry) => void;
+  finalizeDraftJournalEntry: (id: string) => void;
   finalizeJournalEntry: (id: string) => void;
   reverseJournalEntry: (id: string) => void;
   deleteJournalEntry: (id: string) => void;
@@ -736,10 +812,8 @@ interface FinanceContextType {
   collectActivityFeeReceivable: (id: string, collections: DatedAmountRecord[], reportingPeriod: string) => ActivityFeeRecord;
   updateActivityFeeRecord: (id: string, followUp: ActivityFeeFollowUp, date: string, reportingPeriod: string) => ActivityFeeRecord;
   // Saves (or, when an id already exists, overwrites) an in-progress
-  // Transactions form as a draft — no ledger effect until it's actually
-  // posted. Returns the draft's id so the caller can keep updating the
-  // same draft on subsequent saves instead of creating duplicates.
-  saveDraftTransaction: (draft: { id?: string; category: string | null; label: string; formState: Record<string, unknown> }) => string;
+  // Stores a balanced draft ledger entry and form state for later finalization.
+  saveDraftTransaction: (draft: { id?: string; category: string | null; label: string; formState: Record<string, unknown>; journalEntryId?: string }) => string;
   deleteDraftTransaction: (id: string) => void;
   recordFinancialStatementHistory: (record: Omit<FinancialStatementHistoryRecord, 'id' | 'generatedAt'>) => FinancialStatementHistoryRecord;
   deleteSemester: (key: string) => void;
@@ -761,7 +835,7 @@ interface FinanceContextType {
     purposeOptions?: PurposeOption[];
     requiresAccrualCompletion?: boolean;
     mayDeferPortion?: boolean;
-    sponsorshipKind?: 'cash' | 'food' | 'supplies';
+    sponsorshipKind?: 'cash';
     accrualAudience?: 'all' | 'new';
   } | null;
   // Whether a rule's availableInSemester (if any) matches the org's
@@ -797,7 +871,9 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     // Additive only — never overwrites or removes an account the user
     // already has, so their own edits, custom accounts, and balances
     // (driven by journalEntries, saved separately) are untouched.
-    const saved: Account[] = (JSON.parse(local) as Account[]).map(account => {
+    const saved: Account[] = (JSON.parse(local) as Account[]).filter(account => !RETIRED_ACCOUNT_CODES.has(account.code)).map(account => {
+      if (account.code === '1270') return { ...account, name: 'Advances to Suppliers', description: 'Downpayments and advances made to suppliers before related goods, services, or other assets are received' };
+      if (account.code === '1360') return { ...account, name: 'Accounts Receivable - Suppliers', description: 'Payments made to suppliers in excess of the related merchandise, service, or asset cost' };
       if (account.code === '4035' && account.name === 'Contributions Revenue - Restricted') return { ...account, name: 'Contributions Revenue - Temporarily Restricted' };
       if (account.code === '1200' && account.name === 'Receivables') return { ...account, name: 'Accounts Receivable', description: 'Amounts earned or billed but not yet collected from customers, sponsors, or partners' };
       if (account.code === '2110' && account.name === 'Deferred Activity Fees') return { ...account, name: 'Unearned Activity Fees', description: 'Activity or event fees collected before the event date' };
@@ -817,7 +893,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   // only as the explicit, opt-in payload for loadSampleData() below.
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>(() => {
     const local = localStorage.getItem('ss_journals');
-    return local ? JSON.parse(local) : [];
+    return local ? migrateRetiredAccountLines(JSON.parse(local) as JournalEntry[]) : [];
   });
 
   const [projects, setProjects] = useState<Project[]>(() => {
@@ -886,13 +962,13 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
 
   const [reportingPeriodWorkspaces, setReportingPeriodWorkspaces] = useState<ReportingPeriodWorkspace[]>(() => {
     const local = localStorage.getItem('ss_period_workspaces');
-    return local ? JSON.parse(local) : [];
+    return local ? migrateReportingPeriodWorkspaces(JSON.parse(local) as ReportingPeriodWorkspace[]) : [];
   });
 
   const [openingBalances, setOpeningBalances] = useState<OpeningBalances>(() => {
     if (!settings.semester || !settings.reportingYear) return {};
     const schoolYear = `${settings.reportingYear}-${settings.reportingYear + 1}`;
-    return reportingPeriodWorkspaces.find(workspace => workspace.key === `${schoolYear}::${settings.semester}`)?.openingBalances || {};
+    return migrateRetiredOpeningBalances(reportingPeriodWorkspaces.find(workspace => workspace.key === `${schoolYear}::${settings.semester}`)?.openingBalances || {});
   });
 
   // Sync to LocalStorage
@@ -998,8 +1074,12 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
           setWorkspaceError('Your saved workspace could not be read safely.');
           return;
         }
-        setAccounts([...saved.accounts, ...INITIAL_ACCOUNTS.filter(a => ['1210', '1220', '1230', '1280', '1285', '1290', '1295', '1298', '1330', '1340', '1345', '1360', '1370', '2030', '2040', '2060', '2070', '2080', '2140', '2150', '4100', '4110'].includes(a.code) && !saved.accounts.some(existing => existing.code === a.code))]);
-        setJournalEntries(saved.journalEntries);
+        const activeSavedAccounts = saved.accounts.filter(account => !RETIRED_ACCOUNT_CODES.has(account.code)).map(account => {
+          const current = INITIAL_ACCOUNTS.find(defaultAccount => defaultAccount.code === account.code && ['1270', '1360'].includes(account.code));
+          return current ? { ...account, name: current.name, description: current.description } : account;
+        });
+        setAccounts([...activeSavedAccounts, ...INITIAL_ACCOUNTS.filter(a => ['1210', '1220', '1230', '1270', '1280', '1285', '1295', '1298', '1330', '1360', '1370', '2030', '2040', '2061', '2062', '2063', '2064', '2070', '2080', '2140', '2150', '4100', '4110'].includes(a.code) && !activeSavedAccounts.some(existing => existing.code === a.code))]);
+        setJournalEntries(migrateRetiredAccountLines(saved.journalEntries));
         setProjects(saved.projects || []);
         setAuditLogs(saved.auditLogs || []);
         setSettings(saved.settings);
@@ -1009,7 +1089,14 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         setActivityFeeRecords(saved.activityFeeRecords || []);
         setDraftTransactions(saved.draftTransactions || []);
         setFinancialStatementHistory(saved.financialStatementHistory || []);
-        setReportingPeriodWorkspaces(saved.reportingPeriodWorkspaces || []);
+        const savedWorkspaces = migrateReportingPeriodWorkspaces(saved.reportingPeriodWorkspaces || []);
+        setReportingPeriodWorkspaces(savedWorkspaces);
+        if (saved.settings.semester && saved.settings.reportingYear) {
+          const schoolYear = `${saved.settings.reportingYear}-${saved.settings.reportingYear + 1}`;
+          setOpeningBalances(savedWorkspaces.find(workspace => workspace.key === `${schoolYear}::${saved.settings.semester}`)?.openingBalances || {});
+        } else {
+          setOpeningBalances({});
+        }
       } else {
         const legacyWorkspaceExists = Boolean(localStorage.getItem('orgAccount'));
         const organizationName = typeof user.user_metadata.organization_name === 'string'
@@ -1168,11 +1255,16 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     lines: { accountCode: string; debit: number; credit: number }[],
     eventName?: string,
     settlesEntryId?: string,
-    transactionMeta?: TransactionMetadata
+    transactionMeta?: TransactionMetadata,
+    isDraft = false,
+    draftId?: string,
+    replaceDraftEntryId?: string,
   ) => {
-    const reference = generateNextReference(journalEntries);
+    const replaced = replaceDraftEntryId ? journalEntries.find(entry => entry.id === replaceDraftEntryId && entry.isDraft) : undefined;
+    if (replaceDraftEntryId && !replaced) throw new Error('Draft journal entry not found.');
+    const reference = replaced?.reference || generateNextReference(journalEntries);
     const newEntry: JournalEntry = {
-      id: `je-${Date.now()}`,
+      id: replaced?.id || `je-${Date.now()}`,
       reference,
       date,
       description,
@@ -1184,11 +1276,13 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         transactionType: transactionMeta.transactionType,
         ...(transactionMeta.customName ? { customName: transactionMeta.customName } : {}),
         transactionDetails: transactionMeta.details,
-      } : {})
+      } : {}),
+      ...(isDraft ? { isDraft: true } : {}),
+      ...(draftId ? { draftId } : {})
     };
 
-    setJournalEntries(prev => [...prev, newEntry]);
-    logAudit('Create Journal Entry', `Posted journal entry ${reference}: ${description} (${settings.currencySymbol}${lines.reduce((s, l) => s + l.debit, 0).toLocaleString()})`);
+    setJournalEntries(prev => replaced ? prev.map(entry => entry.id === replaced.id ? newEntry : entry) : [...prev, newEntry]);
+    logAudit(isDraft ? (replaced ? 'Update Draft Journal Entry' : 'Create Draft Journal Entry') : 'Create Journal Entry', `${isDraft ? 'Saved draft' : 'Posted'} journal entry ${reference}: ${description} (${settings.currencySymbol}${lines.reduce((s, l) => s + l.debit, 0).toLocaleString()})`);
     return newEntry;
   };
 
@@ -1199,6 +1293,13 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     }
     setJournalEntries(previous => previous.map(candidate => candidate.id === entry.id ? entry : candidate));
     logAudit('Edit Journal Entry', `Updated posted journal entry ${entry.reference}: ${entry.description}.`);
+  };
+
+  const finalizeDraftJournalEntry = (id: string) => {
+    const current = journalEntries.find(entry => entry.id === id);
+    if (!current?.isDraft) throw new Error('Draft journal entry not found.');
+    setJournalEntries(previous => previous.map(entry => entry.id === id ? { ...entry, isDraft: false } : entry));
+    logAudit('Finalize Draft Journal Entry', `Finalized draft journal entry ${current.reference}: ${current.description}.`);
   };
 
   const finalizeJournalEntry = (id: string) => {
@@ -1493,11 +1594,11 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     setAuditLogs(prev => [newLog, ...prev].slice(0, 100));
   };
 
-  const saveDraftTransaction = (draft: { id?: string; category: string | null; label: string; formState: Record<string, unknown> }): string => {
+  const saveDraftTransaction = (draft: { id?: string; category: string | null; label: string; formState: Record<string, unknown>; journalEntryId?: string }): string => {
     const id = draft.id || `draft-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     const savedAt = new Date().toISOString();
     setDraftTransactions(prev => {
-      const next: TransactionDraft = { id, savedAt, category: draft.category, label: draft.label, formState: draft.formState };
+      const next: TransactionDraft = { id, savedAt, category: draft.category, label: draft.label, formState: draft.formState, ...(draft.journalEntryId ? { journalEntryId: draft.journalEntryId } : {}) };
       const existingIndex = prev.findIndex(d => d.id === id);
       if (existingIndex >= 0) {
         const copy = [...prev];
@@ -1514,6 +1615,10 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     setDraftTransactions(prev => {
       const existing = prev.find(d => d.id === id);
       if (existing) logAudit('Discard Draft Transaction', `Discarded draft "${existing.label}".`);
+      if (existing?.journalEntryId) {
+        setJournalEntries(entries => entries.filter(entry => entry.id !== existing.journalEntryId));
+        setReceiptAttachments(receipts => receipts.filter(receipt => receipt.entryId !== existing.journalEntryId));
+      }
       return prev.filter(d => d.id !== id);
     });
   };
@@ -1538,11 +1643,11 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
 
     const target = reportingPeriodWorkspaces.find(workspace => workspace.key === targetKey);
     const predecessor = precedingSemester(reportingPeriodWorkspaces, reportingYear, semester);
-    const nextOpeningBalances = target?.openingBalances || (predecessor
+    const nextOpeningBalances = migrateRetiredOpeningBalances(target?.openingBalances || (predecessor
       ? carryForwardOpeningBalances(
         predecessor.key === current ? openingBalances : predecessor.openingBalances || {},
         predecessor.key === current ? journalEntries : predecessor.journalEntries, accounts)
-      : {});
+      : {}));
     const now = new Date().toISOString();
     if (current) {
       setReportingPeriodWorkspaces(previous => {
@@ -1566,7 +1671,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       });
     }
 
-    setJournalEntries(target?.journalEntries || carryForwardCustomerOrders(predecessor ? (predecessor.key === current ? journalEntries : predecessor.journalEntries) : [], reportingPeriodBounds(semester, reportingYear).startDate));
+    setJournalEntries(migrateRetiredAccountLines(target?.journalEntries || carryForwardCustomerOrders(predecessor ? (predecessor.key === current ? journalEntries : predecessor.journalEntries) : [], reportingPeriodBounds(semester, reportingYear).startDate)));
     setProjects(target?.projects || DEFAULT_PROJECTS.map(project => ({ ...project })));
     setClosedFiscalYears(target?.closedFiscalYears || []);
     setReceiptAttachments(target?.receiptAttachments || []);
@@ -1699,8 +1804,12 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       user: settings.organizationName,
     };
 
-    setAccounts([...payload.accounts, ...INITIAL_ACCOUNTS.filter(a => ['1210', '1220', '1230', '1280', '1285', '1290', '1295', '1298', '1330', '1340', '1345', '1360', '1370', '2030', '2040', '2060', '2070', '2080', '2140', '2150', '4100', '4110'].includes(a.code) && !payload.accounts.some(existing => existing.code === a.code))]);
-    setJournalEntries(payload.journalEntries);
+    const restoredAccounts = payload.accounts.filter(account => !RETIRED_ACCOUNT_CODES.has(account.code)).map(account => {
+      const current = INITIAL_ACCOUNTS.find(defaultAccount => defaultAccount.code === account.code && ['1270', '1360'].includes(account.code));
+      return current ? { ...account, name: current.name, description: current.description } : account;
+    });
+    setAccounts([...restoredAccounts, ...INITIAL_ACCOUNTS.filter(a => ['1210', '1220', '1230', '1270', '1280', '1285', '1295', '1298', '1330', '1360', '1370', '2030', '2040', '2061', '2062', '2063', '2064', '2070', '2080', '2140', '2150', '4100', '4110'].includes(a.code) && !restoredAccounts.some(existing => existing.code === a.code))]);
+    setJournalEntries(migrateRetiredAccountLines(payload.journalEntries));
     setProjects(Array.isArray(payload.projects) ? payload.projects : []);
     setAuditLogs([restoreLogEntry, ...restoredLogs].slice(0, 100));
     setSettings(payload.settings);
@@ -1710,7 +1819,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     setActivityFeeRecords(Array.isArray(payload.activityFeeRecords) ? payload.activityFeeRecords : []);
     setDraftTransactions(Array.isArray(payload.draftTransactions) ? payload.draftTransactions : []);
     setFinancialStatementHistory(Array.isArray(payload.financialStatementHistory) ? payload.financialStatementHistory : []);
-    const restoredWorkspaces = Array.isArray(payload.reportingPeriodWorkspaces) ? payload.reportingPeriodWorkspaces : [];
+    const restoredWorkspaces = migrateReportingPeriodWorkspaces(Array.isArray(payload.reportingPeriodWorkspaces) ? payload.reportingPeriodWorkspaces : []);
     setReportingPeriodWorkspaces(restoredWorkspaces);
     if (payload.settings.semester && payload.settings.reportingYear) {
       const schoolYear = `${payload.settings.reportingYear}-${payload.settings.reportingYear + 1}`;
@@ -1767,6 +1876,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       openingBalances,
       addJournalEntry,
       updateJournalEntry,
+      finalizeDraftJournalEntry,
       finalizeJournalEntry,
       reverseJournalEntry,
       deleteJournalEntry,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildPriorPeriodPayablePayment, remainingPriorPeriodPayable } from './payablePayments';
+import { buildPriorPeriodPayablePayment, PRIOR_PERIOD_PAYABLE_CODES, remainingPriorPeriodPayable } from './payablePayments';
 
 describe('prior-period payable payments', () => {
   it('posts a mixed payment against the selected payable', () => {
@@ -28,10 +28,12 @@ describe('prior-period payable payments', () => {
     ])).toBe(350);
   });
 
-  it('accepts the separate prepaid-assets payable account', () => {
-    const result = buildPriorPeriodPayablePayment({ payableAccountCode: '2060', paymentMethod: 'organization-funds', transactionDate: '2026-10-03', paymentDate: '', organizationAmount: 300, remainingOpeningBalance: 500, availableCash: 300, availableAdvance: 0 });
+  it('accepts each category-specific prepaid and other asset payable account', () => {
+    expect(PRIOR_PERIOD_PAYABLE_CODES).toEqual(expect.arrayContaining(['2061', '2062', '2063', '2064']));
+    expect(PRIOR_PERIOD_PAYABLE_CODES).not.toContain('2060');
+    const result = buildPriorPeriodPayablePayment({ payableAccountCode: '2062', paymentMethod: 'organization-funds', transactionDate: '2026-10-03', paymentDate: '', organizationAmount: 300, remainingOpeningBalance: 500, availableCash: 300, availableAdvance: 0 });
     expect(result.lines).toEqual([
-      { accountCode: '2060', debit: 300, credit: 0, date: '2026-10-03' },
+      { accountCode: '2062', debit: 300, credit: 0, date: '2026-10-03' },
       { accountCode: '1010', debit: 0, credit: 300, date: '2026-10-03' },
     ]);
   });

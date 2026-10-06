@@ -2,7 +2,7 @@ import { JournalLine } from '../types';
 
 export type PayablePaymentMethod = 'organization-funds' | 'officer-personal' | 'officer-advance' | 'combination';
 
-export const PRIOR_PERIOD_PAYABLE_CODES = ['2010', '2020', '2030', '2040', '2060'] as const;
+export const PRIOR_PERIOD_PAYABLE_CODES = ['2010', '2020', '2030', '2040', '2061', '2062', '2063', '2064'] as const;
 export type PriorPeriodPayableCode = typeof PRIOR_PERIOD_PAYABLE_CODES[number];
 
 export interface PayablePaymentInput {
