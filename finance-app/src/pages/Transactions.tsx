@@ -99,6 +99,7 @@ interface TransactionFormSnapshot {
   selectedCategory: TransactionCategoryId | null;
   selectedExpenseAccountCode: string;
   description: string;
+  expenseEventName: string;
   amount: number;
   date: string;
   purposeIndex: number;
@@ -532,6 +533,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     setTxName(snapshot.txName || '');
     setSelectedExpenseAccountCode(snapshot.selectedExpenseAccountCode || '5010');
     setDescription(snapshot.description || '');
+    setExpenseEventName(snapshot.expenseEventName || '');
     setAmount(snapshot.amount || 0);
     setDate(fallbackDate);
     setPurposeIndex(snapshot.purposeIndex || 0);
@@ -867,6 +869,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     selectedCategory,
     selectedExpenseAccountCode,
     description,
+    expenseEventName,
     amount,
     date,
     purposeIndex,
@@ -1011,6 +1014,10 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       setErrorMessage('Please enter the event name for this expense.');
       return;
     }
+    if (!savingDraft && isEventProgramExpense && !expenseEventName.trim()) {
+      setErrorMessage('Please enter an event name for this Event/Program Expense.');
+      return;
+    }
     if (isGuidedPurchase && (outrightPaymentMethod === 'officer-personal' || outrightPaymentMethod === 'officer-advance' || outrightPaymentMethod === 'combination') && (outrightOfficerTotal > 0 || outrightAdvanceTotal > 0) && !outrightOfficer.trim()) {
       setErrorMessage('Please enter the accountable officer for this payment.');
       return;
@@ -1102,7 +1109,9 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
         ? ` (${formatCurrency(deferredAmount)} not yet used — expected ${expectedUsePeriod === 'within' ? 'within this period' : 'next period'})`
         : '';
 
-      const entryDescription = isOutrightExpense
+      const entryDescription = isEventProgramExpense
+        ? `${description || txName} - ${expenseEventName.trim()}`
+        : isOutrightExpense
         ? `${description || txName}${expenseEvent === 'yes' ? ` - ${expenseEventName.trim()}` : ' - General and Administrative Expense'}`
         : isPpeAcquisition
         ? (description || txName)
@@ -1148,7 +1157,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
         entryDescription,
         GENERAL_FUND_PROJECT,
         savingDraft ? lines : primaryJournalLines,
-        isEventProgramExpense ? 'Event/Program Expenses' : isOutrightExpense && expenseEvent === 'yes' ? expenseEventName.trim() : undefined,
+        isEventProgramExpense ? expenseEventName.trim() : isOutrightExpense && expenseEvent === 'yes' ? expenseEventName.trim() : undefined,
         undefined,
         {
           transactionType: txName,
@@ -1250,7 +1259,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
             `${entryDescription} - ${isPriorMembershipCollection || isMerchandiseSale ? 'Collection' : 'Payment'} Batch ${index + 2}`,
             GENERAL_FUND_PROJECT,
             batch.lines,
-            isEventProgramExpense ? 'Event/Program Expenses' : isOutrightExpense && expenseEvent === 'yes' ? expenseEventName.trim() : undefined,
+            isEventProgramExpense ? expenseEventName.trim() : isOutrightExpense && expenseEvent === 'yes' ? expenseEventName.trim() : undefined,
             posted.id,
             {
               transactionType: `${txName} - Dated Batch`,
@@ -2129,6 +2138,17 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               </div>
               {/* Remove accidental duplicate light-only amount control (was causing permanent light/dark mismatch) */}
               <div className="hidden" />
+            </div>}
+
+            {isEventProgramExpense && <div>
+              <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Event Name</label>
+              <input
+                type="text"
+                value={expenseEventName}
+                onChange={event => setExpenseEventName(event.target.value)}
+                placeholder="Name of event or program"
+                className="w-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-blue-900 focus:ring-blue-900/10 rounded-xl text-xs font-semibold p-2.5 outline-none transition-colors dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/20"
+              />
             </div>}
 
             {!isMerchandisePrepayment && !requiresAccrualCompletion && !isPriorMembershipCollection && !isMembershipRefundStatus && !isOutrightExpense && <div>
