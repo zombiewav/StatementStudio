@@ -73,6 +73,10 @@ const EXPENSE_TYPES_HIDDEN_FROM_PICKER = new Set([
   'Event & Operational Supplies', 'Printing Expense', 'Electricity Utility Bill', 'Awards & Prizes Expense', 'Ballpen and Writing Supplies',
   'Business Travel Reimbursement', 'Communication Expense', 'Document Folders and Filing Supplies',
 ]);
+const MERCHANDISE_TYPES_HIDDEN_FROM_PICKER = new Set([
+  'Acquisition of Merchandise for Sale - Goods Received and On Hand',
+  'Downpayment for Pre-ordered Merchandise',
+]);
 
 const localDateInputValue = (): string => {
   const today = new Date();
@@ -291,6 +295,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     return Array.from(new Set(
       classificationRules
         .filter(rule => categorizeTransactionRule(rule) === selectedCategory && isRuleAvailable(rule)
+          && !(selectedCategory === 'merchandise' && MERCHANDISE_TYPES_HIDDEN_FROM_PICKER.has(rule.description))
           && (selectedCategory !== 'ppe-transactions' || rule.description === 'Purchase Chairs' || rule.description.toLowerCase().startsWith('purchase of ')))
         .map(rule => rule.description)
     )).sort();
@@ -1376,6 +1381,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               ? null
               : category.id === 'expense-transactions' ? 1
               : new Set(classificationRules.filter(rule => categorizeTransactionRule(rule) === category.id
+                && !(category.id === 'merchandise' && MERCHANDISE_TYPES_HIDDEN_FROM_PICKER.has(rule.description))
                 && (category.id !== 'ppe-transactions' || rule.description === 'Purchase Chairs' || rule.description.toLowerCase().startsWith('purchase of '))
                 && !(category.id === 'expense-transactions' && EXPENSE_TYPES_HIDDEN_FROM_PICKER.has(rule.description)))
                 .map(rule => rule.description)).size;
