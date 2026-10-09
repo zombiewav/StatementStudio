@@ -4,11 +4,12 @@ import { PREPAID_ASSET_CATEGORIES, PREPAID_ASSET_ITEMS } from './prepaidAssets';
 
 describe('Accounts spreadsheet mappings', () => {
   it.each([
-    ['Purchase of Laptop', '1500'], ['Purchase of Projector', '1500'], ['Purchase of Printer', '1500'],
-    ['Purchase of UPS (Uninterrupted Power System)', '1500'], ['Purchase of Cash Box', '1500'], ['Purchase of HDMI', '1500'],
-    ['Purchase of WIFI Box', '1500'], ['Purchase of Microphone', '1500'], ['Purchase of Flash Drive', '1500'],
-    ['Purchase of Mouse', '1500'], ['Purchase of Speaker', '1500'], ['Purchase of Projector Stand', '1500'],
-    ['Purchase of Adaptor', '1500'], ['Purchase of Cabinet', '1650'], ['Purchase Chairs', '1650'], ['Purchase of Tables/Desks', '1650'],
+    ['Purchase of Laptop', '1501'], ['Purchase of Projector', '1502'], ['Purchase of Printer', '1503'],
+    ['Purchase of UPS (Uninterrupted Power System)', '1504'], ['Purchase of Cash Box', '1505'], ['Purchase of HDMI', '1506'],
+    ['Purchase of WIFI Box', '1507'], ['Purchase of Microphone', '1508'], ['Purchase of Flash Drive', '1509'],
+    ['Purchase of Mouse', '1510'], ['Purchase of Speaker', '1511'], ['Purchase of Projector Stand', '1512'],
+    ['Purchase of Adaptor', '1513'], ['Purchase of Cabinet', '1651'], ['Purchase Chairs', '1652'], ['Purchase of Tables/Desks', '1653'],
+    ['Purchase of Computer Hardware', '1514'], ['Purchase of Extension Wire', '1515'], ['Purchase of Other Small Equipment', '1516'],
   ])('%s records to the required asset class', (description, debitAccountCode) => {
     expect(DEFAULT_RULES.find(rule => rule.description === description)).toMatchObject({ debitAccountCode, creditAccountCode: '1010' });
   });

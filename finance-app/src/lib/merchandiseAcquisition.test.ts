@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { aggregateAvailableMerchandisePrepayments, buildMerchandiseAcquisitionPosting, buildMerchandisePrepaymentPosting, buildSupplierReceivableCollectionPosting } from './merchandiseAcquisition';
+import { aggregateAvailableMerchandisePrepayments, buildMerchandiseAcquisitionPosting, buildMerchandisePrepaymentPosting, buildSupplierReceivableCollectionPosting, splitMerchandiseAcquisitionPosting } from './merchandiseAcquisition';
 
 describe('merchandise acquisition posting', () => {
   it('records an organization payment and leaves the unpaid cost in Accounts Payable - Merchandise', () => {
@@ -83,9 +83,9 @@ describe('merchandise acquisition posting', () => {
       officerPayments: [{ date: '2026-01-12', amount: 700 }],
     }).lines).toEqual([
       { accountCode: '1700', debit: 1000, credit: 0, date: '2026-01-10' },
+      { accountCode: '2020', debit: 0, credit: 1000, date: '2026-01-10' },
       { accountCode: '2020', debit: 700, credit: 0, date: '2026-01-12' },
       { accountCode: '2050', debit: 0, credit: 700, date: '2026-01-12' },
-      { accountCode: '2020', debit: 0, credit: 1000, date: '2026-01-10' },
     ]);
   });
 
@@ -105,9 +105,9 @@ describe('merchandise acquisition posting', () => {
       { accountCode: '1700', debit: 1000, credit: 0, date: '2026-02-10' },
       { accountCode: '1270', debit: 0, credit: 200, date: '2026-02-10' },
       { accountCode: '1010', debit: 0, credit: 300, date: '2026-02-10' },
+      { accountCode: '2020', debit: 0, credit: 500, date: '2026-02-10' },
       { accountCode: '2020', debit: 250, credit: 0, date: '2026-02-15' },
       { accountCode: '1010', debit: 0, credit: 250, date: '2026-02-15' },
-      { accountCode: '2020', debit: 0, credit: 500, date: '2026-02-10' },
     ]);
     expect(posting.merchandisePayable).toBe(250);
     expect(posting.prepaymentApplied).toBe(200);
@@ -126,9 +126,42 @@ describe('merchandise acquisition posting', () => {
     }).lines).toEqual([
       { accountCode: '1700', debit: 2000, credit: 0, date: '2026-09-28' },
       { accountCode: '1010', debit: 0, credit: 1000, date: '2026-09-28' },
+      { accountCode: '2020', debit: 0, credit: 1000, date: '2026-09-28' },
       { accountCode: '2020', debit: 200, credit: 0, date: '2026-09-29' },
       { accountCode: '1010', debit: 0, credit: 200, date: '2026-09-29' },
-      { accountCode: '2020', debit: 0, credit: 1000, date: '2026-09-28' },
+    ]);
+  });
+
+  it('keeps each later dated payment batch together, including mixed funding sources', () => {
+    expect(buildMerchandiseAcquisitionPosting({
+      totalCost: 1000,
+      paymentMethod: 'advance-and-personal',
+      transactionDate: '2026-02-10',
+      organizationPayments: [{ date: '2026-02-10', amount: 200 }, { date: '2026-02-15', amount: 150 }],
+      advancePayments: [{ date: '2026-02-15', amount: 100 }],
+      officerPayments: [{ date: '2026-02-15', amount: 50 }],
+      availableCash: 350,
+      availableAdvance: 100,
+    }).lines).toEqual([
+      { accountCode: '1700', debit: 1000, credit: 0, date: '2026-02-10' },
+      { accountCode: '1010', debit: 0, credit: 200, date: '2026-02-10' },
+      { accountCode: '2020', debit: 0, credit: 800, date: '2026-02-10' },
+      { accountCode: '2020', debit: 300, credit: 0, date: '2026-02-15' },
+      { accountCode: '1010', debit: 0, credit: 150, date: '2026-02-15' },
+      { accountCode: '1250', debit: 0, credit: 100, date: '2026-02-15' },
+      { accountCode: '2050', debit: 0, credit: 50, date: '2026-02-15' },
+    ]);
+  });
+
+  it('creates one balanced journal-entry batch for the purchase and each later payment date', () => {
+    const posting = buildMerchandiseAcquisitionPosting({
+      totalCost: 1000, paymentMethod: 'organization-funds', transactionDate: '2026-02-10',
+      organizationPayments: [{ date: '2026-02-10', amount: 300 }, { date: '2026-02-15', amount: 250 }, { date: '2026-02-20', amount: 450 }],
+    });
+    expect(splitMerchandiseAcquisitionPosting(posting, '2026-02-10')).toEqual([
+      { date: '2026-02-10', lines: [{ accountCode: '1700', debit: 1000, credit: 0, date: '2026-02-10' }, { accountCode: '1010', debit: 0, credit: 300, date: '2026-02-10' }, { accountCode: '2020', debit: 0, credit: 700, date: '2026-02-10' }] },
+      { date: '2026-02-15', lines: [{ accountCode: '2020', debit: 250, credit: 0, date: '2026-02-15' }, { accountCode: '1010', debit: 0, credit: 250, date: '2026-02-15' }] },
+      { date: '2026-02-20', lines: [{ accountCode: '2020', debit: 450, credit: 0, date: '2026-02-20' }, { accountCode: '1010', debit: 0, credit: 450, date: '2026-02-20' }] },
     ]);
   });
 

@@ -91,8 +91,6 @@ export interface TransactionDetails {
   merchandiseOfficerPayments?: DatedAmountRecord[];
   merchandiseAdvancePayment?: number;
   merchandiseAdvancePayments?: DatedAmountRecord[];
-  merchandiseReimbursement?: number;
-  merchandiseReimbursements?: DatedAmountRecord[];
   merchandisePayableAmount?: number;
   merchandiseBatchEntryId?: string;
   merchandiseQuantitySold?: number;

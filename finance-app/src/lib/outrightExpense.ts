@@ -24,7 +24,28 @@ export interface OutrightExpensePosting {
   cashPaid: number;
 }
 
+export interface DatedJournalBatch {
+  date: string;
+  lines: JournalLine[];
+}
+
 const cents = (value: number): number => Math.round(value * 100) / 100;
+
+/** Split a compound posting into dated entries only when every date group is
+ * independently balanced. Unbalanced groups stay together to avoid changing
+ * the accounting effect of a transaction. */
+export function splitBalancedJournalLinesByDate(lines: JournalLine[], fallbackDate: string): DatedJournalBatch[] {
+  if (!lines.length) return [];
+  const groups = new Map<string, JournalLine[]>();
+  lines.forEach(line => {
+    const date = line.date || fallbackDate;
+    groups.set(date, [...(groups.get(date) || []), line]);
+  });
+  if (groups.size <= 1) return [{ date: groups.keys().next().value || fallbackDate, lines }];
+  const batches = [...groups.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, batchLines]) => ({ date, lines: batchLines }));
+  const eachBalanced = batches.every(batch => cents(batch.lines.reduce((sum, line) => sum + line.debit, 0)) === cents(batch.lines.reduce((sum, line) => sum + line.credit, 0)));
+  return eachBalanced ? batches : [{ date: fallbackDate, lines }];
+}
 
 function amount(label: string, value: number): number {
   if (!Number.isFinite(value) || value < 0) throw new Error(`${label} cannot be negative.`);

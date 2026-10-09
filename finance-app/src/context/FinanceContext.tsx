@@ -40,6 +40,11 @@ const GENERAL_FUND_PROJECT = 'General Fund Operations';
 const GENERAL_FUND_BALANCE_CODE = '3010';
 const INCOME_SUMMARY_ACCOUNT_CODE = '3000';
 const RETIRED_ACCOUNT_CODES = new Set(['1290', '1340', '1345', '1710', '1720', '2060']);
+const BACKFILLED_DEFAULT_ACCOUNT_CODES = new Set([
+  '1210', '1220', '1230', '1270', '1280', '1285', '1295', '1298', '1330', '1360', '1370',
+  '1501', '1502', '1503', '1504', '1505', '1506', '1507', '1508', '1509', '1510', '1511', '1512', '1513', '1514', '1515', '1516',
+  '1651', '1652', '1653', '2020', '2030', '2040', '2061', '2062', '2063', '2064', '2070', '2080', '2140', '2150', '4100', '4110',
+]);
 
 // Retired accounts are removed from the COA, while historical journals and
 // carried balances are reclassified so prior data remains balanced and visible.
@@ -177,6 +182,22 @@ export const INITIAL_ACCOUNTS: Account[] = [
   { code: '1295', name: 'Prepaid Rent', type: 'Assets', normalBalance: 'Debit', description: 'Rental rights paid for before the related event or rental period', isActive: true },
   { code: '1298', name: 'Clothing/Uniform', type: 'Assets', normalBalance: 'Debit', description: 'Uniforms and clothing purchased in advance and not yet issued or consumed', isActive: true },
   { code: '1500', name: 'Equipment & Tools', type: 'Assets', normalBalance: 'Debit', description: 'Laptops, computers, hardware, tools, and other equipment used by the organization', isActive: true },
+  { code: '1501', name: 'Laptop', type: 'Assets', normalBalance: 'Debit', description: 'Laptop computers owned and used by the organization', isActive: true },
+  { code: '1502', name: 'Projector', type: 'Assets', normalBalance: 'Debit', description: 'Projectors owned and used by the organization', isActive: true },
+  { code: '1503', name: 'Printer', type: 'Assets', normalBalance: 'Debit', description: 'Printers owned and used by the organization', isActive: true },
+  { code: '1504', name: 'Uninterrupted Power System', type: 'Assets', normalBalance: 'Debit', description: 'Uninterrupted power systems owned and used by the organization', isActive: true },
+  { code: '1505', name: 'Cash Box', type: 'Assets', normalBalance: 'Debit', description: 'Cash boxes owned and used by the organization', isActive: true },
+  { code: '1506', name: 'HDMI', type: 'Assets', normalBalance: 'Debit', description: 'HDMI equipment owned and used by the organization', isActive: true },
+  { code: '1507', name: 'WIFI Box', type: 'Assets', normalBalance: 'Debit', description: 'Wi-Fi equipment owned and used by the organization', isActive: true },
+  { code: '1508', name: 'Microphone', type: 'Assets', normalBalance: 'Debit', description: 'Microphones owned and used by the organization', isActive: true },
+  { code: '1509', name: 'Flash Drive', type: 'Assets', normalBalance: 'Debit', description: 'Flash drives owned and used by the organization', isActive: true },
+  { code: '1510', name: 'Mouse', type: 'Assets', normalBalance: 'Debit', description: 'Computer mice owned and used by the organization', isActive: true },
+  { code: '1511', name: 'Speaker', type: 'Assets', normalBalance: 'Debit', description: 'Speakers owned and used by the organization', isActive: true },
+  { code: '1512', name: 'Projector Stand', type: 'Assets', normalBalance: 'Debit', description: 'Projector stands owned and used by the organization', isActive: true },
+  { code: '1513', name: 'Adaptor', type: 'Assets', normalBalance: 'Debit', description: 'Adaptors owned and used by the organization', isActive: true },
+  { code: '1514', name: 'Computer Hardware', type: 'Assets', normalBalance: 'Debit', description: 'Computer hardware owned and used by the organization', isActive: true },
+  { code: '1515', name: 'Extension Wire', type: 'Assets', normalBalance: 'Debit', description: 'Extension wires owned and used by the organization', isActive: true },
+  { code: '1516', name: 'Small Equipment', type: 'Assets', normalBalance: 'Debit', description: 'Other small equipment owned and used by the organization', isActive: true },
   // Contra-assets: Credit-normal despite being Assets-type accounts, so they
   // reduce Total Assets instead of adding to it (see isContraAccount in
   // src/lib/accountTotals.ts, which every Total Assets calculation relies on
@@ -186,6 +207,9 @@ export const INITIAL_ACCOUNTS: Account[] = [
   { code: '1550', name: 'Accumulated Depreciation - Equipment', type: 'Assets', normalBalance: 'Credit', description: 'Cumulative depreciation charged against Equipment & Tools to date', isActive: true },
   { code: '1600', name: 'Property & Facilities', type: 'Assets', normalBalance: 'Debit', description: 'Real estate and facilities owned/held by the organization', isActive: true },
   { code: '1650', name: 'Furniture & Fixtures', type: 'Assets', normalBalance: 'Debit', description: 'Desks, chairs, cabinets, and other furnishings owned by the organization', isActive: true },
+  { code: '1651', name: 'Cabinet', type: 'Assets', normalBalance: 'Debit', description: 'Cabinets owned and used by the organization', isActive: true },
+  { code: '1652', name: 'Chairs', type: 'Assets', normalBalance: 'Debit', description: 'Chairs owned and used by the organization', isActive: true },
+  { code: '1653', name: 'Tables and Desks', type: 'Assets', normalBalance: 'Debit', description: 'Tables and desks owned and used by the organization', isActive: true },
   { code: '1660', name: 'Accumulated Depreciation - Furniture & Fixtures', type: 'Assets', normalBalance: 'Credit', description: 'Cumulative depreciation charged against Furniture & Fixtures to date', isActive: true },
   { code: '1700', name: 'Inventory - Merchandise', type: 'Assets', normalBalance: 'Debit', description: 'Goods purchased for resale (organization merchandise, apparel, etc.)', isActive: true },
   // These two exist so a treasurer can post to them via "Advanced: Override
@@ -209,7 +233,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
   // paper's own exact term — it distinguishes this (amounts owed directly
   // to a supplier/vendor) from Due to Officers (owed to a person) in the
   // REVIEW settlement mechanism, which asks a different question for each.
-  { code: '2010', name: 'Account Payable-Expense', type: 'Liabilities', normalBalance: 'Credit', description: 'Outstanding expense payables tracked separately for each supplier or payee', isActive: true },
+  { code: '2010', name: 'Accounts Payable - Expense', type: 'Liabilities', normalBalance: 'Credit', description: 'Outstanding expense payables tracked separately for each supplier or payee', isActive: true },
   { code: '2020', name: 'Accounts Payable - Merchandise', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid cost of merchandise acquired for resale', isActive: true },
   { code: '2030', name: 'Accounts Payable-PPE', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid purchases of property, plant, and equipment', isActive: true },
   { code: '2040', name: 'Accounts Payable-Furniture & Fixture', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid purchases of furniture and fixtures', isActive: true },
@@ -464,7 +488,7 @@ export const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   { keyword: 'honorarium/token – speaker, facilitator, or judge', debitAccountCode: '5200', creditAccountCode: '1010', description: 'Honorarium/Token – Speaker, Facilitator, or Judge' },
   { keyword: 'membership fees paid to national organization', debitAccountCode: '5210', creditAccountCode: '1010', description: 'Membership Fees paid to National Organization' },
   { keyword: 'recording session/station id fees', debitAccountCode: '5260', creditAccountCode: '1010', description: 'Recording Session/Station ID Fees' },
-  { keyword: 'printer repairs', debitAccountCode: '5070', creditAccountCode: '1010', description: 'Printer Repairs' },
+  { keyword: 'printer repairs', debitAccountCode: '5070', creditAccountCode: '1010', description: 'Small Printer Repairs' },
   { keyword: 'cash in/cash out fees', debitAccountCode: '5100', creditAccountCode: '1010', description: 'Cash In/Cash Out Fees' },
 
   // --- Utilities -----------------------------------------------------------
@@ -538,25 +562,31 @@ export const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   { keyword: 'depreciation of speaker', debitAccountCode: '5090', creditAccountCode: '1550', description: 'Depreciation of Speaker' },
   { keyword: 'depreciation of projector stand', debitAccountCode: '5090', creditAccountCode: '1550', description: 'Depreciation of Projector Stand' },
   { keyword: 'depreciation of adaptor', debitAccountCode: '5090', creditAccountCode: '1550', description: 'Depreciation of Adaptor' },
+  { keyword: 'depreciation of computer hardware', debitAccountCode: '5090', creditAccountCode: '1550', description: 'Depreciation of Computer Hardware' },
+  { keyword: 'depreciation of extension wire', debitAccountCode: '5090', creditAccountCode: '1550', description: 'Depreciation of Extension Wire' },
+  { keyword: 'depreciation of other small equipment', debitAccountCode: '5090', creditAccountCode: '1550', description: 'Depreciation of Other Small Equipment' },
   { keyword: 'depreciation', debitAccountCode: '5090', creditAccountCode: '1550', description: 'Depreciation Expense - Equipment' },
 
   // --- Equipment Expense -----------------------------------------------------
-  { keyword: 'purchase of laptop', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Purchase of Laptop' },
-  { keyword: 'purchase of projector', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Purchase of Projector' },
-  { keyword: 'purchase of printer', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Purchase of Printer' },
-  { keyword: 'purchase of ups', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Purchase of UPS (Uninterrupted Power System)' },
-  { keyword: 'purchase of cash box', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Purchase of Cash Box' },
-  { keyword: 'purchase of hdmi', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Purchase of HDMI' },
-  { keyword: 'purchase of wifi box', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Purchase of WIFI Box' },
-  { keyword: 'purchase of microphone', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Purchase of Microphone' },
-  { keyword: 'purchase of flash drive', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Purchase of Flash Drive' },
-  { keyword: 'purchase of mouse', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Purchase of Mouse' },
-  { keyword: 'purchase of speaker', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Purchase of Speaker' },
-  { keyword: 'purchase of projector stand', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Purchase of Projector Stand' },
-  { keyword: 'purchase of adaptor', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Purchase of Adaptor' },
-  { keyword: 'purchase of cabinet', debitAccountCode: '1650', creditAccountCode: '1010', description: 'Purchase of Cabinet' },
-  { keyword: 'purchase chairs', debitAccountCode: '1650', creditAccountCode: '1010', description: 'Purchase Chairs' },
-  { keyword: 'purchase of tables/desks', debitAccountCode: '1650', creditAccountCode: '1010', description: 'Purchase of Tables/Desks' },
+  { keyword: 'purchase of laptop', debitAccountCode: '1501', creditAccountCode: '1010', description: 'Purchase of Laptop' },
+  { keyword: 'purchase of projector', debitAccountCode: '1502', creditAccountCode: '1010', description: 'Purchase of Projector' },
+  { keyword: 'purchase of printer', debitAccountCode: '1503', creditAccountCode: '1010', description: 'Purchase of Printer' },
+  { keyword: 'purchase of ups', debitAccountCode: '1504', creditAccountCode: '1010', description: 'Purchase of UPS (Uninterrupted Power System)' },
+  { keyword: 'purchase of cash box', debitAccountCode: '1505', creditAccountCode: '1010', description: 'Purchase of Cash Box' },
+  { keyword: 'purchase of hdmi', debitAccountCode: '1506', creditAccountCode: '1010', description: 'Purchase of HDMI' },
+  { keyword: 'purchase of wifi box', debitAccountCode: '1507', creditAccountCode: '1010', description: 'Purchase of WIFI Box' },
+  { keyword: 'purchase of microphone', debitAccountCode: '1508', creditAccountCode: '1010', description: 'Purchase of Microphone' },
+  { keyword: 'purchase of flash drive', debitAccountCode: '1509', creditAccountCode: '1010', description: 'Purchase of Flash Drive' },
+  { keyword: 'purchase of mouse', debitAccountCode: '1510', creditAccountCode: '1010', description: 'Purchase of Mouse' },
+  { keyword: 'purchase of speaker', debitAccountCode: '1511', creditAccountCode: '1010', description: 'Purchase of Speaker' },
+  { keyword: 'purchase of projector stand', debitAccountCode: '1512', creditAccountCode: '1010', description: 'Purchase of Projector Stand' },
+  { keyword: 'purchase of adaptor', debitAccountCode: '1513', creditAccountCode: '1010', description: 'Purchase of Adaptor' },
+  { keyword: 'purchase of computer hardware', debitAccountCode: '1514', creditAccountCode: '1010', description: 'Purchase of Computer Hardware' },
+  { keyword: 'purchase of extension wire', debitAccountCode: '1515', creditAccountCode: '1010', description: 'Purchase of Extension Wire' },
+  { keyword: 'purchase of other small equipment', debitAccountCode: '1516', creditAccountCode: '1010', description: 'Purchase of Other Small Equipment' },
+  { keyword: 'purchase of cabinet', debitAccountCode: '1651', creditAccountCode: '1010', description: 'Purchase of Cabinet' },
+  { keyword: 'purchase chairs', debitAccountCode: '1652', creditAccountCode: '1010', description: 'Purchase Chairs' },
+  { keyword: 'purchase of tables/desks', debitAccountCode: '1653', creditAccountCode: '1010', description: 'Purchase of Tables/Desks' },
   { keyword: 'laptop', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Developer Laptop Purchase' },
   { keyword: 'computer', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Hardware Equipment Purchase' },
   { keyword: 'monitor', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Computer Monitor Purchase' },
@@ -815,7 +845,7 @@ interface FinanceContextType {
   // Saves (or, when an id already exists, overwrites) an in-progress
   // Stores a balanced draft ledger entry and form state for later finalization.
   saveDraftTransaction: (draft: { id?: string; category: string | null; label: string; formState: Record<string, unknown>; journalEntryId?: string }) => string;
-  deleteDraftTransaction: (id: string) => void;
+  deleteDraftTransaction: (id: string, preserveJournalEntryIds?: string[]) => void;
   recordFinancialStatementHistory: (record: Omit<FinancialStatementHistoryRecord, 'id' | 'generatedAt'>) => FinancialStatementHistoryRecord;
   deleteSemester: (key: string) => void;
   switchReportingPeriod: (schoolYear: string, semester: '1st Semester' | '2nd Semester', reportingYear: number) => void;
@@ -1077,10 +1107,10 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
           return;
         }
         const activeSavedAccounts = saved.accounts.filter(account => !RETIRED_ACCOUNT_CODES.has(account.code)).map(account => {
-          const current = INITIAL_ACCOUNTS.find(defaultAccount => defaultAccount.code === account.code && ['1270', '1360', '2020'].includes(account.code));
+          const current = INITIAL_ACCOUNTS.find(defaultAccount => defaultAccount.code === account.code && ['1270', '1360', '2010', '2020'].includes(account.code));
           return current ? { ...account, name: current.name, description: current.description } : account;
         });
-        setAccounts([...activeSavedAccounts, ...INITIAL_ACCOUNTS.filter(a => ['1210', '1220', '1230', '1270', '1280', '1285', '1295', '1298', '1330', '1360', '1370', '2020', '2030', '2040', '2061', '2062', '2063', '2064', '2070', '2080', '2140', '2150', '4100', '4110'].includes(a.code) && !activeSavedAccounts.some(existing => existing.code === a.code))]);
+        setAccounts([...activeSavedAccounts, ...INITIAL_ACCOUNTS.filter(a => BACKFILLED_DEFAULT_ACCOUNT_CODES.has(a.code) && !activeSavedAccounts.some(existing => existing.code === a.code))]);
         setJournalEntries(migrateRetiredAccountLines(saved.journalEntries));
         setProjects(saved.projects || []);
         setAuditLogs(saved.auditLogs || []);
@@ -1613,11 +1643,12 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     return id;
   };
 
-  const deleteDraftTransaction = (id: string) => {
+  const deleteDraftTransaction = (id: string, preserveJournalEntryIds: string[] = []) => {
+    const preserved = new Set(preserveJournalEntryIds);
     setDraftTransactions(prev => {
       const existing = prev.find(d => d.id === id);
       if (existing) logAudit('Discard Draft Transaction', `Discarded draft "${existing.label}".`);
-      if (existing?.journalEntryId) {
+      if (existing?.journalEntryId && !preserved.has(existing.journalEntryId)) {
         setJournalEntries(entries => entries.filter(entry => entry.id !== existing.journalEntryId));
         setReceiptAttachments(receipts => receipts.filter(receipt => receipt.entryId !== existing.journalEntryId));
       }
@@ -1807,10 +1838,10 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     };
 
     const restoredAccounts = payload.accounts.filter(account => !RETIRED_ACCOUNT_CODES.has(account.code)).map(account => {
-      const current = INITIAL_ACCOUNTS.find(defaultAccount => defaultAccount.code === account.code && ['1270', '1360', '2020'].includes(account.code));
+      const current = INITIAL_ACCOUNTS.find(defaultAccount => defaultAccount.code === account.code && ['1270', '1360', '2010', '2020'].includes(account.code));
       return current ? { ...account, name: current.name, description: current.description } : account;
     });
-    setAccounts([...restoredAccounts, ...INITIAL_ACCOUNTS.filter(a => ['1210', '1220', '1230', '1270', '1280', '1285', '1295', '1298', '1330', '1360', '1370', '2020', '2030', '2040', '2061', '2062', '2063', '2064', '2070', '2080', '2140', '2150', '4100', '4110'].includes(a.code) && !restoredAccounts.some(existing => existing.code === a.code))]);
+    setAccounts([...restoredAccounts, ...INITIAL_ACCOUNTS.filter(a => BACKFILLED_DEFAULT_ACCOUNT_CODES.has(a.code) && !restoredAccounts.some(existing => existing.code === a.code))]);
     setJournalEntries(migrateRetiredAccountLines(payload.journalEntries));
     setProjects(Array.isArray(payload.projects) ? payload.projects : []);
     setAuditLogs([restoreLogEntry, ...restoredLogs].slice(0, 100));

@@ -34,6 +34,7 @@ import { categorizeTransactionRule, TRANSACTION_CATEGORIES, TransactionCategoryI
 import { merchandiseSaleCostError } from '../lib/transactionHistory';
 import {
   buildMerchandiseAcquisitionPosting,
+  splitMerchandiseAcquisitionPosting,
   buildMerchandisePrepaymentPosting,
   buildSupplierReceivableCollectionPosting,
   aggregateAvailableMerchandisePrepayments,
@@ -51,7 +52,7 @@ import {
   MEMBERSHIP_REFUND_LIABILITY_CODE,
   MembershipRefundStatus,
 } from '../lib/membershipFees';
-import { buildOutrightExpensePosting, OutrightExpensePaymentMethod } from '../lib/outrightExpense';
+import { buildOutrightExpensePosting, splitBalancedJournalLinesByDate, OutrightExpensePaymentMethod } from '../lib/outrightExpense';
 import { counterpartyBalance, counterpartyBalances } from '../lib/counterpartyBalances';
 import { isDateWithinReportingPeriod, periodForSemester, reportingPeriodBounds } from '../lib/reportingPeriod';
 
@@ -64,6 +65,21 @@ const UNRESTRICTED_REVENUE_CODE = '4030';
 const MEMBERSHIP_DUES_RECEIVABLE_CODE = '1300';
 const MERCHANDISE_ITEM_OPTIONS = ['Lanyard', 'Pins', 'Tote Bag', 'Mug', 'Shirt', 'Stickers', 'Others'] as const;
 const sumDatedAmounts = (rows: DatedAmountInputRow[]): number => rows.reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
+const EXPENSE_TYPES_HIDDEN_FROM_PICKER = new Set([
+  'Flight Ticket Fare', 'Freight Expense', 'Gasoline Expense', 'General Staff Payroll', 'Honoraria Expense',
+  'Hourly Wages Pay', 'Miscellaneous Operating Expense', 'Monthly Office Rental Payment', 'Notebooks and Writing Pads',
+  'Office Administrative Supplies', 'Office Space Lease', 'Office Supplies Billed by Vendor', 'Office Supplies Purchase',
+  'Office Supplies Stationary', 'Power Bill Payment', 'Printer Ink Supplies', 'Printer Paper and Ink',
+  'Event & Operational Supplies', 'Printing Expense', 'Electricity Utility Bill', 'Awards & Prizes Expense', 'Ballpen and Writing Supplies',
+  'Business Travel Reimbursement', 'Communication Expense', 'Document Folders and Filing Supplies',
+]);
+
+const localDateInputValue = (): string => {
+  const today = new Date();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${today.getFullYear()}-${month}-${day}`;
+};
 
 // The generic bag saved as a draft's TransactionDraft.formState — mirrors
 // every field of the general transaction form that's worth resuming later.
@@ -71,6 +87,7 @@ const sumDatedAmounts = (rows: DatedAmountInputRow[]): number => rows.reduce((su
 interface TransactionFormSnapshot {
   txName: string;
   selectedCategory: TransactionCategoryId | null;
+  selectedExpenseAccountCode: string;
   description: string;
   amount: number;
   date: string;
@@ -243,6 +260,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   // than starting a fresh entry — "Save as Draft" updates this same draft
   // instead of creating a duplicate, and a successful Post deletes it.
   const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
+  const [selectedExpenseAccountCode, setSelectedExpenseAccountCode] = useState('5010');
   // Set for exactly one effect pass right after a draft is hydrated, so the
   // classification-match effect below (keyed on txName, which hydration
   // also sets) doesn't immediately wipe the just-restored fields back to
@@ -269,9 +287,11 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   // since they're the same category under two different trigger words).
   const transactionTypeOptions = useMemo(() => {
     if (!selectedCategory || selectedCategory === 'activity-fees') return [];
+    if (selectedCategory === 'expense-transactions') return ['Outright Expense Payment'];
     return Array.from(new Set(
       classificationRules
-        .filter(rule => categorizeTransactionRule(rule) === selectedCategory && isRuleAvailable(rule))
+        .filter(rule => categorizeTransactionRule(rule) === selectedCategory && isRuleAvailable(rule)
+          && (selectedCategory !== 'ppe-transactions' || rule.description === 'Purchase Chairs' || rule.description.toLowerCase().startsWith('purchase of ')))
         .map(rule => rule.description)
     )).sort();
   }, [classificationRules, selectedCategory, isRuleAvailable]);
@@ -283,7 +303,18 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
 
   const selectCategory = (category: TransactionCategoryId) => {
     setSelectedCategory(category);
-    setTxName('');
+    if (category === 'expense-transactions') {
+      const firstExpense = activeAccounts.find(account => account.type === 'Expenses' && account.isActive && account.code !== '5090' && account.code !== '5095');
+      setSelectedExpenseAccountCode(firstExpense?.code || '5010');
+      setTxName('Outright Expense Payment');
+    }
+    const fixedOfficerType = category === 'advances-to-officers'
+      ? 'Advances to Officers'
+      : category === 'reimbursements-to-officers' ? 'Reimbursement to Officer' : '';
+    const matchingRule = fixedOfficerType
+      ? classificationRules.find(rule => rule.description === fixedOfficerType && categorizeTransactionRule(rule) === category && isRuleAvailable(rule))
+      : undefined;
+    setTxName(matchingRule?.description || '');
     setShowTxDropdown(false);
     setErrorMessage('');
   };
@@ -317,6 +348,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   const merchandiseUsesOfficer = isMerchandiseAcquisition && (merchandisePaymentMethod === 'officer-personal' || merchandisePaymentMethod === 'organization-advance' || merchandisePaymentMethod === 'advance-and-personal');
   const isOfficerAdvance = debitCode === '1250';
   const isOfficerReimbursement = debitCode === '2050';
+  const isFixedOfficerTransactionType = selectedCategory === 'advances-to-officers' || selectedCategory === 'reimbursements-to-officers';
   const isLoanToOrganization = debitCode === '1350';
   const isLoanCollection = effectiveCreditCode === '1350';
   const isPriorExpensePayablePayment = debitCode === '2010';
@@ -354,7 +386,9 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       justHydratedDraftRef.current = false;
       return;
     }
-    const match = selectedTransactionType ? suggestTransactionClassification(selectedTransactionType) : null;
+    const match = selectedTransactionType === 'Outright Expense Payment' && selectedCategory === 'expense-transactions'
+      ? { debitAccountCode: selectedExpenseAccountCode, creditAccountCode: '1010', defaultDesc: 'Outright Expense Payment' }
+      : selectedTransactionType ? suggestTransactionClassification(selectedTransactionType) : null;
     if (match) {
       setDebitCode(match.debitAccountCode);
       setCreditCode(match.creditAccountCode);
@@ -478,6 +512,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     setEditingDraftId(draftToResume.id);
     setSelectedCategory((draftToResume.category as TransactionCategoryId) || null);
     setTxName(snapshot.txName || '');
+    setSelectedExpenseAccountCode(snapshot.selectedExpenseAccountCode || '5010');
     setDescription(snapshot.description || '');
     setAmount(snapshot.amount || 0);
     setDate(fallbackDate);
@@ -511,7 +546,10 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     setMerchandiseRemittances(snapshot.merchandiseRemittances?.length ? snapshot.merchandiseRemittances : [{ id: `remittance-${Date.now()}`, date: fallbackDate, amount: '' }]);
     setMerchandiseCollectionOfficer(snapshot.merchandiseCollectionOfficer || '');
 
-    const match = snapshot.txName ? suggestTransactionClassification(snapshot.txName) : null;
+    const genericExpenseDraft = snapshot.selectedCategory === 'expense-transactions' && snapshot.txName === 'Outright Expense Payment';
+    const match = genericExpenseDraft
+      ? { debitAccountCode: snapshot.selectedExpenseAccountCode || '5010', creditAccountCode: '1010', defaultDesc: 'Outright Expense Payment' }
+      : snapshot.txName ? suggestTransactionClassification(snapshot.txName) : null;
     if (match) {
       setDebitCode(match.debitAccountCode);
       setCreditCode(match.creditAccountCode);
@@ -560,9 +598,12 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
         : isPriorExpensePayablePayment ? supplierPayableBalances : [];
   const counterpartyBalanceHeading = isLoanToOrganization || isLoanCollection
     ? 'Outstanding loans by organization'
-    : isOfficerAdvance ? 'Available advances by officer'
-      : isOfficerReimbursement ? 'Amounts payable by officer'
+    : isOfficerAdvance ? 'Available advances to officers'
+      : isOfficerReimbursement ? 'Amount payable to officers'
         : 'Outstanding expense payables by supplier / payee';
+  const reimbursementAmountError = isOfficerReimbursement && amount > selectedOfficerPayableBalance
+    ? 'Reimbursement cannot exceed the amount currently payable to this accountable officer.'
+    : '';
   // Membership Fees collections are never paid via an officer's cash
   // advance (they're money coming in from members, not an expense paid
   // out), so this warning must never apply there regardless of whatever
@@ -598,6 +639,16 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   const merchandiseOrganizationPaymentTotal = sumDatedAmounts(merchandiseOrganizationPayments);
   const merchandiseOfficerPaymentTotal = sumDatedAmounts(merchandiseOfficerPayments);
   const merchandiseAdvancePaymentTotal = sumDatedAmounts(merchandiseAdvancePayments);
+  const merchandisePrepaymentAmount = Math.round((merchandiseOrganizationPaymentTotal + merchandiseOfficerPaymentTotal + merchandiseAdvancePaymentTotal) * 100) / 100;
+  const merchandisePrepaymentPaymentRows = merchandisePaymentMethod === 'organization-funds'
+    ? merchandiseOrganizationPayments
+    : merchandisePaymentMethod === 'officer-personal'
+      ? merchandiseOfficerPayments
+      : merchandisePaymentMethod === 'organization-advance'
+        ? merchandiseAdvancePayments
+        : [...merchandiseOrganizationPayments, ...merchandiseOfficerPayments, ...merchandiseAdvancePayments];
+  const merchandisePrepaymentDate = merchandisePrepaymentPaymentRows.find(row => Number(row.amount) > 0 && row.date)?.date || localDateInputValue();
+  const transactionAmount = isMerchandisePrepayment ? merchandisePrepaymentAmount : amount;
   const draftSupplierReceivable = journalEntries.filter(entry => entry.isDraft)
     .reduce((sum, entry) => sum + entry.lines.filter(line => line.accountCode === '1360').reduce((lineSum, line) => lineSum + line.debit - line.credit, 0), 0);
   const supplierReceivableOutstanding = Math.max(0, Math.round(((accountBalances['1360'] || 0) - draftSupplierReceivable) * 100) / 100);
@@ -667,12 +718,12 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   }, [isMerchandiseAcquisition, amount, merchandisePaymentMethod, date, merchandiseOrganizationPaymentTotal, merchandiseOrganizationPayments, merchandiseOfficerPaymentTotal, merchandiseOfficerPayments, merchandiseAdvancePaymentTotal, merchandiseAdvancePayments, selectedOfficerAdvanceBalance, cashAvailable, selectedMerchandisePrepayment]);
 
   const merchandisePrepaymentResult = useMemo(() => {
-    if (!isMerchandisePrepayment || amount <= 0 || merchandisePaymentMethod === 'not-yet-paid') return { lines: [] as JournalLine[], error: '' };
+    if (!isMerchandisePrepayment || transactionAmount <= 0 || merchandisePaymentMethod === 'not-yet-paid') return { lines: [] as JournalLine[], error: '' };
     try {
       return { lines: buildMerchandisePrepaymentPosting({
-        amount,
+        amount: transactionAmount,
         paymentMethod: merchandisePaymentMethod,
-        transactionDate: date,
+        transactionDate: merchandisePrepaymentDate,
         organizationPayments: merchandiseOrganizationPayments.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })),
         officerPayments: merchandiseOfficerPayments.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })),
         advancePayments: merchandiseAdvancePayments.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })),
@@ -682,20 +733,21 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     } catch (error) {
       return { lines: [] as JournalLine[], error: error instanceof Error ? error.message : 'The supplier downpayment amounts are invalid.' };
     }
-  }, [isMerchandisePrepayment, amount, merchandisePaymentMethod, date, merchandiseOrganizationPayments, merchandiseOfficerPayments, merchandiseAdvancePayments, cashAvailable, selectedOfficerAdvanceBalance]);
+  }, [isMerchandisePrepayment, transactionAmount, merchandisePaymentMethod, merchandisePrepaymentDate, merchandiseOrganizationPayments, merchandiseOfficerPayments, merchandiseAdvancePayments, cashAvailable, selectedOfficerAdvanceBalance]);
 
   const isDepreciationEntry = debitCode === '5090' || debitCode === '5095';
   const isOutrightExpense = !!classificationPreview && activeAccounts.find(account => account.code === debitCode)?.type === 'Expenses' && !isMerchandiseAcquisition && !isDepreciationEntry;
-  const isPpeAcquisition = selectedCategory === 'ppe-transactions' && (debitCode === '1500' || debitCode === '1650');
+  const debitCodeNumber = Number(debitCode);
+  const isPpeAcquisition = selectedCategory === 'ppe-transactions' && ((debitCodeNumber >= 1500 && debitCodeNumber <= 1516) || (debitCodeNumber >= 1650 && debitCodeNumber <= 1653));
   const isGuidedPurchase = isOutrightExpense || isPpeAcquisition;
-  const guidedPayableAccountCode = debitCode === '1650' ? '2040' : isPpeAcquisition ? '2030' : '2010';
+  const guidedPayableAccountCode = debitCodeNumber >= 1650 && debitCodeNumber <= 1653 ? '2040' : isPpeAcquisition ? '2030' : '2010';
   const outrightOfficerTotal = sumDatedAmounts(outrightOfficerPayments);
   const outrightAdvanceTotal = sumDatedAmounts(outrightAdvancePayments);
   const outrightExpenseResult = useMemo(() => {
     if (!isGuidedPurchase || amount <= 0) return { posting: null, error: '' };
     try {
       return { posting: buildOutrightExpensePosting({
-        expenseAccountCode: debitCode, totalAmount: amount, paymentMethod: outrightPaymentMethod, transactionDate: date,
+        expenseAccountCode: debitCode, totalAmount: amount, paymentMethod: outrightPaymentMethod, transactionDate: date || localDateInputValue(),
         organizationPayments: outrightOrganizationPayments.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })),
         officerPayments: outrightOfficerPayments.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })),
         advancePayments: outrightAdvancePayments.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })),
@@ -706,6 +758,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       return { posting: null, error: error instanceof Error ? error.message : 'The expense payments are invalid.' };
     }
   }, [isGuidedPurchase, amount, debitCode, outrightPaymentMethod, date, outrightOrganizationPayments, outrightOfficerPayments, outrightAdvancePayments, selectedOfficerAdvanceBalance, cashAvailable, guidedPayableAccountCode]);
+  const requiresExpenseDraftReview = isOutrightExpense && (outrightExpenseResult.posting?.dueToSupplier || 0) > 0;
 
   useEffect(() => {
     if (isMerchandiseSale) setAmount(merchandiseSaleTotal);
@@ -739,7 +792,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   const previewLines = useMemo<JournalLine[]>(() => {
     if (!classificationPreview || !debitCode || !effectiveCreditCode) return [];
     if (isMembershipRefundStatus) return membershipRefundResolutionResult.lines;
-    if (amount <= 0) return [];
+    if (transactionAmount <= 0) return [];
     if (isMerchandiseAcquisition) return merchandiseAcquisitionResult.posting?.lines || [];
     if (isMerchandisePrepayment) return merchandisePrepaymentResult.lines;
     if (isSupplierReceivableCollection) {
@@ -758,7 +811,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       ]);
     }
     return buildJournalLines(debitCode, effectiveCreditCode, amount);
-  }, [classificationPreview, amount, date, debitCode, effectiveCreditCode, isMembershipRefundStatus, membershipRefundResolutionResult, isMerchandiseAcquisition, merchandiseAcquisitionResult, isMerchandisePrepayment, merchandisePrepaymentResult, isSupplierReceivableCollection, supplierReceivableOutstanding, isGuidedPurchase, outrightExpenseResult, requiresAccrualCompletion, isPriorMembershipCollection, membershipPostingResult, isMerchandiseSale, merchandiseSaleResult, showDeferPortionQuestion, notYetUsedAmount]);
+  }, [classificationPreview, transactionAmount, amount, date, debitCode, effectiveCreditCode, isMembershipRefundStatus, membershipRefundResolutionResult, isMerchandiseAcquisition, merchandiseAcquisitionResult, isMerchandisePrepayment, merchandisePrepaymentResult, isSupplierReceivableCollection, supplierReceivableOutstanding, isGuidedPurchase, outrightExpenseResult, requiresAccrualCompletion, isPriorMembershipCollection, membershipPostingResult, isMerchandiseSale, merchandiseSaleResult, showDeferPortionQuestion, notYetUsedAmount]);
 
   const projectedImpacts = useMemo(
     () => projectJournalLineImpacts(previewLines, activeAccounts, accountBalances),
@@ -793,6 +846,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   const buildFormSnapshot = (): TransactionFormSnapshot => ({
     txName,
     selectedCategory,
+    selectedExpenseAccountCode,
     description,
     amount,
     date,
@@ -842,6 +896,11 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     setSuccessMessage('');
     setLastPostedEntry(null);
 
+    if (!savingDraft && requiresExpenseDraftReview) {
+      setErrorMessage('Save this as a draft so its balanced journal entry is recorded in the ledger. Complete the remaining payment in Review before final posting.');
+      return;
+    }
+
     if (!classificationPreview) {
       setErrorMessage('Please select a transaction type from the list so its accounts can be determined automatically.');
       return;
@@ -883,7 +942,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       setErrorMessage('Please enter the accountable officer who collected the merchandise payments.');
       return;
     }
-    if (amount <= 0 && !(isMembershipRefundStatus && membershipRefundStatus === 'next')) {
+    if (transactionAmount <= 0 && !(isMembershipRefundStatus && membershipRefundStatus === 'next')) {
       setErrorMessage('Please enter a valid amount greater than zero.');
       return;
     }
@@ -969,10 +1028,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       setErrorMessage(`Please enter the ${counterpartyLabel.toLowerCase()} for this transaction.`);
       return;
     }
-    if (isOfficerReimbursement && amount > selectedOfficerPayableBalance) {
-      setErrorMessage('Reimbursement cannot exceed the amount currently payable to this accountable officer.');
-      return;
-    }
+    if (reimbursementAmountError) return;
     if (isLoanCollection && amount > selectedOrganizationLoanBalance) {
       setErrorMessage('Collection cannot exceed this organization’s outstanding loan balance.');
       return;
@@ -1049,16 +1105,30 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
 
       const journalDate = isPriorMembershipCollection
         ? membershipPostingResult.posting?.collections[0]?.date || date
-        : date;
+        : isMerchandisePrepayment
+          ? merchandisePrepaymentDate
+          : (isOfficerReimbursement || isOutrightExpense) && !date ? localDateInputValue() : date;
       const draftEntryId = editingDraftId
         ? draftTransactions.find(draft => draft.id === editingDraftId)?.journalEntryId
         : undefined;
       const draftEntry = draftEntryId ? journalEntries.find(entry => entry.id === draftEntryId) : undefined;
+      const merchandiseBatches = isMerchandiseAcquisition && merchandiseAcquisitionResult.posting
+        ? splitMerchandiseAcquisitionPosting(merchandiseAcquisitionResult.posting, journalDate)
+        : [];
+      const datedPostingBatches = !savingDraft && merchandiseBatches.length === 0
+        ? splitBalancedJournalLinesByDate(lines, journalDate)
+        : [];
+      const primaryJournalLines = merchandiseBatches.length > 0
+        ? merchandiseBatches[0].lines
+        : datedPostingBatches.length > 1 ? datedPostingBatches[0].lines : lines;
+      const primaryJournalDate = datedPostingBatches.length > 1
+        ? datedPostingBatches[0].date
+        : journalDate;
       const posted = addJournalEntry(
-        journalDate,
+        primaryJournalDate,
         entryDescription,
         GENERAL_FUND_PROJECT,
-        lines,
+        savingDraft ? lines : primaryJournalLines,
         isOutrightExpense && expenseEvent === 'yes' ? expenseEventName.trim() : undefined,
         undefined,
         {
@@ -1131,6 +1201,50 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
         draftEntry?.id,
       );
       const je = posted;
+      if (!savingDraft && merchandiseBatches.length > 1) {
+        merchandiseBatches.slice(1).forEach((batch, index) => {
+          addJournalEntry(
+            batch.date,
+            `${entryDescription} — Payment Batch ${index + 2}`,
+            GENERAL_FUND_PROJECT,
+            batch.lines,
+            undefined,
+            undefined,
+            {
+              transactionType: 'Merchandise Payment Batch',
+              details: {
+                eventRelated: false,
+                receiptAttachmentIds: [],
+                counterpartyName: counterpartyName.trim() || undefined,
+                merchandiseItem: merchandiseItemLabel,
+                merchandiseBatch: merchandiseBatch.trim(),
+                merchandisePurchaseDate: date,
+              },
+            },
+          );
+        });
+      }
+      if (!savingDraft && datedPostingBatches.length > 1) {
+        datedPostingBatches.slice(1).forEach((batch, index) => {
+          addJournalEntry(
+            batch.date,
+            `${entryDescription} - ${isPriorMembershipCollection || isMerchandiseSale ? 'Collection' : 'Payment'} Batch ${index + 2}`,
+            GENERAL_FUND_PROJECT,
+            batch.lines,
+            isOutrightExpense && expenseEvent === 'yes' ? expenseEventName.trim() : undefined,
+            posted.id,
+            {
+              transactionType: `${txName} - Dated Batch`,
+              details: {
+                memo: description.trim() || undefined,
+                eventRelated: isOutrightExpense ? expenseEvent === 'yes' : false,
+                counterpartyName: (isGuidedPurchase && outrightOfficer.trim()) || counterpartyName.trim() || undefined,
+                receiptAttachmentIds: [],
+              },
+            },
+          );
+        });
+      }
       attachReceiptsToEntry(je.id, pendingReceipts);
 
       if (savingDraft) {
@@ -1148,7 +1262,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       }
 
       if (editingDraftId) {
-        deleteDraftTransaction(editingDraftId);
+        deleteDraftTransaction(editingDraftId, [je.id]);
         setEditingDraftId(null);
         appliedDraftIdRef.current = null;
       }
@@ -1258,8 +1372,13 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
             const selected = selectedCategory === category.id;
             const isNewCategory = ['activity-fees', 'merchandise', 'membership-fees', 'prepaid-assets', 'payables', 'advances-to-officers', 'reimbursements-to-officers'].includes(category.id);
             const optionCount = category.id === 'activity-fees' || category.id === 'prepaid-assets' || category.id === 'payables'
+              || category.id === 'advances-to-officers' || category.id === 'reimbursements-to-officers'
               ? null
-              : new Set(classificationRules.filter(rule => categorizeTransactionRule(rule) === category.id).map(rule => rule.description)).size;
+              : category.id === 'expense-transactions' ? 1
+              : new Set(classificationRules.filter(rule => categorizeTransactionRule(rule) === category.id
+                && (category.id !== 'ppe-transactions' || rule.description === 'Purchase Chairs' || rule.description.toLowerCase().startsWith('purchase of '))
+                && !(category.id === 'expense-transactions' && EXPENSE_TYPES_HIDDEN_FROM_PICKER.has(rule.description)))
+                .map(rule => rule.description)).size;
             return (
               <button
                 key={category.id}
@@ -1319,7 +1438,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
             )}
           </div>
 
-          {errorMessage && (
+          {errorMessage && !(isOfficerReimbursement && errorMessage === 'Reimbursement cannot exceed the amount currently payable to this accountable officer.') && (
             <div className="p-3 bg-rose-50 border border-rose-100 text-rose-700 text-xs font-semibold rounded-xl flex items-center gap-2 dark:bg-rose-500/10 dark:border-rose-500/20 dark:text-rose-300">
               <span className="w-1.5 h-1.5 rounded-full bg-rose-400 shrink-0" />
               {errorMessage}
@@ -1352,6 +1471,28 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2 relative">
               <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Transaction Type</label>
+              {isFixedOfficerTransactionType ? (
+                <div className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
+                  {txName}
+                </div>
+              ) : selectedCategory === 'ppe-transactions' ? (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">PPE Dropdown</label>
+                    <select value={debitCodeNumber >= 1500 && debitCodeNumber <= 1599 ? txName : ''} onChange={event => { setTxName(event.target.value); setShowTxDropdown(false); }} className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white p-3 text-xs font-semibold text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
+                      <option value="">Select a PPE purchase</option>
+                      {classificationRules.filter(rule => { const code = Number(rule.debitAccountCode); return categorizeTransactionRule(rule) === 'ppe-transactions' && code >= 1500 && code <= 1599 && (rule.description.toLowerCase().startsWith('purchase of ') || rule.description === 'Purchase Chairs'); }).map(rule => <option key={rule.description} value={rule.description}>{rule.description}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">F&amp;F Dropdown</label>
+                    <select value={debitCodeNumber >= 1650 && debitCodeNumber <= 1699 ? txName : ''} onChange={event => { setTxName(event.target.value); setShowTxDropdown(false); }} className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white p-3 text-xs font-semibold text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
+                      <option value="">Select a furniture purchase</option>
+                      {classificationRules.filter(rule => { const code = Number(rule.debitAccountCode); return categorizeTransactionRule(rule) === 'ppe-transactions' && code >= 1650 && code <= 1699 && (rule.description.toLowerCase().startsWith('purchase of ') || rule.description === 'Purchase Chairs'); }).map(rule => <option key={rule.description} value={rule.description}>{rule.description}</option>)}
+                    </select>
+                  </div>
+                </div>
+              ) : <>
               <input
                 type="text"
                 value={txName}
@@ -1394,6 +1535,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               )}
 
               <p className="text-[10px] text-slate-500 mt-1 font-medium dark:text-slate-400">Select a known type. Its accounting rule determines the accounts automatically.</p>
+              </>}
               <div className="mt-2"><ReviewLaterNote /></div>
 
               {isSmartMatched && (
@@ -1473,17 +1615,17 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                   <datalist id="preorder-officers">{officerAdvanceBalances.map(record => <option key={record.name} value={record.name} />)}</datalist>
                   {(merchandisePaymentMethod === 'organization-advance' || merchandisePaymentMethod === 'advance-and-personal') && <p className="mt-1 text-[10px] font-medium text-violet-700 dark:text-violet-300">Available advance for this officer: {formatCurrency(selectedOfficerAdvanceBalance)}</p>}
                 </div>}
-                {(merchandisePaymentMethod === 'organization-funds' || merchandisePaymentMethod === 'advance-and-personal') && <DatedAmountRows label={`Organization payment (available cash: ${formatCurrency(cashAvailable)})`} rows={merchandiseOrganizationPayments} onChange={setMerchandiseOrganizationPayments} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={Math.min(amount || cashAvailable, cashAvailable)} addLabel="Add payment" allowBlankDates blankDateHelp="Date is optional." />}
+                {(merchandisePaymentMethod === 'organization-funds' || merchandisePaymentMethod === 'advance-and-personal') && <DatedAmountRows label={`Organization payment (available cash: ${formatCurrency(cashAvailable)})`} rows={merchandiseOrganizationPayments} onChange={setMerchandiseOrganizationPayments} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={cashAvailable} allowBlankDates allowEmptyAmounts={merchandisePaymentMethod === 'advance-and-personal'} allowMultiple={false} blankDateHelp="Date is optional." />}
                 {(merchandisePaymentMethod === 'officer-personal' || merchandisePaymentMethod === 'advance-and-personal') && <div>
-                  <DatedAmountRows label="Amount paid personally by the officer" rows={merchandiseOfficerPayments} onChange={setMerchandiseOfficerPayments} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={amount || undefined} addLabel="Add officer payment" allowBlankDates blankDateHelp="Date is optional." />
-                  <p className="mt-1 text-[10px] font-medium text-violet-700 dark:text-violet-300">Record reimbursement separately under Reimbursement to Officers.</p>
+                  <DatedAmountRows label="Amount paid personally by the officer" rows={merchandiseOfficerPayments} onChange={setMerchandiseOfficerPayments} currencySymbol={settings.currencySymbol} defaultDate={date} allowBlankDates allowEmptyAmounts={merchandisePaymentMethod === 'advance-and-personal'} allowMultiple={false} blankDateHelp="Date is optional." />
+                  <p className="mt-1 text-[10px] font-medium text-violet-700 dark:text-violet-300">Record reimbursement separately under Reimbursement to Officer.</p>
                 </div>}
                 {(merchandisePaymentMethod === 'organization-advance' || merchandisePaymentMethod === 'advance-and-personal') && <>
-                  <DatedAmountRows label="Payment using the officer cash advance" rows={merchandiseAdvancePayments} onChange={setMerchandiseAdvancePayments} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={Math.min(amount || selectedOfficerAdvanceBalance, selectedOfficerAdvanceBalance)} addLabel="Add advance payment" allowBlankDates blankDateHelp="Date is optional." />
+                  <DatedAmountRows label="Payment using the officer cash advance" rows={merchandiseAdvancePayments} onChange={setMerchandiseAdvancePayments} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={selectedOfficerAdvanceBalance} allowBlankDates allowEmptyAmounts={merchandisePaymentMethod === 'advance-and-personal'} allowMultiple={false} blankDateHelp="Date is optional." />
                   {outrightOfficer.trim() && selectedOfficerAdvanceBalance <= 0 && <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[10px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">No recorded cash advance is available for {outrightOfficer.trim()}. Record the advance first under Advances to Officers before using it for this supplier downpayment.</div>}
-                  {officerAdvanceBalances.length > 0 && <div className="overflow-hidden rounded-lg border border-violet-200 bg-white/70 text-[10px] dark:border-violet-500/30 dark:bg-slate-900/40"><p className="px-3 py-2 font-black uppercase tracking-wide text-violet-900 dark:text-violet-200">Available advances by officer</p>{officerAdvanceBalances.map(record => <div key={record.name} className="flex items-center justify-between border-t border-violet-100 px-3 py-2 dark:border-violet-500/20"><span className="font-semibold text-slate-700 dark:text-slate-200">{record.name}</span><span className="font-black text-violet-800 dark:text-violet-200">{formatCurrency(record.balance)}</span></div>)}</div>}
+                {officerAdvanceBalances.length > 0 && <div className="overflow-hidden rounded-lg border border-violet-200 bg-white/70 text-[10px] dark:border-violet-500/30 dark:bg-slate-900/40"><p className="px-3 py-2 font-black uppercase tracking-wide text-violet-900 dark:text-violet-200">Available advances to officers</p>{officerAdvanceBalances.map(record => <div key={record.name} className="flex items-center justify-between border-t border-violet-100 px-3 py-2 dark:border-violet-500/20"><span className="font-semibold text-slate-700 dark:text-slate-200">{record.name}</span><span className="font-black text-violet-800 dark:text-violet-200">{formatCurrency(record.balance)}</span></div>)}</div>}
                 </>}
-                {merchandisePrepaymentResult.error && amount > 0 && <p className="text-[10px] font-bold text-rose-700 dark:text-rose-300">{merchandisePrepaymentResult.error}</p>}
+                {merchandisePrepaymentResult.error && transactionAmount > 0 && <p className="text-[10px] font-bold text-rose-700 dark:text-rose-300">{merchandisePrepaymentResult.error}</p>}
               </div>
             )}
 
@@ -1492,7 +1634,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                 <div>
                   <h4 className="flex items-center gap-2 text-xs font-black text-violet-700 dark:text-violet-300">Acquisition of Merchandise for Sale - Goods Received and On Hand <NewFeatureBadge /></h4>
                   <p className="mt-1 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Record each received batch separately so its item, optional quantity, full cost, downpayments, and supplier settlement remain traceable.</p>
-                  <p className="mt-1 text-[10px] font-semibold text-indigo-800 dark:text-indigo-200"><strong>Date Merchandise Was Received:</strong> use the transaction date entered above.</p>
+                  <p className="mt-1 text-[10px] font-semibold text-indigo-800 dark:text-indigo-200"><strong>Date of Purchase:</strong> use the date when the organization actually received the purchased goods.</p>
                 </div>
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -1549,6 +1691,21 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                   </select>
                 </div>
 
+                {merchandiseUsesOfficer && (
+                  <div>
+                    <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-slate-700 dark:text-slate-300">Accountable Officer Name</label>
+                    <input
+                      type="text"
+                      value={counterpartyName}
+                      onChange={event => setCounterpartyName(event.target.value)}
+                      placeholder="Enter officer or accountable person name"
+                      className="w-full rounded-xl border border-slate-200 bg-white p-3 text-xs font-semibold text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-900 focus:ring-blue-900/10 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/20"
+                      required
+                    />
+                    <p className="mt-1 text-[10px] font-medium text-slate-500 dark:text-slate-400">Saved with the transaction for Review and audit history.</p>
+                  </div>
+                )}
+
                 {(merchandisePaymentMethod === 'organization-funds' || merchandisePaymentMethod === 'advance-and-personal') && (
                   <DatedAmountRows label={`Organization payments to supplier (available cash: ${formatCurrency(cashAvailable)})`} rows={merchandiseOrganizationPayments} onChange={setMerchandiseOrganizationPayments} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={cashAvailable} addLabel="Add payment" allowBlankDates blankDateHelp="Date can be cleared and is optional. A blank date uses the Date Merchandise Was Received." />
                 )}
@@ -1557,14 +1714,14 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                   <div className="space-y-2">
                     <DatedAmountRows label={`Payments using ${counterpartyName.trim() || 'the selected officer'}'s cash advance`} rows={merchandiseAdvancePayments} onChange={setMerchandiseAdvancePayments} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={selectedOfficerAdvanceBalance} addLabel="Add advance payment" allowBlankDates blankDateHelp="Date can be cleared and is optional. A blank date uses the Date Merchandise Was Received." />
                     <p className="text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Available advance for this officer: {formatCurrency(selectedOfficerAdvanceBalance)}.</p>
-                    {officerAdvanceBalances.length > 0 ? <div className="overflow-hidden rounded-lg border border-indigo-200 bg-white/70 text-[10px] dark:border-indigo-500/30 dark:bg-slate-900/40"><p className="px-3 py-2 font-black uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Available advances by officer</p>{officerAdvanceBalances.map(record => <div key={record.name} className="flex items-center justify-between border-t border-indigo-100 px-3 py-2 dark:border-indigo-500/20"><span className="font-semibold text-slate-700 dark:text-slate-200">{record.name}</span><span className="font-black text-indigo-800 dark:text-indigo-200">{formatCurrency(record.balance)}</span></div>)}</div> : <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[10px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">No accountable officer has an available cash advance. Record the advance first under Advances to Officers.</p>}
+                    {officerAdvanceBalances.length > 0 ? <div className="overflow-hidden rounded-lg border border-indigo-200 bg-white/70 text-[10px] dark:border-indigo-500/30 dark:bg-slate-900/40"><p className="px-3 py-2 font-black uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Available advances to officers</p>{officerAdvanceBalances.map(record => <div key={record.name} className="flex items-center justify-between border-t border-indigo-100 px-3 py-2 dark:border-indigo-500/20"><span className="font-semibold text-slate-700 dark:text-slate-200">{record.name}</span><span className="font-black text-indigo-800 dark:text-indigo-200">{formatCurrency(record.balance)}</span></div>)}</div> : <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[10px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">No accountable officer has an available cash advance. Record the advance first under Advances to Officers.</p>}
                   </div>
                 )}
 
                 {(merchandisePaymentMethod === 'officer-personal' || merchandisePaymentMethod === 'advance-and-personal') && (
                   <div className="space-y-2">
                     <DatedAmountRows label="Payments made personally by the officer" rows={merchandiseOfficerPayments} onChange={setMerchandiseOfficerPayments} currencySymbol={settings.currencySymbol} defaultDate={date} addLabel="Add officer payment" allowBlankDates blankDateHelp="Date can be cleared and is optional. A blank date uses the Date Merchandise Was Received." />
-                    <p className="text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Record any reimbursement separately under Reimbursement to Officers.</p>
+                    <p className="text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Record any reimbursement separately under Reimbursement to Officer.</p>
                   </div>
                 )}
 
@@ -1588,7 +1745,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               </div>
             )}
 
-            {needsCounterpartyName && (
+            {needsCounterpartyName && !merchandiseUsesOfficer && (
               <div className="sm:col-span-2">
                 <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">{counterpartyLabel}</label>
                 <input
@@ -1894,10 +2051,20 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
 
             {isGuidedPurchase && (
               <div className="sm:col-span-2 space-y-4 rounded-xl border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-500/20 dark:bg-indigo-500/10">
-                <div>
+              <div>
                   <h4 className="text-xs font-black text-violet-700 dark:text-violet-300">{isPpeAcquisition ? 'Property, Plant and Equipment purchase' : 'Outright expense payment'}</h4>
                   <p className="mt-1 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Record the full {isPpeAcquisition ? 'purchase price' : 'expense'} now. Each payment is posted separately; any unpaid balance remains in {activeAccounts.find(account => account.code === guidedPayableAccountCode)?.name || 'the related payable'} for Review.</p>
                 </div>
+                {isOutrightExpense && <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Expense account</label>
+                  <select value={debitCode} onChange={event => { const code = event.target.value; setSelectedExpenseAccountCode(code); setDebitCode(code); setClassificationPreview(previous => previous ? { ...previous, debitAccountCode: code } : previous); }} className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required>
+                    {activeAccounts.filter(account => account.type === 'Expenses' && account.code !== '5090' && account.code !== '5095').map(account => <option key={account.code} value={account.code}>{account.code} - {account.name}</option>)}
+                  </select>
+                </div>}
+                {isOutrightExpense && <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Date <span className="normal-case font-medium">(optional; clear to use today)</span></label>
+                  <input type="date" value={date} onChange={event => setDate(event.target.value)} className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" />
+                </div>}
                 {isOutrightExpense && <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
                     <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Is this expense for an event?</label>
@@ -1921,11 +2088,12 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                 {(outrightPaymentMethod === 'officer-personal' || outrightPaymentMethod === 'officer-advance' || outrightPaymentMethod === 'combination') && <div><label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Accountable officer</label><input value={outrightOfficer} onChange={event => setOutrightOfficer(event.target.value)} placeholder="Officer who paid or used the advance" className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" /></div>}
                 {outrightPaymentMethod === 'not-yet-paid' && <p className="rounded-lg bg-white/80 p-3 text-[10px] font-semibold text-indigo-800 dark:bg-slate-900/60 dark:text-indigo-200">Posts Debit to the selected {isPpeAcquisition ? 'asset' : 'expense'} account and Credit to {activeAccounts.find(account => account.code === guidedPayableAccountCode)?.name || 'Accounts Payable'}. The payable carries into the next reporting period and remains in Review until paid.</p>}
                 {outrightExpenseResult.posting && <div className="grid grid-cols-1 gap-2 sm:grid-cols-3"><div className="rounded-lg bg-white/80 p-3 text-[10px] dark:bg-slate-900/60"><span className="font-bold text-slate-500">Due to supplier</span><p className="mt-1 font-black text-rose-700">{formatCurrency(outrightExpenseResult.posting.dueToSupplier)}</p></div><div className="rounded-lg bg-white/80 p-3 text-[10px] dark:bg-slate-900/60"><span className="font-bold text-slate-500">Due to officer</span><p className="mt-1 font-black text-amber-700">{formatCurrency(outrightExpenseResult.posting.dueToOfficer)}</p></div><div className="rounded-lg bg-white/80 p-3 text-[10px] dark:bg-slate-900/60"><span className="font-bold text-slate-500">Advance used</span><p className="mt-1 font-black text-indigo-700">{formatCurrency(outrightExpenseResult.posting.advanceUsed)}</p></div></div>}
+                {requiresExpenseDraftReview && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[10px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">Save as Draft to keep this balanced entry visible in the ledger. Add remaining payments from Review, then post the completed transaction.</p>}
                 {outrightExpenseResult.error && <p className="text-[10px] font-bold text-rose-700 dark:text-rose-300">{outrightExpenseResult.error}</p>}
               </div>
             )}
 
-            {!isGuidedPurchase && !isMerchandiseAcquisition && !isMerchandiseSale && !requiresAccrualCompletion && !isPriorMembershipCollection && !isMembershipRefundStatus && <div>
+            {!isGuidedPurchase && !isMerchandiseAcquisition && !isMerchandiseSale && !isMerchandisePrepayment && !requiresAccrualCompletion && !isPriorMembershipCollection && !isMembershipRefundStatus && <div>
               <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">{isMerchandisePrepayment ? 'Payment' : isSupplierReceivableCollection ? 'Amount collected' : 'Amount'}</label>
               <div className="relative">
                 <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 dark:text-slate-400">{settings.currencySymbol}</span>
@@ -1942,16 +2110,18 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               <div className="hidden" />
             </div>}
 
-            {!requiresAccrualCompletion && !isPriorMembershipCollection && !isMembershipRefundStatus && <div>
-              <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">{isMerchandiseAcquisition ? 'Date Merchandise Was Received' : isSupplierReceivableCollection ? 'Collection date' : 'Date'}</label>
+            {!isMerchandisePrepayment && !requiresAccrualCompletion && !isPriorMembershipCollection && !isMembershipRefundStatus && !isOutrightExpense && <div>
+              <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">{isMerchandiseAcquisition ? 'Date of Purchase' : isSupplierReceivableCollection ? 'Collection date' : 'Date'}</label>
               <input
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
                 className="w-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-blue-900 focus:ring-blue-900/10 rounded-xl text-xs font-semibold p-2.5 outline-none transition-colors dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/20"
-                required
+                required={!isOfficerReimbursement}
               />
             </div>}
+
+            {reimbursementAmountError && <p role="alert" className="sm:col-span-2 text-[10px] font-bold text-rose-700 dark:text-rose-300">{reimbursementAmountError}</p>}
 
             {!requiresAccrualCompletion && !isPriorMembershipCollection && !isMembershipRefundStatus && (
               <div className="sm:col-span-2 rounded-xl border border-dashed border-slate-300 bg-slate-50/70 p-3.5 dark:border-slate-700 dark:bg-slate-950/30">
@@ -2035,7 +2205,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
           <div className="mt-2 flex flex-col gap-2 sm:flex-row">
             <button
               type="submit"
-              disabled={isProcessingReceipts}
+              disabled={isProcessingReceipts || requiresExpenseDraftReview}
               className="flex-1 bg-blue-700 hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-600 dark:hover:bg-blue-500 text-white font-bold text-xs p-3.5 rounded-xl transition-all shadow-md shadow-blue-900/10 cursor-pointer text-center flex items-center justify-center gap-2"
             >
               <ArrowRightLeft className="w-4 h-4" /> Post Double-Entry Transaction

@@ -40,6 +40,11 @@ export interface MerchandiseAcquisitionPosting {
   supplierReceivable: number;
 }
 
+export interface MerchandiseAcquisitionBatchPosting {
+  date: string;
+  lines: JournalLine[];
+}
+
 export interface MerchandisePrepaymentInput {
   amount: number;
   paymentMethod: Exclude<MerchandisePaymentMethod, 'not-yet-paid'>;
@@ -207,30 +212,59 @@ export function buildMerchandiseAcquisitionPosting(input: MerchandiseAcquisition
   const payableAtPurchase = Math.max(0, cents(totalCost - prepaymentAmount - purchaseDateSupplierPayments));
   const supplierReceivableAtPurchase = Math.max(0, cents(prepaymentAmount + purchaseDateSupplierPayments - totalCost));
 
-  let remainingPayable = payableAtPurchase;
-  let supplierReceivable = supplierReceivableAtPurchase;
-  const applyLaterPayment = (payments: DatedAmountRecord[], sourceAccountCode: string) => {
-    laterPayments(payments).forEach(payment => {
-      const payableSettled = Math.min(payment.amount, remainingPayable);
-      const excessPayment = cents(payment.amount - payableSettled);
-      addLine(lines, MERCHANDISE_PAYABLE_ACCOUNT_CODE, payableSettled, 0, payment.date);
-      addLine(lines, RECEIVABLE_FROM_SUPPLIER_ACCOUNT_CODE, excessPayment, 0, payment.date);
-      addLine(lines, sourceAccountCode, 0, payment.amount, payment.date);
-      remainingPayable = cents(remainingPayable - payableSettled);
-      supplierReceivable = cents(supplierReceivable + excessPayment);
-    });
-  };
-  if (allowedOrganization) applyLaterPayment(organizationPayments, cashAccountCode);
-  if (allowedAdvance) applyLaterPayment(advancePayments, ADVANCES_TO_OFFICERS_ACCOUNT_CODE);
-  if (allowedOfficer) applyLaterPayment(officerPayments, DUE_TO_OFFICERS_ACCOUNT_CODE);
   addLine(lines, MERCHANDISE_PAYABLE_ACCOUNT_CODE, 0, payableAtPurchase, input.transactionDate);
   addLine(lines, RECEIVABLE_FROM_SUPPLIER_ACCOUNT_CODE, supplierReceivableAtPurchase, 0, input.transactionDate);
+
+  // Keep each later payment batch together in the journal: settle the payable
+  // (or record supplier receivable) immediately before that batch's funding
+  // credits. This makes the displayed entry follow the payment sequence.
+  let remainingPayable = payableAtPurchase;
+  let supplierReceivable = supplierReceivableAtPurchase;
+  const laterPaymentBatches = new Map<string, { accountCode: string; amount: number }[]>();
+  const addLaterPayments = (payments: DatedAmountRecord[], accountCode: string) => {
+    laterPayments(payments).forEach(payment => {
+      const batch = laterPaymentBatches.get(payment.date) || [];
+      batch.push({ accountCode, amount: payment.amount });
+      laterPaymentBatches.set(payment.date, batch);
+    });
+  };
+  if (allowedOrganization) addLaterPayments(organizationPayments, cashAccountCode);
+  if (allowedAdvance) addLaterPayments(advancePayments, ADVANCES_TO_OFFICERS_ACCOUNT_CODE);
+  if (allowedOfficer) addLaterPayments(officerPayments, DUE_TO_OFFICERS_ACCOUNT_CODE);
+
+  [...laterPaymentBatches.entries()].sort(([left], [right]) => left.localeCompare(right)).forEach(([paymentDate, payments]) => {
+    const batchTotal = cents(payments.reduce((sum, payment) => sum + payment.amount, 0));
+    const payableSettled = Math.min(batchTotal, remainingPayable);
+    const excessPayment = cents(batchTotal - payableSettled);
+    addLine(lines, MERCHANDISE_PAYABLE_ACCOUNT_CODE, payableSettled, 0, paymentDate);
+    addLine(lines, RECEIVABLE_FROM_SUPPLIER_ACCOUNT_CODE, excessPayment, 0, paymentDate);
+    payments.forEach(payment => addLine(lines, payment.accountCode, 0, payment.amount, paymentDate));
+    remainingPayable = cents(remainingPayable - payableSettled);
+    supplierReceivable = cents(supplierReceivable + excessPayment);
+  });
 
   const debits = cents(lines.reduce((sum, line) => sum + line.debit, 0));
   const credits = cents(lines.reduce((sum, line) => sum + line.credit, 0));
   if (debits !== credits) throw new Error('The merchandise acquisition entry is not balanced.');
 
   return { lines, merchandisePayable: remainingPayable, dueToOfficer, advanceUsed, cashPaid, prepaymentApplied: prepaymentAmount, supplierReceivable };
+}
+
+/** Splits a received-merchandise posting into one balanced journal entry per payment batch. */
+export function splitMerchandiseAcquisitionPosting(posting: MerchandiseAcquisitionPosting, purchaseDate: string): MerchandiseAcquisitionBatchPosting[] {
+  const batches = new Map<string, JournalLine[]>();
+  posting.lines.forEach(line => {
+    const date = line.date || purchaseDate;
+    const batch = batches.get(date) || [];
+    batch.push(line);
+    batches.set(date, batch);
+  });
+  return [...batches.entries()].map(([date, lines]) => {
+    const debits = cents(lines.reduce((sum, line) => sum + line.debit, 0));
+    const credits = cents(lines.reduce((sum, line) => sum + line.credit, 0));
+    if (debits !== credits) throw new Error(`Merchandise payment batch on ${date || 'the purchase date'} is not balanced.`);
+    return { date, lines };
+  });
 }
 
 export function buildSupplierReceivableCollectionPosting(amount: number, date: string, availableReceivable: number): JournalLine[] {

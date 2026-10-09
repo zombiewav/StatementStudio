@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildOutrightExpensePosting } from './outrightExpense';
+import { buildOutrightExpensePosting, splitBalancedJournalLinesByDate } from './outrightExpense';
 
 describe('buildOutrightExpensePosting', () => {
   it('posts a split expense and leaves the unpaid amount due to the supplier', () => {
@@ -83,5 +83,26 @@ describe('buildOutrightExpensePosting', () => {
       organizationPayments: [{ date: '2026-01-01', amount: 101 }],
       availableCash: 101,
     })).toThrow('Total payment cannot exceed the expense amount.');
+  });
+});
+
+describe('splitBalancedJournalLinesByDate', () => {
+  it('returns a separate balanced journal batch for each date', () => {
+    const batches = splitBalancedJournalLinesByDate([
+      { accountCode: '5030', debit: 100, credit: 0, date: '2026-01-01' },
+      { accountCode: '2010', debit: 0, credit: 100, date: '2026-01-01' },
+      { accountCode: '2010', debit: 40, credit: 0, date: '2026-01-02' },
+      { accountCode: '2050', debit: 0, credit: 40, date: '2026-01-02' },
+    ], '2026-01-01');
+    expect(batches.map(batch => batch.date)).toEqual(['2026-01-01', '2026-01-02']);
+    expect(batches.every(batch => batch.lines.reduce((sum, line) => sum + line.debit, 0) === batch.lines.reduce((sum, line) => sum + line.credit, 0))).toBe(true);
+  });
+
+  it('keeps unbalanced date groups together', () => {
+    const lines = [
+      { accountCode: '5030', debit: 100, credit: 0, date: '2026-01-01' },
+      { accountCode: '1010', debit: 0, credit: 100, date: '2026-01-02' },
+    ];
+    expect(splitBalancedJournalLinesByDate(lines, '2026-01-01')).toEqual([{ date: '2026-01-01', lines }]);
   });
 });

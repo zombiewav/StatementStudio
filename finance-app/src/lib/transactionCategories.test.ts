@@ -26,6 +26,13 @@ describe('transaction categories', () => {
     expect(categorizeTransactionRule(rule('1010', '4030', 'Sponsorship - Cash Contribution'))).toBe('other');
   });
 
+  it('routes the item-specific PPE accounts to Property, Plant and Equipment', () => {
+    expect(categorizeTransactionRule(rule('1501', '1010', 'Purchase of Laptop'))).toBe('ppe-transactions');
+    expect(categorizeTransactionRule(rule('1516', '1010', 'Purchase of Other Small Equipment'))).toBe('ppe-transactions');
+    expect(categorizeTransactionRule(rule('1651', '1010', 'Purchase of Cabinet'))).toBe('ppe-transactions');
+    expect(categorizeTransactionRule(rule('1653', '1010', 'Purchase of Tables/Desks'))).toBe('ppe-transactions');
+  });
+
   it('labels the catch-all group as Miscellaneous Transactions', () => {
     expect(TRANSACTION_CATEGORIES.find(category => category.id === 'other')?.label).toBe('Miscellaneous Transactions');
     expect(TRANSACTION_CATEGORIES.find(category => category.id === 'prepaid-assets')).toMatchObject({
