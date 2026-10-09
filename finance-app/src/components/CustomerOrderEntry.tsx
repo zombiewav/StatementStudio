@@ -112,7 +112,7 @@ export function CustomerOrderEntry({ orderId, editOriginal = false, draftToResum
     onDraftSaved?.();
   };
   const input = (key: keyof Form, label: string, type = 'text', required = false) => <label className="block text-xs font-semibold">{label}<input aria-label={label} className={field} type={type} value={String(form[key])} onChange={e => change({ [key]: e.target.value })} required={required} {...(type === 'number' ? { min: 0, step: key === 'quantity' ? '1' : '0.01' } : {})} /></label>;
-  return <form onSubmit={post} className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+  return <form onSubmit={event => { event.preventDefault(); if (editOriginal || draftId) post(event); else saveDraft(); }} className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
     <h3 className="text-sm font-bold">Customer pre-orders and actual sales</h3>
     {!orderId && <div className="flex gap-2"><button className={button} type="button" aria-pressed={form.mode === 'new'} onClick={() => { setForm(empty()); setDraftId(undefined); setMessage(''); }}>New pre-order</button><button className={button} type="button" aria-pressed={form.mode === 'update'} onClick={() => change({ mode: 'update' })}>Actual sale / delivery / collection</button></div>}
     {draftId && <p className="text-xs">Continuing a saved draft.</p>}
@@ -148,7 +148,7 @@ export function CustomerOrderEntry({ orderId, editOriginal = false, draftToResum
       <p className="text-xs text-slate-500 dark:text-slate-400">Deposits remain unearned until delivery. Later payments settle unpaid sales first. Payments exceeding the entire order are refundable.</p>
     </>}
     {message && <p role="status" className="rounded-lg bg-blue-50 p-3 text-xs font-semibold text-blue-900 dark:bg-blue-900/30 dark:text-blue-200">{message}</p>}
-    <div className="flex flex-wrap gap-3"><button type="submit" className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-bold text-white">{editOriginal ? 'Save Changes' : `Post ${root ? 'update' : 'pre-order'}`}</button>{!editOriginal && <button type="button" onClick={saveDraft} className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-bold text-slate-700 dark:border-slate-600 dark:text-slate-200">Save as Draft</button>}</div>
+    <div className="flex flex-wrap gap-3"><button type="submit" className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-bold text-white">{editOriginal ? 'Save Changes' : draftId ? `Post Reviewed ${root ? 'Update' : 'Pre-order'}` : 'Save as Draft'}</button></div>
   </form>;
 }
 

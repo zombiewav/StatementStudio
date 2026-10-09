@@ -79,7 +79,7 @@ function rootReviewEntryId(entry: JournalEntry, entries: JournalEntry[]): string
  * uses elsewhere. Settling an obligation always posts to its opposite
  * (decrease) side.
  */
-export function computePendingObligations(entries: JournalEntry[], accounts: Account[]): PendingObligation[] {
+export function computePendingObligations(entries: JournalEntry[], accounts: Account[], currentReportingPeriod?: string): PendingObligation[] {
   const obligations: PendingObligation[] = [];
 
   for (const entry of entries) {
@@ -93,6 +93,7 @@ export function computePendingObligations(entries: JournalEntry[], accounts: Acc
     const obligationCodesInEntry = [...new Set(entry.lines.map(line => line.accountCode)
       .filter(accountCode => OBLIGATION_ACCOUNT_CODES.includes(accountCode as ObligationAccountCode)))] as ObligationAccountCode[];
     for (const accountCode of obligationCodesInEntry) {
+      if (PREPAID_ASSET_ACCOUNT_CODES.includes(accountCode) && currentReportingPeriod && entry.transactionDetails?.prepaidSemesterFinalized === currentReportingPeriod) continue;
       const account = accounts.find(a => a.code === accountCode);
       if (!account) continue;
 
@@ -144,8 +145,8 @@ export function computePendingObligations(entries: JournalEntry[], accounts: Acc
  * records and remain available in Journal Entries instead of appearing as
  * duplicate transactions here.
  */
-export function computeTransactionReviewStates(entries: JournalEntry[], accounts: Account[]): TransactionReviewState[] {
-  const pending = computePendingObligations(entries, accounts);
+export function computeTransactionReviewStates(entries: JournalEntry[], accounts: Account[], currentReportingPeriod?: string): TransactionReviewState[] {
+  const pending = computePendingObligations(entries, accounts, currentReportingPeriod);
   const pendingByEntry = new Map<string, PendingObligation[]>();
   pending.forEach(item => pendingByEntry.set(item.reviewEntryId, [...(pendingByEntry.get(item.reviewEntryId) || []), item]));
 

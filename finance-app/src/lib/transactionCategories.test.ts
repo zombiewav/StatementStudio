@@ -26,6 +26,11 @@ describe('transaction categories', () => {
     expect(categorizeTransactionRule(rule('1010', '4030', 'Sponsorship - Cash Contribution'))).toBe('other');
   });
 
+  it('routes the shared Event/Program Expense account to its dedicated category', () => {
+    expect(categorizeTransactionRule(rule('5300', '1010', 'Event/Program Expense'))).toBe('event-program-expenses');
+    expect(TRANSACTION_CATEGORIES.find(category => category.id === 'event-program-expenses')?.label).toBe('Event/Program Expenses');
+  });
+
   it('routes the item-specific PPE accounts to Property, Plant and Equipment', () => {
     expect(categorizeTransactionRule(rule('1501', '1010', 'Purchase of Laptop'))).toBe('ppe-transactions');
     expect(categorizeTransactionRule(rule('1516', '1010', 'Purchase of Other Small Equipment'))).toBe('ppe-transactions');

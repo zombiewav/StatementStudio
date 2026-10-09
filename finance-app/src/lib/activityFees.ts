@@ -251,6 +251,10 @@ export function buildActivityFeeFollowUp(record: ActivityFeeRecord, followUp: Ac
  * statements or closing workflow.
  */
 export function isActivityFeeIncomplete(record: ActivityFeeRecord): boolean {
+  const isHeldEvent = !['scheduled', 'postponed'].includes(record.status) && record.totalExpected > 0;
+  if (isHeldEvent && record.semesterCollectionsReviewed !== true) return true;
+  const refundDeferred = record.history.some(item => item.action === 'excess-refund-deferred');
+  if ((record.refundLiabilityBalance || 0) > 0 && !refundDeferred && record.semesterPaymentsReviewed !== true) return true;
   if (record.status === 'complete' || record.status === 'scheduled') return false;
   return !(record.status === 'refund-due' && record.history.some(item => item.action === 'excess-refund-deferred'));
 }

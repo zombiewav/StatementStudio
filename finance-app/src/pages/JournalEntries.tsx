@@ -214,9 +214,9 @@ export function JournalEntries({ searchTerm: controlledSearchTerm, onSearchTermC
                     {/* Expanded Double Entry Breakdown */}
                     {isExpanded && (
                       <tr>
-                        <td colSpan={8} className="bg-slate-50/30 px-6 py-4">
+                        <td colSpan={8} className="bg-slate-50/30 dark:bg-slate-950/40 px-6 py-4">
                           <div className="border border-slate-200/70 dark:border-slate-800 rounded-2xl bg-white dark:bg-slate-900 p-4 max-w-4xl mx-auto shadow-inner">
-                            <div className="flex justify-between items-center border-b border-gray-50 pb-2 mb-3">
+                            <div className="flex justify-between items-center border-b border-gray-50 dark:border-slate-800 pb-2 mb-3">
                               <span className="text-[10px] font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider">Double-Entry Breakdown ({je.reference})</span>
                                 <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1">
                                 <Calendar className="w-3 h-3 text-orange-500" /> Booked: {je.date}
@@ -238,7 +238,7 @@ export function JournalEntries({ searchTerm: controlledSearchTerm, onSearchTermC
                             
                             <div className="space-y-2 text-xs">
                               {/* Headers */}
-                              <div className="grid grid-cols-12 text-[10px] font-bold text-gray-400 uppercase tracking-wider border-b border-slate-50 pb-1">
+                              <div className="grid grid-cols-12 text-[10px] font-bold text-gray-400 dark:text-slate-400 uppercase tracking-wider border-b border-slate-50 dark:border-slate-800 pb-1">
                                 <div className="col-span-2">Account Code</div>
                                 <div className="col-span-4">Account Name</div>
                                 <div className="col-span-2">Posting Date</div>

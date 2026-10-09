@@ -5,6 +5,7 @@ export type TransactionCategoryId =
   | 'merchandise'
   | 'membership-fees'
   | 'expense-transactions'
+  | 'event-program-expenses'
   | 'depreciation'
   | 'ppe-transactions'
   | 'prepaid-assets'
@@ -24,6 +25,7 @@ export const TRANSACTION_CATEGORIES: TransactionCategory[] = [
   { id: 'merchandise', label: 'Merchandise Transactions', description: 'Buy inventory or record merchandise sales.' },
   { id: 'membership-fees', label: 'Membership Fees', description: 'Current and prior-period member collections.' },
   { id: 'expense-transactions', label: 'Expense Transactions', description: 'Operating, event, and administrative expenses.' },
+  { id: 'event-program-expenses', label: 'Event/Program Expenses', description: 'Record event and program expenses under the Event Expense account.' },
   { id: 'depreciation', label: 'Depreciation', description: 'Non-cash depreciation of equipment and furniture.' },
   { id: 'ppe-transactions', label: 'PPE Transactions', description: 'Property, plant, equipment, and furniture purchases.' },
   { id: 'prepaid-assets', label: 'Prepaid Expenses and Other Assets', description: 'Record assets acquired in advance, whether paid or unpaid, that will be used or consumed later.' },
@@ -41,6 +43,8 @@ const isPurchaseAssetCode = (code: string): boolean => {
 
 export function categorizeTransactionRule(rule: Pick<ClassificationRule, 'debitAccountCode' | 'creditAccountCode' | 'description'>): Exclude<TransactionCategoryId, 'activity-fees'> {
   const description = rule.description.toLowerCase();
+
+  if (rule.debitAccountCode === '5300') return 'event-program-expenses';
 
   if (rule.debitAccountCode === '1700' || rule.creditAccountCode === '4070' || rule.creditAccountCode === '1360' || description.includes('merchandise')) {
     return 'merchandise';

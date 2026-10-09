@@ -12,6 +12,7 @@ import { useFinance } from '../context/FinanceContext';
 import { computeActivitiesExpenseBreakdown } from '../lib/activitiesBreakdown';
 import { computeAccountBalances, computeTypeTotals, isContraAccount } from '../lib/accountTotals';
 import { computeTransactionReviewStates } from '../lib/reviewEngine';
+import { isActivityFeeIncomplete } from '../lib/activityFees';
 import { CASH_FLOW_EXPENSE_ROWS, CASH_FLOW_OPERATING_ROWS, computeCashFlowDetails } from '../lib/cashFlow';
 import { excludeClosingEntries } from '../lib/closingEntries';
 import { periodForSemester } from '../lib/reportingPeriod';
@@ -31,6 +32,7 @@ export function FinancialStatements(): React.ReactElement {
   const { 
     accounts, 
     journalEntries, 
+    activityFeeRecords,
     closedFiscalYears,
     formatCurrency, 
     settings,
@@ -82,13 +84,14 @@ export function FinancialStatements(): React.ReactElement {
   // since an open item from outside the selected period can still mean
   // the period's own numbers (a receivable, a prepaid balance) aren't
   // final yet either.
+  const semesterKey = `${settings.reportingYear}::${settings.semester}`;
   const incompleteReviewItems = useMemo(
-    () => computeTransactionReviewStates(journalEntries.filter(entry => !entry.isDraft), accounts).filter(item => item.status === 'incomplete'),
-    [journalEntries, accounts]
+    () => computeTransactionReviewStates(journalEntries.filter(entry => !entry.isDraft), accounts, semesterKey).filter(item => item.status === 'incomplete'),
+    [journalEntries, accounts, semesterKey]
   );
+  const incompleteActivityFeeRecords = activityFeeRecords.filter(isActivityFeeIncomplete);
   const activeClose = closedFiscalYears.find(record => record.fiscalYear === settings.fiscalYear);
   const closingIncomplete = !activeClose?.completed;
-  const isGated = incompleteReviewItems.length > 0 || closingIncomplete;
 
   // Compute Account Balances specifically for the filtered date range —
   // right for Revenue/Expenses (a period's activity), but NOT for Assets,
@@ -158,6 +161,11 @@ export function FinancialStatements(): React.ReactElement {
     () => computeActivitiesExpenseBreakdown(performanceEntries, accounts),
     [performanceEntries, accounts]
   );
+  const negativeBalanceAccounts = useMemo(
+    () => accounts.filter(account => (cumulativeToEndBalances[account.code] || 0) < -0.005),
+    [accounts, cumulativeToEndBalances]
+  );
+  const isGated = incompleteReviewItems.length > 0 || incompleteActivityFeeRecords.length > 0 || closingIncomplete || negativeBalanceAccounts.length > 0;
   const positionAssetGroups = useMemo(() => {
     const groups: Array<[string, string[]]> = [
       ['Cash and Cash Equivalents', ['1010', '1015']], ['Receivables', ['1200', '1210', '1300', '1310', '1330', '1360', '1370']], ['Advances and Dues', ['1220', '1230', '1250', '1270', '1320']], ['Inventories', ['1700']], ['Prepaid Expenses and Other Assets', ['1260', '1280', '1285', '1295', '1298']], ['Property and Equipment', ['1500', '1550', '1600', '1650', '1660']],
@@ -581,11 +589,14 @@ export function FinancialStatements(): React.ReactElement {
               <ClipboardCheck className="w-10 h-10 text-amber-500 mx-auto mb-3" />
               <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Statements aren't ready yet</h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 max-w-md mx-auto">
-                {incompleteReviewItems.length > 0
-                  ? `${incompleteReviewItems.length} item${incompleteReviewItems.length === 1 ? '' : 's'} in REVIEW still need an answer before the books are final. Resolve them in Review, then come back here.`
+                {negativeBalanceAccounts.length > 0
+                  ? `${negativeBalanceAccounts.length} account${negativeBalanceAccounts.length === 1 ? '' : 's'} have a negative balance. Correct the previous transactions before generating financial statements.`
+                  : incompleteReviewItems.length + incompleteActivityFeeRecords.length > 0
+                  ? `${incompleteReviewItems.length + incompleteActivityFeeRecords.length} item${incompleteReviewItems.length + incompleteActivityFeeRecords.length === 1 ? '' : 's'} in REVIEW still need an answer before the books are final. Resolve them in Review, then come back here.`
                   : 'Complete the three required Closing Entries stages for the active fiscal year before generating financial statements.'}
               </p>
-              {closingIncomplete && incompleteReviewItems.length === 0 && <p className="mt-2 text-[10px] font-semibold text-amber-700 dark:text-amber-300">Go to Closing Entries to close Revenue, Expenses, then Income Summary.</p>}
+              {negativeBalanceAccounts.length > 0 && <div className="mt-4 max-w-md mx-auto space-y-2 text-left">{negativeBalanceAccounts.map(account => <div key={account.code} className="rounded-lg border border-rose-200 bg-rose-50 px-3.5 py-2 text-[11px] font-semibold text-rose-800 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300">{account.code} {account.name}: {formatCurrency(cumulativeToEndBalances[account.code] || 0)}. Please check previous transactions; an amount may be missing.</div>)}</div>}
+              {closingIncomplete && incompleteReviewItems.length === 0 && incompleteActivityFeeRecords.length === 0 && negativeBalanceAccounts.length === 0 && <p className="mt-2 text-[10px] font-semibold text-amber-700 dark:text-amber-300">Go to Closing Entries to close Revenue, Expenses, then Income Summary.</p>}
               <div className="mt-6 max-w-md mx-auto text-left space-y-2">
                 {incompleteReviewItems.slice(0, 8).map(item => (
                   <div key={item.entry.id} className="flex justify-between items-center px-3.5 py-2 bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 rounded-lg text-[11px]">
@@ -593,8 +604,9 @@ export function FinancialStatements(): React.ReactElement {
                     <span className="text-rose-600 dark:text-rose-400 font-bold whitespace-nowrap">Incomplete</span>
                   </div>
                 ))}
-                {incompleteReviewItems.length > 8 && (
-                  <p className="text-[10px] text-slate-400 text-center pt-1">+{incompleteReviewItems.length - 8} more in Review</p>
+                {incompleteActivityFeeRecords.slice(0, Math.max(0, 8 - incompleteReviewItems.length)).map(record => <div key={record.id} className="flex justify-between items-center px-3.5 py-2 bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 rounded-lg text-[11px]"><span className="font-semibold text-rose-900 dark:text-rose-300 truncate pr-3">Activity Fees: {record.eventName}</span><span className="text-rose-600 dark:text-rose-400 font-bold whitespace-nowrap">Incomplete</span></div>)}
+                {incompleteReviewItems.length + incompleteActivityFeeRecords.length > 8 && (
+                  <p className="text-[10px] text-slate-400 text-center pt-1">+{incompleteReviewItems.length + incompleteActivityFeeRecords.length - 8} more in Review</p>
                 )}
               </div>
             </div>

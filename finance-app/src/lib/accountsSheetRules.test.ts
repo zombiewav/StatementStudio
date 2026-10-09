@@ -3,6 +3,14 @@ import { DEFAULT_RULES, INITIAL_ACCOUNTS } from '../context/FinanceContext';
 import { PREPAID_ASSET_CATEGORIES, PREPAID_ASSET_ITEMS } from './prepaidAssets';
 
 describe('Accounts spreadsheet mappings', () => {
+  it('adds the shared Event Expense account and routes the event-program entry to cash', () => {
+    expect(INITIAL_ACCOUNTS.find(account => account.code === '5300')).toMatchObject({ name: 'Event Expense', type: 'Expenses' });
+    expect(DEFAULT_RULES.find(rule => rule.description === 'Event/Program Expense')).toMatchObject({ debitAccountCode: '5300', creditAccountCode: '1010' });
+  });
+
+  it('routes Printing Services income to Other Income', () => {
+    expect(DEFAULT_RULES.find(rule => rule.description === 'Income from Printing Services')).toMatchObject({ debitAccountCode: '1010', creditAccountCode: '4050' });
+  });
   it.each([
     ['Purchase of Laptop', '1501'], ['Purchase of Projector', '1502'], ['Purchase of Printer', '1503'],
     ['Purchase of UPS (Uninterrupted Power System)', '1504'], ['Purchase of Cash Box', '1505'], ['Purchase of HDMI', '1506'],

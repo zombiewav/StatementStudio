@@ -77,6 +77,12 @@ const MERCHANDISE_TYPES_HIDDEN_FROM_PICKER = new Set([
   'Acquisition of Merchandise for Sale - Goods Received and On Hand',
   'Downpayment for Pre-ordered Merchandise',
 ]);
+const MISC_TYPES_HIDDEN_FROM_PICKER = new Set([
+  'Bank Loan Capital Funding', 'Client Consulting Services', 'Customer Invoice Billed',
+  'Customer Milestone Invoice', 'Professional Services Rendered', 'Public Funding Grant Receipt',
+  'Release from Custodian - Restricted Contribution Now Unrestricted',
+  'Release from Restriction — Restricted Contribution Now Unrestricted',
+]);
 
 const localDateInputValue = (): string => {
   const today = new Date();
@@ -296,6 +302,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       classificationRules
         .filter(rule => categorizeTransactionRule(rule) === selectedCategory && isRuleAvailable(rule)
           && !(selectedCategory === 'merchandise' && MERCHANDISE_TYPES_HIDDEN_FROM_PICKER.has(rule.description))
+          && !(selectedCategory === 'other' && MISC_TYPES_HIDDEN_FROM_PICKER.has(rule.description))
           && (selectedCategory !== 'ppe-transactions' || rule.description === 'Purchase Chairs' || rule.description.toLowerCase().startsWith('purchase of ')))
         .map(rule => rule.description)
     )).sort();
@@ -507,6 +514,12 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     if (draftToResume.category === 'activity-fees') {
       appliedDraftIdRef.current = draftToResume.id;
       setSelectedCategory('activity-fees');
+      return;
+    }
+    if (draftToResume.category === 'prepaid-assets') {
+      appliedDraftIdRef.current = draftToResume.id;
+      setSelectedCategory('prepaid-assets');
+      setEditingDraftId(null);
       return;
     }
     appliedDraftIdRef.current = draftToResume.id;
@@ -741,7 +754,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   }, [isMerchandisePrepayment, transactionAmount, merchandisePaymentMethod, merchandisePrepaymentDate, merchandiseOrganizationPayments, merchandiseOfficerPayments, merchandiseAdvancePayments, cashAvailable, selectedOfficerAdvanceBalance]);
 
   const isDepreciationEntry = debitCode === '5090' || debitCode === '5095';
-  const isOutrightExpense = !!classificationPreview && activeAccounts.find(account => account.code === debitCode)?.type === 'Expenses' && !isMerchandiseAcquisition && !isDepreciationEntry;
+  const isEventProgramExpense = selectedCategory === 'event-program-expenses' && debitCode === '5300';
+  const isOutrightExpense = !!classificationPreview && activeAccounts.find(account => account.code === debitCode)?.type === 'Expenses' && !isMerchandiseAcquisition && !isDepreciationEntry && !isEventProgramExpense;
   const debitCodeNumber = Number(debitCode);
   const isPpeAcquisition = selectedCategory === 'ppe-transactions' && ((debitCodeNumber >= 1500 && debitCodeNumber <= 1516) || (debitCodeNumber >= 1650 && debitCodeNumber <= 1653));
   const isGuidedPurchase = isOutrightExpense || isPpeAcquisition;
@@ -1134,7 +1148,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
         entryDescription,
         GENERAL_FUND_PROJECT,
         savingDraft ? lines : primaryJournalLines,
-        isOutrightExpense && expenseEvent === 'yes' ? expenseEventName.trim() : undefined,
+        isEventProgramExpense ? 'Event/Program Expenses' : isOutrightExpense && expenseEvent === 'yes' ? expenseEventName.trim() : undefined,
         undefined,
         {
           transactionType: txName,
@@ -1153,7 +1167,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               : isMerchandiseSale && merchandiseCollectionMethod === 'officer-to-remit'
               ? merchandiseCollectionOfficer.trim()
               : counterpartyName.trim() || undefined,
-            eventRelated: isOutrightExpense ? expenseEvent === 'yes' : false,
+            eventRelated: isEventProgramExpense || (isOutrightExpense && expenseEvent === 'yes'),
             donorRestriction: showRestrictionQuestion
               ? restrictionAnswer === 'no'
                 ? 'none'
@@ -1236,7 +1250,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
             `${entryDescription} - ${isPriorMembershipCollection || isMerchandiseSale ? 'Collection' : 'Payment'} Batch ${index + 2}`,
             GENERAL_FUND_PROJECT,
             batch.lines,
-            isOutrightExpense && expenseEvent === 'yes' ? expenseEventName.trim() : undefined,
+            isEventProgramExpense ? 'Event/Program Expenses' : isOutrightExpense && expenseEvent === 'yes' ? expenseEventName.trim() : undefined,
             posted.id,
             {
               transactionType: `${txName} - Dated Batch`,
@@ -1375,13 +1389,14 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                         ? ArrowRightLeft
                     : LayoutGrid;
             const selected = selectedCategory === category.id;
-            const isNewCategory = ['activity-fees', 'merchandise', 'membership-fees', 'prepaid-assets', 'payables', 'advances-to-officers', 'reimbursements-to-officers'].includes(category.id);
+            const isNewCategory = ['activity-fees', 'merchandise', 'membership-fees', 'event-program-expenses', 'prepaid-assets', 'payables', 'advances-to-officers', 'reimbursements-to-officers'].includes(category.id);
             const optionCount = category.id === 'activity-fees' || category.id === 'prepaid-assets' || category.id === 'payables'
               || category.id === 'advances-to-officers' || category.id === 'reimbursements-to-officers'
               ? null
               : category.id === 'expense-transactions' ? 1
               : new Set(classificationRules.filter(rule => categorizeTransactionRule(rule) === category.id
                 && !(category.id === 'merchandise' && MERCHANDISE_TYPES_HIDDEN_FROM_PICKER.has(rule.description))
+                && !(category.id === 'other' && MISC_TYPES_HIDDEN_FROM_PICKER.has(rule.description))
                 && (category.id !== 'ppe-transactions' || rule.description === 'Purchase Chairs' || rule.description.toLowerCase().startsWith('purchase of '))
                 && !(category.id === 'expense-transactions' && EXPENSE_TYPES_HIDDEN_FROM_PICKER.has(rule.description)))
                 .map(rule => rule.description)).size;
@@ -1417,7 +1432,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
 
       {selectedCategory === 'activity-fees' && <ActivityFeeEntry defaultOpen draftToResume={draftToResume} onDraftResumed={onDraftResumed} onDraftSaved={onDraftSaved} />}
       {selectedCategory === 'prepaid-assets' && <div className="space-y-5">
-        <PrepaidAssetEntry />
+        <PrepaidAssetEntry draftToResume={draftToResume} onDraftResumed={onDraftResumed} onDraftSaved={onDraftSaved} />
         <PayablesEntry allowedPayableCodes={['2061', '2062', '2063', '2064']} title="Payment of Prepaid and Other Asset Payables" />
       </div>}
       {selectedCategory === 'payables' && <PayablesEntry />}
@@ -1432,7 +1447,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       {selectedCategory && selectedCategory !== 'activity-fees' && selectedCategory !== 'prepaid-assets' && selectedCategory !== 'payables' && !(selectedCategory === 'merchandise' && customerOrdersOpen) && (
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
         {/* Left Column: Entry Form */}
-        <form onSubmit={handlePost} className="xl:col-span-7 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm p-6 sm:p-8 space-y-5">
+        <form onSubmit={event => { event.preventDefault(); if (editingDraftId) handlePost(); else handleSaveDraft(); }} className="xl:col-span-7 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm p-6 sm:p-8 space-y-5">
           <div className="flex items-center justify-between border-b border-slate-800 pb-4">
             <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
               <PlusCircle className="w-5 h-5 text-blue-200" /> New Transaction
@@ -2211,17 +2226,10 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
           <div className="mt-2 flex flex-col gap-2 sm:flex-row">
             <button
               type="submit"
-              disabled={isProcessingReceipts || requiresExpenseDraftReview}
-              className="flex-1 bg-blue-700 hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-600 dark:hover:bg-blue-500 text-white font-bold text-xs p-3.5 rounded-xl transition-all shadow-md shadow-blue-900/10 cursor-pointer text-center flex items-center justify-center gap-2"
-            >
-              <ArrowRightLeft className="w-4 h-4" /> Post Double-Entry Transaction
-            </button>
-            <button
-              type="button"
-              onClick={handleSaveDraft}
+              disabled={isProcessingReceipts}
               className="rounded-xl border border-slate-200 bg-white px-4 py-3.5 text-xs font-bold text-slate-700 transition-all hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
             >
-              Save as Draft
+              {editingDraftId ? 'Post Reviewed Transaction' : 'Save as Draft'}
             </button>
           </div>
         </form>

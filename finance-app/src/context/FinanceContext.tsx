@@ -30,7 +30,7 @@ import { ActivityFeeFollowUp, ActivityFeeSchedule, buildActivityFeeFollowUp, bui
 import { useAuth } from './AuthContext';
 import { supabase } from '../lib/supabase';
 import { carryForwardCustomerOrders, customerOrderFinalizationIssues, customerOrderReversalBlock } from '../lib/customerOrders';
-import { reportingPeriodBounds } from '../lib/reportingPeriod';
+import { isDateWithinReportingPeriod, reportingPeriodBounds } from '../lib/reportingPeriod';
 
 // The default catch-all project and the account closing entries post their
 // net income plug to — same constants Transactions.tsx and INITIAL_PROJECTS
@@ -43,7 +43,7 @@ const RETIRED_ACCOUNT_CODES = new Set(['1290', '1340', '1345', '1710', '1720', '
 const BACKFILLED_DEFAULT_ACCOUNT_CODES = new Set([
   '1210', '1220', '1230', '1270', '1280', '1285', '1295', '1298', '1330', '1360', '1370',
   '1501', '1502', '1503', '1504', '1505', '1506', '1507', '1508', '1509', '1510', '1511', '1512', '1513', '1514', '1515', '1516',
-  '1651', '1652', '1653', '2020', '2030', '2040', '2061', '2062', '2063', '2064', '2070', '2080', '2140', '2150', '4100', '4110',
+  '1651', '1652', '1653', '2020', '2030', '2040', '2061', '2062', '2063', '2064', '2070', '2080', '2140', '2150', '4100', '4110', '5300',
 ]);
 
 // Retired accounts are removed from the COA, while historical journals and
@@ -324,6 +324,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
   { code: '5270', name: 'Food Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Food costs that are distinct from meals and refreshments', isActive: true },
   { code: '5280', name: 'Printing Supplies Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Paper, ink, and other supplies consumed for printing work', isActive: true },
   { code: '5290', name: 'Supplies and Materials Expense', type: 'Expenses', normalBalance: 'Debit', description: 'General supplies and materials consumed outside a specific event', isActive: true },
+  { code: '5300', name: 'Event Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Event and program expenses recorded under one account when per-event expense breakdowns are unavailable', isActive: true },
   { code: '5300', name: 'Professional Fee Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Professional fees paid for specialized services', isActive: true },
   { code: '5310', name: 'Logistics and Venue Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Venue, logistics, and event coordination costs', isActive: true },
   { code: '5320', name: 'Assistance Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Financial or in-kind assistance provided by the organization', isActive: true },
@@ -472,6 +473,7 @@ const INITIAL_JOURNALS: JournalEntry[] = [
 // 'paper', 'printer ink' before both 'ink' and 'printer', 'ballpen' before
 // 'pen', 'water bill' before 'water', 'electricity' before 'electric').
 export const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
+  { keyword: 'event/program expense', debitAccountCode: '5300', creditAccountCode: '1010', description: 'Event/Program Expense' },
   // Exact dropdown labels from the live expense-transactions working paper.
   // Keep these ahead of broad keywords so the document's wording always
   // resolves to its stated expense account.
@@ -511,8 +513,8 @@ export const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   // Placed here, before every expense keyword that could collide, for
   // exactly that reason. Credits 4055 Rental Revenues (not 4050 Other
   // Income) per the client's revised note sheet.
-  { keyword: 'income from printing', debitAccountCode: '1010', creditAccountCode: '4055', description: 'Income from Printing Services' },
-  { keyword: 'received from printing', debitAccountCode: '1010', creditAccountCode: '4055', description: 'Income from Printing Services' },
+  { keyword: 'income from printing', debitAccountCode: '1010', creditAccountCode: '4050', description: 'Income from Printing Services' },
+  { keyword: 'received from printing', debitAccountCode: '1010', creditAccountCode: '4050', description: 'Income from Printing Services' },
   { keyword: 'income from projector rental', debitAccountCode: '1010', creditAccountCode: '4055', description: 'Income from Projector Rental' },
   { keyword: 'income from extension wire rental', debitAccountCode: '1010', creditAccountCode: '4055', description: 'Income from Extension Wire Rental' },
   { keyword: 'received from renting', debitAccountCode: '1010', creditAccountCode: '4055', description: 'Income from Renting Equipment/Supplies' },
@@ -842,6 +844,10 @@ interface FinanceContextType {
   recognizeScheduledActivityFee: (id: string, totalExpected: number, eventDate: string, collections: DatedAmountRecord[], reportingPeriod: string) => ActivityFeeRecord;
   collectActivityFeeReceivable: (id: string, collections: DatedAmountRecord[], reportingPeriod: string) => ActivityFeeRecord;
   updateActivityFeeRecord: (id: string, followUp: ActivityFeeFollowUp, date: string, reportingPeriod: string) => ActivityFeeRecord;
+  postActivityFeeReviewCollections: (id: string, collections: DatedAmountRecord[], reportingPeriod: string) => ActivityFeeRecord;
+  postActivityFeeReviewPayments: (id: string, payments: DatedAmountRecord[], reportingPeriod: string) => ActivityFeeRecord;
+  markActivityFeeReviewComplete: (id: string, section: 'collections' | 'payments') => void;
+  finalizePrepaidAssetForSemester: (entryId: string, semesterKey: string) => void;
   // Saves (or, when an id already exists, overwrites) an in-progress
   // Stores a balanced draft ledger entry and form state for later finalization.
   saveDraftTransaction: (draft: { id?: string; category: string | null; label: string; formState: Record<string, unknown>; journalEntryId?: string }) => string;
@@ -1294,6 +1300,12 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   ) => {
     const replaced = replaceDraftEntryId ? journalEntries.find(entry => entry.id === replaceDraftEntryId && entry.isDraft) : undefined;
     if (replaceDraftEntryId && !replaced) throw new Error('Draft journal entry not found.');
+    const activeEntries = journalEntries.filter(entry => !entry.isDraft && entry.id !== replaced?.id);
+    const nextBalances = computeAccountBalances([...activeEntries, { id: 'pending-validation', reference: 'PENDING', date, description, project, lines } as JournalEntry], accounts);
+    Object.entries(openingBalances).forEach(([code, balance]) => { nextBalances[code] = (nextBalances[code] || 0) + balance; });
+    const changedCodes = new Set(lines.map(line => line.accountCode));
+    const negativeAccount = !isDraft && accounts.find(account => changedCodes.has(account.code) && (nextBalances[account.code] || 0) < -0.005);
+    if (negativeAccount) throw new Error(`This transaction would give ${negativeAccount.name} a negative balance. Please check the previous transactions and available balance.`);
     const reference = replaced?.reference || generateNextReference(journalEntries);
     const newEntry: JournalEntry = {
       id: replaced?.id || `je-${Date.now()}`,
@@ -1334,6 +1346,16 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     logAudit('Finalize Draft Journal Entry', `Finalized draft journal entry ${current.reference}: ${current.description}.`);
   };
 
+  const finalizePrepaidAssetForSemester = (entryId: string, semesterKey: string) => {
+    const entry = journalEntries.find(candidate => candidate.id === entryId);
+    if (!entry) throw new Error('Prepaid-asset purchase not found.');
+    setJournalEntries(previous => previous.map(candidate => candidate.id === entryId ? {
+      ...candidate,
+      transactionDetails: { ...(candidate.transactionDetails || { eventRelated: false, receiptAttachmentIds: [] }), prepaidSemesterFinalized: semesterKey },
+    } : candidate));
+    logAudit('Finalize Prepaid Review', `Finalized ${entry.reference} for ${semesterKey}.`);
+  };
+
   const finalizeJournalEntry = (id: string) => {
     const current = journalEntries.find(candidate => candidate.id === id);
     if (!current?.transactionDetails?.customerOrder || current.transactionDetails.reviewFinalized) return;
@@ -1370,7 +1392,11 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     };
 
     setJournalEntries(prev => [
-      ...prev.map(e => e.id === id ? { ...e, reversedByEntryId: reversalEntry.id } : e),
+      ...prev.map(e => e.id === id
+        ? { ...e, reversedByEntryId: reversalEntry.id }
+        : entry.transactionType === 'Consumption of Prepaid Assets' && entry.settlesEntryId === e.id
+          ? { ...e, transactionDetails: { ...e.transactionDetails!, prepaidSemesterFinalized: undefined } }
+          : e),
       reversalEntry,
     ]);
     logAudit('Reverse Journal Entry', `Reversed ${entry.reference}: ${entry.description} (via new entry ${reference})`);
@@ -1457,6 +1483,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       ...(input.eventDate ? { eventDate: input.eventDate } : {}),
       priorPeriodCollected: input.priorPeriodCollected || 0,
       collections: input.collections,
+      ...(input.eventOccursThisPeriod ? { semesterCollectionsReviewed: false, semesterPaymentsReviewed: (schedule.next.refundLiabilityBalance || 0) <= 0 } : {}),
       createdAt: now,
       updatedAt: now,
       history,
@@ -1471,7 +1498,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     if (!current) throw new Error('Activity fee event not found.');
     const schedule = buildScheduledActivityFeeRecognition(current, totalExpected, eventDate, collections);
     const history = commitActivityFeeSchedule(schedule, current.eventName, reportingPeriod);
-    const updated: ActivityFeeRecord = { ...current, ...schedule.next, eventDate, collections: [...(current.collections || []), ...collections], updatedAt: new Date().toISOString(), history: [...current.history, ...history] };
+    const updated: ActivityFeeRecord = { ...current, ...schedule.next, eventDate, semesterCollectionsReviewed: false, semesterPaymentsReviewed: (schedule.next.refundLiabilityBalance || 0) <= 0, collections: [...(current.collections || []), ...collections], updatedAt: new Date().toISOString(), history: [...current.history, ...history] };
     setActivityFeeRecords(previous => previous.map(record => record.id === id ? updated : record));
     logAudit('Update Activity Fee Event', `${current.reference}: event held and activity fees recognized.`);
     return updated;
@@ -1504,6 +1531,50 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     setActivityFeeRecords(previous => previous.map(record => record.id === id ? updated : record));
     logAudit('Update Activity Fee Event', `${current.reference}: ${posting.description}.`);
     return updated;
+  };
+
+  const reviewActivityFeeRows = (id: string, rows: DatedAmountRecord[], section: 'collections' | 'payments', reportingPeriod: string): ActivityFeeRecord => {
+    const current = activityFeeRecords.find(record => record.id === id);
+    if (!current) throw new Error('Activity fee event not found.');
+    const activeSemester = settings.semester;
+    const activeYear = settings.reportingYear;
+    if (!activeSemester || !activeYear) throw new Error('Set the active semester and year first.');
+    const cleanRows = rows.filter(row => Number(row.amount) > 0);
+    if (cleanRows.length === 0) throw new Error(`Enter at least one ${section === 'collections' ? 'collection' : 'payment'} amount.`);
+    if (cleanRows.some(row => !row.date || !Number.isFinite(Number(row.amount)) || Number(row.amount) <= 0)) throw new Error('Each amount needs a date and must be greater than zero.');
+    if (cleanRows.some(row => !isDateWithinReportingPeriod(row.date, activeSemester, activeYear))) throw new Error('Dates must be within the active reporting semester.');
+    if (new Set(cleanRows.map(row => row.date)).size !== cleanRows.length) throw new Error('Combine amounts recorded on the same date into one row.');
+    const total = cleanRows.reduce((sum, row) => sum + Number(row.amount), 0);
+    const limit = section === 'collections'
+      ? Math.max(0, current.totalExpected - current.totalCollected)
+      : Math.max(0, current.refundLiabilityBalance || 0);
+    if (total > limit + 0.005) throw new Error(`${section === 'collections' ? 'Collections' : 'Payments'} cannot exceed the remaining ${section === 'collections' ? 'Activity Fees Revenue amount' : 'Refund Liability'} of ${settings.currencySymbol}${limit.toLocaleString()}.`);
+    const lines: JournalLine[] = cleanRows.flatMap(row => {
+      const amount = Number(row.amount);
+      return section === 'collections'
+        ? [{ accountCode: '1010', debit: amount, credit: 0, date: row.date }, { accountCode: '4090', debit: 0, credit: amount, date: row.date }]
+        : [{ accountCode: '2120', debit: amount, credit: 0, date: row.date }, { accountCode: '1010', debit: 0, credit: amount, date: row.date }];
+    });
+    const entry = addJournalEntry(cleanRows[0].date, section === 'collections' ? `Additional activity-fee collection: ${current.eventName}` : `Activity-fee refund-liability payment: ${current.eventName}`, GENERAL_FUND_PROJECT, lines, current.eventName);
+    const nextHistory = [...current.history, ...cleanRows.map(row => ({ id: `afh-${Date.now()}-${Math.floor(Math.random() * 10000)}`, date: row.date, reportingPeriod, action: section === 'collections' ? 'additional-collection' as const : 'additional-payment' as const, amount: Number(row.amount), journalEntryId: entry.id }))];
+    const updated: ActivityFeeRecord = {
+      ...current,
+      ...(section === 'collections' ? { totalCollected: current.totalCollected + total, semesterCollectionsReviewed: true } : { totalRefunded: current.totalRefunded + total, refundLiabilityBalance: Math.max(0, (current.refundLiabilityBalance || 0) - total), semesterPaymentsReviewed: true, status: Math.max(0, (current.refundLiabilityBalance || 0) - total) === 0 ? (current.receivableBalance > 0 ? 'receivable' as const : 'complete' as const) : current.status }),
+      updatedAt: new Date().toISOString(), history: nextHistory,
+    };
+    setActivityFeeRecords(previous => previous.map(record => record.id === id ? updated : record));
+    logAudit('Update Activity Fee Event', `${current.reference}: ${section === 'collections' ? 'additional collections' : 'refund-liability payments'} recorded.`);
+    return updated;
+  };
+
+  const postActivityFeeReviewCollections = (id: string, rows: DatedAmountRecord[], reportingPeriod: string) => reviewActivityFeeRows(id, rows, 'collections', reportingPeriod);
+  const postActivityFeeReviewPayments = (id: string, rows: DatedAmountRecord[], reportingPeriod: string) => reviewActivityFeeRows(id, rows, 'payments', reportingPeriod);
+  const markActivityFeeReviewComplete = (id: string, section: 'collections' | 'payments') => {
+    setActivityFeeRecords(previous => previous.map(record => record.id === id ? {
+      ...record,
+      ...(section === 'collections' ? { semesterCollectionsReviewed: true } : { semesterPaymentsReviewed: true }),
+      updatedAt: new Date().toISOString(),
+    } : record));
   };
 
   const addCustomClassificationRule = (description: string, debitAccountCode: string, creditAccountCode: string) => {
@@ -1910,6 +1981,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       addJournalEntry,
       updateJournalEntry,
       finalizeDraftJournalEntry,
+      finalizePrepaidAssetForSemester,
       finalizeJournalEntry,
       reverseJournalEntry,
       deleteJournalEntry,
@@ -1921,6 +1993,9 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       recognizeScheduledActivityFee,
       collectActivityFeeReceivable,
       updateActivityFeeRecord,
+      postActivityFeeReviewCollections,
+      postActivityFeeReviewPayments,
+      markActivityFeeReviewComplete,
       saveDraftTransaction,
       deleteDraftTransaction,
       recordFinancialStatementHistory,

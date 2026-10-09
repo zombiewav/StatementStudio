@@ -4,6 +4,8 @@ import { useFinance } from '../context/FinanceContext';
 import { JournalEntry } from '../types';
 import { ReceiptAttachments } from '../components/ReceiptAttachments';
 import { CustomerOrderFollowUp } from '../components/CustomerOrderEntry';
+import { ActivityFeeReview } from '../components/ActivityFeeReview';
+import { isActivityFeeIncomplete } from '../lib/activityFees';
 import {
   computePendingObligations,
   computeAdvanceSettlement,
@@ -348,9 +350,10 @@ interface ReviewProps {
 }
 
 export function Review({ onContinueDraft }: ReviewProps): React.ReactElement {
-  const { journalEntries, accounts, draftTransactions, deleteDraftTransaction, deleteJournalEntry, reverseJournalEntry, addJournalEntry, updateJournalEntry, formatCurrency } = useFinance();
-  const pendingObligations = useMemo(() => computePendingObligations(journalEntries, accounts), [journalEntries, accounts]);
-  const reviewStates = useMemo(() => computeTransactionReviewStates(journalEntries, accounts), [journalEntries, accounts]);
+  const { journalEntries, accounts, settings, activityFeeRecords, draftTransactions, deleteDraftTransaction, deleteJournalEntry, reverseJournalEntry, addJournalEntry, updateJournalEntry, formatCurrency } = useFinance();
+  const semesterKey = `${settings.reportingYear}::${settings.semester}`;
+  const pendingObligations = useMemo(() => computePendingObligations(journalEntries, accounts, semesterKey), [journalEntries, accounts, semesterKey]);
+  const reviewStates = useMemo(() => computeTransactionReviewStates(journalEntries, accounts, semesterKey), [journalEntries, accounts, semesterKey]);
   const [statusFilter, setStatusFilter] = useState<'all' | ReviewStatus>('all');
   const [settlementMessage, setSettlementMessage] = useState('');
   const [lastPostedSettlement, setLastPostedSettlement] = useState<{ id: string; reference: string } | null>(null);
@@ -444,7 +447,7 @@ export function Review({ onContinueDraft }: ReviewProps): React.ReactElement {
   const visibleStates = statusFilter === 'all'
     ? reviewStates
     : reviewStates.filter(state => state.status === statusFilter);
-  const incompleteCount = reviewStates.filter(state => state.status === 'incomplete').length;
+  const incompleteCount = reviewStates.filter(state => state.status === 'incomplete').length + activityFeeRecords.filter(isActivityFeeIncomplete).length;
 
   return (
     <div className="space-y-6 bg-slate-50 dark:bg-slate-950">
@@ -517,6 +520,8 @@ export function Review({ onContinueDraft }: ReviewProps): React.ReactElement {
         </section>
       )}
 
+      <ActivityFeeReview />
+
       <section className="space-y-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -556,7 +561,6 @@ export function Review({ onContinueDraft }: ReviewProps): React.ReactElement {
                   <p className="mt-1 text-[10px] font-medium text-slate-500 dark:text-slate-400">
                     {state.entry.reference} • {state.entry.date} • {state.entry.transactionType || 'Legacy transaction'} • {state.entry.eventName || state.entry.project}
                   </p>
-                  {state.entry.transactionDetails?.counterpartyName && <p className="mt-1 text-[10px] font-semibold text-slate-600 dark:text-slate-300">Officer / payee: {state.entry.transactionDetails.counterpartyName}</p>}
                   {state.completedOn && <p className="mt-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">Completed {state.completedOn}</p>}
                   {isIncomplete && (
                     <ul className="mt-2 space-y-1 text-[10px] font-semibold text-rose-700 dark:text-rose-300">

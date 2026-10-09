@@ -113,7 +113,7 @@ export function ProjectsPage(): React.ReactElement {
           <h3 className="text-sm font-bold text-gray-800 dark:text-slate-100 border-b border-gray-50 dark:border-slate-800 pb-2">Define New Activity Account</h3>
           
           {errorMsg && (
-            <p className="text-xs text-rose-600 font-semibold bg-rose-50 p-2 rounded-lg">{errorMsg}</p>
+            <p className="text-xs text-rose-600 font-semibold bg-rose-50 dark:bg-rose-500/10 dark:text-rose-300 p-2 rounded-lg">{errorMsg}</p>
           )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -124,7 +124,7 @@ export function ProjectsPage(): React.ReactElement {
                 value={projName}
                 onChange={(e) => setProjName(e.target.value)}
                 placeholder="e.g. Health Outreach Q3, Engineering Sprint B..."
-                className="w-full bg-gray-50 border border-gray-100 rounded-xl text-xs font-semibold text-gray-850 p-2.5 outline-none focus:border-blue-900 focus:bg-white transition-colors"
+                className="w-full bg-gray-50 dark:bg-slate-800 border border-gray-100 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-900 dark:text-slate-100 p-2.5 outline-none focus:border-blue-900 dark:focus:border-blue-500 focus:bg-white dark:focus:bg-slate-900 transition-colors"
                 required
               />
             </div>
@@ -136,7 +136,7 @@ export function ProjectsPage(): React.ReactElement {
                 value={budget || ''}
                 onChange={(e) => setBudget(Number(e.target.value))}
                 placeholder="0.00"
-                className="w-full bg-gray-50 border border-gray-100 rounded-xl text-xs font-bold text-gray-850 p-2.5 outline-none focus:border-blue-900 focus:bg-white transition-colors"
+                className="w-full bg-gray-50 dark:bg-slate-800 border border-gray-100 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-slate-100 p-2.5 outline-none focus:border-blue-900 dark:focus:border-blue-500 focus:bg-white dark:focus:bg-slate-900 transition-colors"
                 required
               />
             </div>
@@ -147,7 +147,7 @@ export function ProjectsPage(): React.ReactElement {
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Describe program objectives..."
-                className="w-full bg-gray-50 border border-gray-100 rounded-xl text-xs font-medium text-gray-700 p-2.5 outline-none focus:border-blue-900 focus:bg-white transition-colors h-20 resize-none"
+                className="w-full bg-gray-50 dark:bg-slate-800 border border-gray-100 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-slate-100 p-2.5 outline-none focus:border-blue-900 dark:focus:border-blue-500 focus:bg-white dark:focus:bg-slate-900 transition-colors h-20 resize-none"
               />
             </div>
           </div>
@@ -156,13 +156,13 @@ export function ProjectsPage(): React.ReactElement {
             <button
               type="button"
               onClick={() => setShowAddForm(false)}
-              className="px-3.5 py-2 text-xs font-bold text-gray-500 hover:bg-gray-50 rounded-lg cursor-pointer"
+              className="px-3.5 py-2 text-xs font-bold text-gray-500 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 rounded-lg cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 text-xs font-bold text-white bg-blue-900 hover:bg-blue-950 rounded-lg shadow-sm shadow-blue-900/10 cursor-pointer"
+              className="px-4 py-2 text-xs font-bold text-white bg-blue-900 dark:bg-blue-700 hover:bg-blue-950 dark:hover:bg-blue-600 rounded-lg shadow-sm shadow-blue-900/10 cursor-pointer"
             >
               Add Program
             </button>
@@ -193,7 +193,7 @@ export function ProjectsPage(): React.ReactElement {
                 <div className="flex justify-between items-start">
 
                   <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 rounded-xl bg-slate-50 text-blue-900 border border-slate-100 flex items-center justify-center">
+                    <div className="w-9 h-9 rounded-xl bg-slate-50 dark:bg-slate-800 text-blue-900 dark:text-blue-300 border border-slate-100 dark:border-slate-700 flex items-center justify-center">
                       <FolderKanban className="w-5 h-5" />
                     </div>
                     <div>
@@ -276,7 +276,7 @@ export function ProjectsPage(): React.ReactElement {
                     {spendingRatio.toFixed(1)}% Used
                   </span>
                 </div>
-                <div className="w-full h-2 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden border border-slate-100/50">
+                <div className="w-full h-2 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden border border-slate-100/50 dark:border-slate-700/50">
                   <div 
                     className={`h-full rounded-full transition-all duration-500 ${
                       spendingRatio > 100 ? 'bg-rose-500' : spendingRatio > 85 ? 'bg-amber-500' : 'bg-blue-900'

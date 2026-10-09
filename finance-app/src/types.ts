@@ -73,6 +73,7 @@ export interface TransactionDetails {
   prepaidAssetDownpaymentAmount?: number;
   prepaidAssetPayableAmount?: number;
   prepaidAssetPurpose?: 'event' | 'general';
+  prepaidSemesterFinalized?: string;
   priorPeriodPayableAccountCode?: string;
   priorPeriodPayablePaymentAmount?: number;
   priorPeriodPayablePaymentMethod?: 'organization-funds' | 'officer-personal' | 'officer-advance' | 'combination';
@@ -224,7 +225,7 @@ export interface ActivityFeeHistoryItem {
   id: string;
   date: string;
   reportingPeriod: string;
-  action: 'initial' | 'collection' | 'held' | 'postponed' | 'cancelled-refundable' | 'cancelled-nonrefundable' | 'refund' | 'excess-refund' | 'excess-nonrefundable' | 'excess-refund-deferred';
+  action: 'initial' | 'collection' | 'held' | 'postponed' | 'cancelled-refundable' | 'cancelled-nonrefundable' | 'refund' | 'excess-refund' | 'excess-nonrefundable' | 'excess-refund-deferred' | 'additional-collection' | 'additional-payment';
   amount: number;
   journalEntryId?: string;
 }
@@ -257,6 +258,8 @@ export interface ActivityFeeRecord {
   receivableBalance: number;
   deferredBalance: number;
   refundLiabilityBalance?: number;
+  semesterCollectionsReviewed?: boolean;
+  semesterPaymentsReviewed?: boolean;
   status: ActivityFeeStatus;
   eventDate?: string;
   priorPeriodCollected?: number;

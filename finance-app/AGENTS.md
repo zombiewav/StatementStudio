@@ -7,6 +7,10 @@ Context and is per-browser (nothing syncs across devices).
 This file exists so another coding agent (or a future session) can pick up work without
 re-deriving context. Read it before making changes.
 
+## Required workflow for project requests
+
+Before starting any StatementStudio request, read [`PROJECT_WORKFLOW.md`](./PROJECT_WORKFLOW.md) and follow its sequence: plan first, inspect the files and screenshots, check what already exists and what is new, implement only confirmed gaps, verify in the browser, and audit every acceptance criterion before reporting completion. Preserve ongoing user changes and state any verification limits plainly.
+
 ## Commands
 
 ```bash

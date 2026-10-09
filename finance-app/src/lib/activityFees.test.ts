@@ -29,6 +29,13 @@ describe('final activity fee workflow', () => {
     expect(isActivityFeeIncomplete(record({ status: 'scheduled' }))).toBe(false);
   });
 
+  it('keeps held events in Review until additional collections and payments are answered', () => {
+    const pending = record({ status: 'complete', totalExpected: 1000, totalCollected: 1000, semesterCollectionsReviewed: false, semesterPaymentsReviewed: true });
+    expect(isActivityFeeIncomplete(pending)).toBe(true);
+    expect(isActivityFeeIncomplete({ ...pending, semesterCollectionsReviewed: true })).toBe(false);
+    expect(isActivityFeeIncomplete({ ...pending, refundLiabilityBalance: 500, semesterCollectionsReviewed: true, semesterPaymentsReviewed: false })).toBe(true);
+  });
+
   it('does not block financial statements after a refund is explicitly carried forward', () => {
     const deferredRefund = record({
       status: 'refund-due',
