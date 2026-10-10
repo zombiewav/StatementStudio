@@ -65,16 +65,7 @@ const UNRESTRICTED_REVENUE_CODE = '4030';
 const MEMBERSHIP_DUES_RECEIVABLE_CODE = '1300';
 const MERCHANDISE_ITEM_OPTIONS = ['Lanyard', 'Pins', 'Tote Bag', 'Mug', 'Shirt', 'Stickers', 'Others'] as const;
 const sumDatedAmounts = (rows: DatedAmountInputRow[]): number => rows.reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
-const EXPENSE_TYPES_HIDDEN_FROM_PICKER = new Set([
-  'Flight Ticket Fare', 'Freight Expense', 'Gasoline Expense', 'General Staff Payroll', 'Honoraria Expense',
-  'Hourly Wages Pay', 'Miscellaneous Operating Expense', 'Monthly Office Rental Payment', 'Notebooks and Writing Pads',
-  'Office Administrative Supplies', 'Office Space Lease', 'Office Supplies Billed by Vendor', 'Office Supplies Purchase',
-  'Office Supplies Stationary', 'Power Bill Payment', 'Printer Ink Supplies', 'Printer Paper and Ink',
-  'Event & Operational Supplies', 'Printing Expense', 'Electricity Utility Bill', 'Awards & Prizes Expense', 'Ballpen and Writing Supplies',
-  'Business Travel Reimbursement', 'Communication Expense', 'Document Folders and Filing Supplies',
-]);
 const MERCHANDISE_TYPES_HIDDEN_FROM_PICKER = new Set([
-  'Acquisition of Merchandise for Sale - Goods Received and On Hand',
   'Downpayment for Pre-ordered Merchandise',
 ]);
 const MISC_TYPES_HIDDEN_FROM_PICKER = new Set([
@@ -298,7 +289,12 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   // since they're the same category under two different trigger words).
   const transactionTypeOptions = useMemo(() => {
     if (!selectedCategory || selectedCategory === 'activity-fees') return [];
-    if (selectedCategory === 'expense-transactions') return ['Outright Expense Payment'];
+    if (selectedCategory === 'expense-transactions') {
+      const expenseTypes = classificationRules
+        .filter(rule => categorizeTransactionRule(rule) === selectedCategory && isRuleAvailable(rule))
+        .map(rule => rule.description);
+      return Array.from(new Set(['Outright Expense Payment', ...expenseTypes])).sort();
+    }
     return Array.from(new Set(
       classificationRules
         .filter(rule => categorizeTransactionRule(rule) === selectedCategory && isRuleAvailable(rule)
@@ -327,7 +323,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     const matchingRule = fixedOfficerType
       ? classificationRules.find(rule => rule.description === fixedOfficerType && categorizeTransactionRule(rule) === category && isRuleAvailable(rule))
       : undefined;
-    setTxName(matchingRule?.description || '');
+    setTxName(category === 'expense-transactions' ? 'Outright Expense Payment' : matchingRule?.description || '');
     setShowTxDropdown(false);
     setErrorMessage('');
   };
@@ -1402,12 +1398,17 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
             const optionCount = category.id === 'activity-fees' || category.id === 'prepaid-assets' || category.id === 'payables'
               || category.id === 'advances-to-officers' || category.id === 'reimbursements-to-officers'
               ? null
-              : category.id === 'expense-transactions' ? 1
+              : category.id === 'expense-transactions' ? new Set([
+                'Outright Expense Payment',
+                ...classificationRules
+                  .filter(rule => categorizeTransactionRule(rule) === category.id && isRuleAvailable(rule))
+                  .map(rule => rule.description),
+              ]).size
               : new Set(classificationRules.filter(rule => categorizeTransactionRule(rule) === category.id
                 && !(category.id === 'merchandise' && MERCHANDISE_TYPES_HIDDEN_FROM_PICKER.has(rule.description))
                 && !(category.id === 'other' && MISC_TYPES_HIDDEN_FROM_PICKER.has(rule.description))
                 && (category.id !== 'ppe-transactions' || rule.description === 'Purchase Chairs' || rule.description.toLowerCase().startsWith('purchase of '))
-                && !(category.id === 'expense-transactions' && EXPENSE_TYPES_HIDDEN_FROM_PICKER.has(rule.description)))
+                && (category.id !== 'expense-transactions' || isRuleAvailable(rule)))
                 .map(rule => rule.description)).size;
             return (
               <button
