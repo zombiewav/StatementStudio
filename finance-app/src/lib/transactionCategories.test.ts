@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { categorizeTransactionRule, TRANSACTION_CATEGORIES } from './transactionCategories';
+import { categorizeTransactionRule, isDepreciationPickerTypeVisible, TRANSACTION_CATEGORIES } from './transactionCategories';
 
 const rule = (debitAccountCode: string, creditAccountCode: string, description: string) => ({
   debitAccountCode,
@@ -8,6 +8,14 @@ const rule = (debitAccountCode: string, creditAccountCode: string, description: 
 });
 
 describe('transaction categories', () => {
+  it('hides only the five retired generic depreciation picker choices', () => {
+    for (const name of ['Depreciation Expense - Equipment', ...['Chairs', 'Cabinet', 'Tables', 'Desks'].map(item => `Depreciation Expense - Furniture & Fixtures (${item})`)]) {
+      expect(isDepreciationPickerTypeVisible(name)).toBe(false);
+    }
+    for (const item of ['Computer Hardware', 'Extension Wire', 'Other Small Equipment', 'Laptop']) {
+      expect(isDepreciationPickerTypeVisible(`Depreciation of ${item}`)).toBe(true);
+    }
+  });
   it('groups inventory purchases and merchandise sales together', () => {
     expect(categorizeTransactionRule(rule('1700', '1010', 'Merchandise Inventory Purchase'))).toBe('merchandise');
     expect(categorizeTransactionRule(rule('1010', '4070', 'Merchandise Sales Revenue'))).toBe('merchandise');

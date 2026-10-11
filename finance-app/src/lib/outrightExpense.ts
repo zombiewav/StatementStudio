@@ -2,6 +2,17 @@ import { DatedAmountRecord, JournalLine } from '../types';
 
 export type OutrightExpensePaymentMethod = 'organization-funds' | 'officer-personal' | 'officer-advance' | 'combination' | 'not-yet-paid';
 
+/** Discard hidden funding rows when the user selects a different method. */
+export function selectExpensePaymentRows<T>(method: OutrightExpensePaymentMethod, rows: {
+  organizationPayments: T[]; officerPayments: T[]; advancePayments: T[];
+}): typeof rows {
+  return {
+    organizationPayments: method === 'organization-funds' || method === 'combination' ? rows.organizationPayments : [],
+    officerPayments: method === 'officer-personal' || method === 'combination' ? rows.officerPayments : [],
+    advancePayments: method === 'officer-advance' || method === 'combination' ? rows.advancePayments : [],
+  };
+}
+
 export interface OutrightExpenseInput {
   expenseAccountCode: string;
   totalAmount: number;
@@ -41,10 +52,24 @@ export function splitBalancedJournalLinesByDate(lines: JournalLine[], fallbackDa
     const date = line.date || fallbackDate;
     groups.set(date, [...(groups.get(date) || []), line]);
   });
-  if (groups.size <= 1) return [{ date: groups.keys().next().value || fallbackDate, lines }];
   const batches = [...groups.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, batchLines]) => ({ date, lines: batchLines }));
   const eachBalanced = batches.every(batch => cents(batch.lines.reduce((sum, line) => sum + line.debit, 0)) === cents(batch.lines.reduce((sum, line) => sum + line.credit, 0)));
-  return eachBalanced ? batches : [{ date: fallbackDate, lines }];
+  if (!eachBalanced) return [{ date: fallbackDate, lines }];
+  // Separate already-balanced collections even when their dates match.
+  return batches.flatMap(batch => {
+    const result: DatedJournalBatch[] = [];
+    let pending: JournalLine[] = [];
+    let balance = 0;
+    for (const line of batch.lines) {
+      pending.push(line);
+      balance = cents(balance + line.debit - line.credit);
+      if (balance === 0) {
+        result.push({ date: batch.date, lines: pending });
+        pending = [];
+      }
+    }
+    return result;
+  });
 }
 
 function amount(label: string, value: number): number {
@@ -69,7 +94,7 @@ function addLine(lines: JournalLine[], accountCode: string, debit: number, credi
 }
 
 /** Builds the document's multi-batch outright-expense entry. Later dated
- * payments first clear Due to Supplier, so all lines remain balanced while
+ * payments first clear Accounts Payable - Expense, so all lines remain balanced while
  * the ledger still shows the date of every payment batch. */
 export function buildOutrightExpensePosting(input: OutrightExpenseInput): OutrightExpensePosting {
   const totalAmount = amount('Expense amount', input.totalAmount);

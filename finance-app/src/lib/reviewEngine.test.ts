@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   computePendingObligations,
+  isReviewSettlementAvailable,
+  isJournalEntryEditLocked,
   computeAdvanceSettlement,
   buildAdvanceSettlementLines,
   buildSimpleSettlementLines,
@@ -9,7 +11,8 @@ import {
   buildRestrictionReleaseLines,
   AdvanceSettlementStatus,
 } from './reviewEngine';
-import { Account, JournalEntry } from '../types';
+import { Account, ClosingRecord, JournalEntry } from '../types';
+import { counterpartyBalance } from './counterpartyBalances';
 
 const accounts: Account[] = [
   { code: '1010', name: 'Cash on Hand', type: 'Assets', normalBalance: 'Debit', description: '', isActive: true },
@@ -36,7 +39,111 @@ const baseEntry = (overrides: Partial<JournalEntry>): JournalEntry => ({
   ...overrides,
 });
 
+describe('isJournalEntryEditLocked', () => {
+  const closing: ClosingRecord = { id: 'close', fiscalYear: '2026', closingDate: '2026-05-31', netIncome: 0, journalEntryId: 'closing-je', closedAt: '2026-05-31', completed: true };
+  it('locks closed dates, including the boundary, but allows the next open period', () => {
+    expect(isJournalEntryEditLocked(baseEntry({ date: '2026-05-31' }), [closing])).toBe(true);
+    expect(isJournalEntryEditLocked(baseEntry({ date: '2026-06-01' }), [closing])).toBe(false);
+    expect(isJournalEntryEditLocked(baseEntry({}), [{ ...closing, completed: false }])).toBe(false);
+    expect(isJournalEntryEditLocked(baseEntry({}), [{ ...closing, completed: undefined }])).toBe(true);
+  });
+  it('protects closing-stage entries even before closing is completed', () => {
+    expect(isJournalEntryEditLocked(baseEntry({ id: 'revenue-close' }), [{ ...closing, completed: false, revenueClosingEntryId: 'revenue-close' }])).toBe(true);
+  });
+  it('retains finalized, reversed, and carried-forward protections', () => {
+    for (const patch of [
+      { reversedByEntryId: 'reversal' }, { reversalOfEntryId: 'original' },
+      { transactionDetails: { eventRelated: false, receiptAttachmentIds: [], reviewFinalized: true } },
+      { transactionDetails: { eventRelated: false, receiptAttachmentIds: [], carriedForward: true } },
+    ]) expect(isJournalEntryEditLocked(baseEntry(patch), [])).toBe(true);
+    expect(isJournalEntryEditLocked(baseEntry({}), [])).toBe(false);
+  });
+});
+
+describe('isReviewSettlementAvailable', () => {
+  const acquisition = baseEntry({
+    lines: [
+      { accountCode: '1700', debit: 1000, credit: 0 },
+      { accountCode: '2020', debit: 0, credit: 700 },
+      { accountCode: '2050', debit: 0, credit: 300 },
+    ],
+  });
+
+  it('hides acquisition supplier settlement while retaining the open balance and incomplete status', () => {
+    expect(isReviewSettlementAvailable('2020', acquisition)).toBe(false);
+    expect(computePendingObligations([acquisition], accounts)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ accountCode: '2020', remainingAmount: 700 }),
+    ]));
+    expect(computeTransactionReviewStates([acquisition], accounts)[0]).toMatchObject({
+      status: 'incomplete',
+      missing: expect.arrayContaining(['Accounts Payable - Merchandise still open: 700']),
+    });
+  });
+
+  it('keeps officer and other obligations available even on an acquisition', () => {
+    for (const code of ['2050', '1250', '1260', '1200', '2010', '2061'] as const) {
+      expect(isReviewSettlementAvailable(code, acquisition)).toBe(true);
+    }
+  });
+
+  it('keeps merchandise payables from other entries available', () => {
+    expect(isReviewSettlementAvailable('2020', baseEntry({
+      lines: [
+        { accountCode: '2010', debit: 1000, credit: 0 },
+        { accountCode: '2020', debit: 0, credit: 1000 },
+      ],
+    }))).toBe(true);
+    expect(isReviewSettlementAvailable('2020')).toBe(true);
+  });
+});
+
 describe('computePendingObligations', () => {
+  it('completes a standalone officer advance without removing its available balance', () => {
+    const entry = baseEntry({
+      transactionType: 'Advances to Officers',
+      transactionDetails: { counterpartyName: 'TEST officer', eventRelated: false, receiptAttachmentIds: [] },
+      lines: [
+        { accountCode: '1250', debit: 500, credit: 0 },
+        { accountCode: '1010', debit: 0, credit: 500 },
+      ],
+    });
+    expect(computePendingObligations([entry], accounts)).toEqual([]);
+    expect(computeTransactionReviewStates([entry], accounts)[0].status).toBe('complete');
+    expect(counterpartyBalance([entry], '1250', 'Debit', 'TEST officer')).toBe(500);
+  });
+
+  it.each(['Reimbursement to Officer', 'Reimbursement to Officers'])('keeps %s separate from the original expense obligation', transactionType => {
+    const expense = baseEntry({
+      transactionType: 'Outright Expense Payment',
+      transactionDetails: { counterpartyName: 'TEST officer', eventRelated: false, receiptAttachmentIds: [] },
+      lines: [
+        { accountCode: '5020', debit: 500, credit: 0 },
+        { accountCode: '2050', debit: 0, credit: 500 },
+      ],
+    });
+    const reimbursement = baseEntry({
+      id: 'reimbursement', transactionType,
+      transactionDetails: { counterpartyName: 'TEST officer', eventRelated: false, receiptAttachmentIds: [] },
+      lines: [
+        { accountCode: '2050', debit: 200, credit: 0 },
+        { accountCode: '1010', debit: 0, credit: 200 },
+      ],
+    });
+    const entries = [expense, reimbursement];
+    expect(computePendingObligations(entries, accounts)).toEqual([
+      expect.objectContaining({ entryId: expense.id, accountCode: '2050', remainingAmount: 500 }),
+    ]);
+    expect(computeTransactionReviewStates(entries, accounts).find(state => state.entry.id === reimbursement.id)?.status).toBe('complete');
+    expect(counterpartyBalance(entries, '2050', 'Credit', 'TEST officer')).toBe(300);
+  });
+
+  it('recognizes exact legacy officer labels without suppressing other flows', () => {
+    const lines = [{ accountCode: '1250', debit: 100, credit: 0 }, { accountCode: '1010', debit: 0, credit: 100 }];
+    expect(computePendingObligations([baseEntry({ description: 'Advances to Officers', lines })], accounts)).toEqual([]);
+    const purchase = baseEntry({ transactionType: 'Acquisition of Merchandise', description: 'Advances to Officers', lines });
+    expect(computePendingObligations([purchase], accounts)).toEqual([expect.objectContaining({ accountCode: '1250', remainingAmount: 100 })]);
+  });
+
   it('finds an obligation-creating entry with no settlement as fully open', () => {
     const entries = [
       baseEntry({

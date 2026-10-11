@@ -1,5 +1,50 @@
 import { describe, expect, it } from 'vitest';
-import { aggregateAvailableMerchandisePrepayments, buildMerchandiseAcquisitionPosting, buildMerchandisePrepaymentPosting, buildSupplierReceivableCollectionPosting, splitMerchandiseAcquisitionPosting } from './merchandiseAcquisition';
+import { aggregateAvailableMerchandisePrepayments, buildMerchandiseAcquisitionPosting, buildMerchandisePrepaymentPosting, buildSupplierReceivableCollectionPosting, resolveMerchandisePurchaseDate, splitMerchandiseAcquisitionPosting } from './merchandiseAcquisition';
+
+describe('optional merchandise purchase date', () => {
+  it('keeps an explicit receipt date even when payments are later', () => {
+    expect(resolveMerchandisePurchaseDate('2026-02-10', [{ date: '2026-02-15', amount: 100 }], '2026-10-11')).toBe('2026-02-10');
+  });
+
+  it('uses the earliest entered positive payment and ignores empty or zero-value rows', () => {
+    expect(resolveMerchandisePurchaseDate('', [
+      { date: '2026-02-20', amount: '100' }, { date: '2026-02-10', amount: 200 },
+      { date: '2026-01-01', amount: '' }, { date: '2026-01-02', amount: 0 }, { date: '', amount: 50 },
+    ], '2026-10-11')).toBe('2026-02-10');
+  });
+
+  it('posts a blank purchase date as balanced dated batches using the earliest payment', () => {
+    const organizationPayments = [{ date: '2026-02-15', amount: 250 }, { date: '2026-02-10', amount: 300 }];
+    const purchaseDate = resolveMerchandisePurchaseDate('', organizationPayments, '2026-10-11');
+    const posting = buildMerchandiseAcquisitionPosting({
+      totalCost: 1000, paymentMethod: 'organization-funds', transactionDate: purchaseDate, organizationPayments,
+    });
+    const batches = splitMerchandiseAcquisitionPosting(posting, purchaseDate);
+    expect(batches.map(batch => batch.date)).toEqual(['2026-02-10', '2026-02-15']);
+    expect(batches[0].lines).toEqual([
+      { accountCode: '1700', debit: 1000, credit: 0, date: '2026-02-10' },
+      { accountCode: '1010', debit: 0, credit: 300, date: '2026-02-10' },
+      { accountCode: '2020', debit: 0, credit: 700, date: '2026-02-10' },
+    ]);
+    expect(batches[1].lines).toEqual([
+      { accountCode: '2020', debit: 250, credit: 0, date: '2026-02-15' },
+      { accountCode: '1010', debit: 0, credit: 250, date: '2026-02-15' },
+    ]);
+    expect(posting.merchandisePayable).toBe(450);
+  });
+
+  it('uses the supplied local date for an unpaid purchase with no dated payments', () => {
+    const purchaseDate = resolveMerchandisePurchaseDate('', [], '2026-10-11');
+    const posting = buildMerchandiseAcquisitionPosting({ totalCost: 1000, paymentMethod: 'not-yet-paid', transactionDate: purchaseDate });
+    expect(purchaseDate).toBe('2026-10-11');
+    expect(splitMerchandiseAcquisitionPosting(posting, purchaseDate)).toEqual([
+      { date: '2026-10-11', lines: [
+        { accountCode: '1700', debit: 1000, credit: 0, date: '2026-10-11' },
+        { accountCode: '2020', debit: 0, credit: 1000, date: '2026-10-11' },
+      ] },
+    ]);
+  });
+});
 
 describe('merchandise acquisition posting', () => {
   it('records an organization payment and leaves the unpaid cost in Accounts Payable - Merchandise', () => {

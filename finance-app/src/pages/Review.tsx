@@ -8,6 +8,8 @@ import { ActivityFeeReview } from '../components/ActivityFeeReview';
 import { isActivityFeeIncomplete } from '../lib/activityFees';
 import {
   computePendingObligations,
+  isReviewSettlementAvailable,
+  isJournalEntryEditLocked,
   computeAdvanceSettlement,
   buildAdvanceSettlementLines,
   buildSimpleSettlementLines,
@@ -350,7 +352,7 @@ interface ReviewProps {
 }
 
 export function Review({ onContinueDraft }: ReviewProps): React.ReactElement {
-  const { journalEntries, accounts, settings, activityFeeRecords, draftTransactions, deleteDraftTransaction, deleteJournalEntry, reverseJournalEntry, addJournalEntry, updateJournalEntry, formatCurrency } = useFinance();
+  const { journalEntries, accounts, settings, closedFiscalYears, activityFeeRecords, draftTransactions, deleteDraftTransaction, deleteJournalEntry, reverseJournalEntry, addJournalEntry, updateJournalEntry, formatCurrency } = useFinance();
   const semesterKey = `${settings.reportingYear}::${settings.semester}`;
   const pendingObligations = useMemo(() => computePendingObligations(journalEntries, accounts, semesterKey), [journalEntries, accounts, semesterKey]);
   const reviewStates = useMemo(() => computeTransactionReviewStates(journalEntries, accounts, semesterKey), [journalEntries, accounts, semesterKey]);
@@ -547,9 +549,12 @@ export function Review({ onContinueDraft }: ReviewProps): React.ReactElement {
         ) : visibleStates.map(state => {
           const amount = state.entry.lines.reduce((sum, line) => sum + line.debit, 0);
           const isIncomplete = state.status === 'incomplete';
-          const editLocked = !!(state.entry.reversalOfEntryId || state.entry.reversedByEntryId || state.entry.transactionDetails?.carriedForward || state.entry.transactionDetails?.reviewFinalized || state.entry.description.startsWith('Closing Entries'));
+          const editLocked = isJournalEntryEditLocked(state.entry, closedFiscalYears);
           const amountEditable = state.entry.lines.filter(line => line.debit > 0).length === 1 && state.entry.lines.filter(line => line.credit > 0).length === 1;
-          const entryObligations = pendingObligations.filter(obligation => obligation.reviewEntryId === state.entry.id);
+          const entryObligations = pendingObligations.filter(obligation =>
+            obligation.reviewEntryId === state.entry.id &&
+            isReviewSettlementAvailable(obligation.accountCode, journalEntries.find(entry => entry.id === obligation.entryId))
+          );
           return (
             <article key={state.entry.id} className={`rounded-xl border p-4 ${isIncomplete ? 'border-rose-200 bg-rose-50 dark:border-rose-500/30 dark:bg-rose-500/10' : state.status === 'complete' ? 'border-emerald-100 bg-white dark:border-emerald-500/20 dark:bg-slate-900' : 'border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900/70'}`}>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -575,7 +580,7 @@ export function Review({ onContinueDraft }: ReviewProps): React.ReactElement {
                     disabled={editLocked}
                     onClick={() => editingEntryId === state.entry.id ? setEditingEntryId(null) : beginEdit(state.entry)}
                     className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-[10px] font-bold text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-blue-500/30 dark:bg-slate-900 dark:text-blue-300 dark:hover:bg-blue-500/10"
-                    title={editLocked ? 'This transaction is finalized, reversed, or carried forward and cannot be edited.' : 'Edit this transaction'}
+                    title={editLocked ? 'This transaction is finalized, reversed, carried forward, or in a closed period and cannot be edited.' : 'Edit this transaction'}
                   >
                     {editingEntryId === state.entry.id ? <X className="h-3 w-3" /> : <Pencil className="h-3 w-3" />}
                     {editingEntryId === state.entry.id ? 'Close edit' : 'Edit'}

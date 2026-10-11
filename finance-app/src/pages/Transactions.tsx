@@ -30,10 +30,11 @@ import { NewFeatureBadge } from '../components/NewFeatureBadge';
 import { ReviewLaterNote } from '../components/ReviewLaterNote';
 import { PrepaidAssetEntry } from '../components/PrepaidAssetEntry';
 import { PayablesEntry } from '../components/PayablesEntry';
-import { categorizeTransactionRule, TRANSACTION_CATEGORIES, TransactionCategoryId } from '../lib/transactionCategories';
+import { isDepreciationPickerTypeVisible, categorizeTransactionRule, TRANSACTION_CATEGORIES, TransactionCategoryId } from '../lib/transactionCategories';
 import { merchandiseSaleCostError } from '../lib/transactionHistory';
 import {
   buildMerchandiseAcquisitionPosting,
+  resolveMerchandisePurchaseDate,
   splitMerchandiseAcquisitionPosting,
   buildMerchandisePrepaymentPosting,
   buildSupplierReceivableCollectionPosting,
@@ -52,7 +53,7 @@ import {
   MEMBERSHIP_REFUND_LIABILITY_CODE,
   MembershipRefundStatus,
 } from '../lib/membershipFees';
-import { buildOutrightExpensePosting, splitBalancedJournalLinesByDate, OutrightExpensePaymentMethod } from '../lib/outrightExpense';
+import { buildOutrightExpensePosting, selectExpensePaymentRows, splitBalancedJournalLinesByDate, OutrightExpensePaymentMethod } from '../lib/outrightExpense';
 import { counterpartyBalance, counterpartyBalances } from '../lib/counterpartyBalances';
 import { isDateWithinReportingPeriod, periodForSemester, reportingPeriodBounds } from '../lib/reportingPeriod';
 
@@ -88,6 +89,12 @@ interface TransactionFormSnapshot {
   selectedExpenseAccountCode: string;
   description: string;
   expenseEventName: string;
+  expenseEvent: '' | 'yes' | 'no';
+  outrightPaymentMethod: OutrightExpensePaymentMethod;
+  outrightOrganizationPayments: DatedAmountInputRow[];
+  outrightOfficerPayments: DatedAmountInputRow[];
+  outrightAdvancePayments: DatedAmountInputRow[];
+  outrightOfficer: string;
   amount: number;
   date: string;
   purposeIndex: number;
@@ -145,6 +152,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     formatCurrency,
     settings,
     saveDraftTransaction,
+    runAtomicPosting,
     deleteDraftTransaction,
   } = useFinance();
 
@@ -203,6 +211,20 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   const [outrightOfficer, setOutrightOfficer] = useState('');
   const [expenseEvent, setExpenseEvent] = useState<'' | 'yes' | 'no'>('');
   const [expenseEventName, setExpenseEventName] = useState('');
+
+  const changeOutrightPaymentMethod = (next: OutrightExpensePaymentMethod) => {
+    const rows = selectExpensePaymentRows(next, {
+      organizationPayments: outrightOrganizationPayments,
+      officerPayments: outrightOfficerPayments,
+      advancePayments: outrightAdvancePayments,
+    });
+    const emptyRow = (source: string) => [{ id: `${source}-${Date.now()}`, date: '', amount: '' }];
+    setOutrightPaymentMethod(next);
+    setOutrightOrganizationPayments(rows.organizationPayments.length ? rows.organizationPayments : emptyRow('expense-org'));
+    setOutrightOfficerPayments(rows.officerPayments.length ? rows.officerPayments : emptyRow('expense-officer'));
+    setOutrightAdvancePayments(rows.advancePayments.length ? rows.advancePayments : emptyRow('expense-advance'));
+    if (next === 'organization-funds' || next === 'not-yet-paid') setOutrightOfficer('');
+  };
 
   const changeMerchandisePaymentMethod = (next: MerchandisePaymentMethod) => {
     setMerchandisePaymentMethod(next);
@@ -287,14 +309,12 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   const transactionTypeOptions = useMemo(() => {
     if (!selectedCategory || selectedCategory === 'activity-fees') return [];
     if (selectedCategory === 'expense-transactions') {
-      const expenseTypes = classificationRules
-        .filter(rule => categorizeTransactionRule(rule) === selectedCategory && isRuleAvailable(rule))
-        .map(rule => rule.description);
-      return Array.from(new Set(['Outright Expense Payment', ...expenseTypes])).sort();
+      return ['Outright Expense Payment'];
     }
     return Array.from(new Set(
       classificationRules
         .filter(rule => categorizeTransactionRule(rule) === selectedCategory && isRuleAvailable(rule)
+          && (selectedCategory !== 'depreciation' || isDepreciationPickerTypeVisible(rule.description))
           && !(selectedCategory === 'other' && MISC_TYPES_HIDDEN_FROM_PICKER.has(rule.description))
           && (selectedCategory !== 'ppe-transactions' || rule.description === 'Purchase Chairs' || rule.description.toLowerCase().startsWith('purchase of ')))
         .map(rule => rule.description)
@@ -526,6 +546,12 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     setSelectedExpenseAccountCode(snapshot.selectedExpenseAccountCode || '5010');
     setDescription(snapshot.description || '');
     setExpenseEventName(snapshot.expenseEventName || '');
+    setExpenseEvent(snapshot.expenseEvent || '');
+    setOutrightPaymentMethod(snapshot.outrightPaymentMethod || 'organization-funds');
+    setOutrightOrganizationPayments(snapshot.outrightOrganizationPayments?.length ? snapshot.outrightOrganizationPayments : [{ id: 'expense-org-resumed', date: '', amount: '' }]);
+    setOutrightOfficerPayments(snapshot.outrightOfficerPayments?.length ? snapshot.outrightOfficerPayments : [{ id: 'expense-officer-resumed', date: '', amount: '' }]);
+    setOutrightAdvancePayments(snapshot.outrightAdvancePayments?.length ? snapshot.outrightAdvancePayments : [{ id: 'expense-advance-resumed', date: '', amount: '' }]);
+    setOutrightOfficer(snapshot.outrightOfficer || '');
     setAmount(snapshot.amount || 0);
     setDate(fallbackDate);
     setPurposeIndex(snapshot.purposeIndex || 0);
@@ -703,6 +729,10 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     }
   }, [isMembershipRefundStatus, membershipRefundStatus, amount, date, membershipRefundLiabilityOutstanding]);
 
+  const merchandisePurchaseDate = resolveMerchandisePurchaseDate(date, [
+    ...merchandiseOrganizationPayments, ...merchandiseOfficerPayments, ...merchandiseAdvancePayments,
+  ], localDateInputValue());
+
   const merchandiseAcquisitionResult = useMemo(() => {
     if (!isMerchandiseAcquisition || amount <= 0) return { posting: null, error: '' };
     try {
@@ -710,7 +740,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
         posting: buildMerchandiseAcquisitionPosting({
           totalCost: amount,
           paymentMethod: merchandisePaymentMethod,
-          transactionDate: date,
+          transactionDate: merchandisePurchaseDate,
           organizationPayment: merchandiseOrganizationPaymentTotal,
           organizationPayments: merchandiseOrganizationPayments.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })),
           officerPayment: merchandiseOfficerPaymentTotal,
@@ -727,7 +757,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     } catch (error) {
       return { posting: null, error: error instanceof Error ? error.message : 'The acquisition amounts are invalid.' };
     }
-  }, [isMerchandiseAcquisition, amount, merchandisePaymentMethod, date, merchandiseOrganizationPaymentTotal, merchandiseOrganizationPayments, merchandiseOfficerPaymentTotal, merchandiseOfficerPayments, merchandiseAdvancePaymentTotal, merchandiseAdvancePayments, selectedOfficerAdvanceBalance, cashAvailable, selectedMerchandisePrepayment]);
+  }, [isMerchandiseAcquisition, amount, merchandisePaymentMethod, merchandisePurchaseDate, merchandiseOrganizationPaymentTotal, merchandiseOrganizationPayments, merchandiseOfficerPaymentTotal, merchandiseOfficerPayments, merchandiseAdvancePaymentTotal, merchandiseAdvancePayments, selectedOfficerAdvanceBalance, cashAvailable, selectedMerchandisePrepayment]);
 
   const merchandisePrepaymentResult = useMemo(() => {
     if (!isMerchandisePrepayment || transactionAmount <= 0 || merchandisePaymentMethod === 'not-yet-paid') return { lines: [] as JournalLine[], error: '' };
@@ -862,6 +892,12 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     selectedExpenseAccountCode,
     description,
     expenseEventName,
+    expenseEvent,
+    outrightPaymentMethod,
+    outrightOrganizationPayments,
+    outrightOfficerPayments,
+    outrightAdvancePayments,
+    outrightOfficer,
     amount,
     date,
     purposeIndex,
@@ -1127,6 +1163,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
         ? membershipPostingResult.posting?.collections[0]?.date || date
         : isMerchandisePrepayment
           ? merchandisePrepaymentDate
+          : isMerchandiseAcquisition ? merchandisePurchaseDate
           : (isOfficerReimbursement || isOutrightExpense) && !date ? localDateInputValue() : date;
       const draftEntryId = editingDraftId
         ? draftTransactions.find(draft => draft.id === editingDraftId)?.journalEntryId
@@ -1144,7 +1181,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       const primaryJournalDate = datedPostingBatches.length > 1
         ? datedPostingBatches[0].date
         : journalDate;
-      const posted = addJournalEntry(
+      const posted = runAtomicPosting(() => {
+      const firstEntry = addJournalEntry(
         primaryJournalDate,
         entryDescription,
         GENERAL_FUND_PROJECT,
@@ -1190,7 +1228,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
             inventoryCost: isMerchandiseSale ? Number(merchandiseCost) : undefined,
             merchandiseQuantity: isMerchandiseAcquisition && merchandiseQuantity.trim() ? Number(merchandiseQuantity) : undefined,
             merchandiseBatch: (isMerchandiseAcquisition || isMerchandisePrepayment) ? merchandiseBatch.trim() : undefined,
-            merchandisePurchaseDate: isMerchandiseAcquisition ? date : undefined,
+            merchandisePurchaseDate: isMerchandiseAcquisition ? merchandisePurchaseDate : undefined,
             merchandisePrepaymentEntryId: isMerchandiseAcquisition ? merchandisePrepaymentEntryId || undefined : undefined,
             merchandisePrepaymentEntryIds: isMerchandiseAcquisition ? selectedMerchandisePrepayment?.entryIds : undefined,
             merchandisePrepaymentAmount: isMerchandiseAcquisition ? selectedMerchandisePrepayment?.amount : undefined,
@@ -1220,7 +1258,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
         editingDraftId || undefined,
         draftEntry?.id,
       );
-      const je = posted;
       if (!savingDraft && merchandiseBatches.length > 1) {
         merchandiseBatches.slice(1).forEach((batch, index) => {
           addJournalEntry(
@@ -1238,7 +1275,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                 counterpartyName: counterpartyName.trim() || undefined,
                 merchandiseItem: merchandiseItemLabel,
                 merchandiseBatch: merchandiseBatch.trim(),
-                merchandisePurchaseDate: date,
+                merchandisePurchaseDate,
               },
             },
           );
@@ -1252,7 +1289,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
             GENERAL_FUND_PROJECT,
             batch.lines,
             isEventProgramExpense ? expenseEventName.trim() : isOutrightExpense && expenseEvent === 'yes' ? expenseEventName.trim() : undefined,
-            posted.id,
+            firstEntry.id,
             {
               transactionType: `${txName} - Dated Batch`,
               details: {
@@ -1265,6 +1302,9 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
           );
         });
       }
+      return firstEntry;
+      });
+      const je = posted;
       attachReceiptsToEntry(je.id, pendingReceipts);
 
       if (savingDraft) {
@@ -1394,13 +1434,9 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
             const optionCount = category.id === 'activity-fees' || category.id === 'prepaid-assets' || category.id === 'payables'
               || category.id === 'advances-to-officers' || category.id === 'reimbursements-to-officers'
               ? null
-              : category.id === 'expense-transactions' ? new Set([
-                'Outright Expense Payment',
-                ...classificationRules
-                  .filter(rule => categorizeTransactionRule(rule) === category.id && isRuleAvailable(rule))
-                  .map(rule => rule.description),
-              ]).size
+              : category.id === 'expense-transactions' ? 1
               : new Set(classificationRules.filter(rule => categorizeTransactionRule(rule) === category.id
+                && (category.id !== 'depreciation' || isDepreciationPickerTypeVisible(rule.description))
                 && !(category.id === 'other' && MISC_TYPES_HIDDEN_FROM_PICKER.has(rule.description))
                 && (category.id !== 'ppe-transactions' || rule.description === 'Purchase Chairs' || rule.description.toLowerCase().startsWith('purchase of '))
                 && (category.id !== 'expense-transactions' || isRuleAvailable(rule)))
@@ -1660,7 +1696,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                 <div>
                   <h4 className="flex items-center gap-2 text-xs font-black text-violet-700 dark:text-violet-300">Acquisition of Merchandise for Sale - Goods Received and On Hand <NewFeatureBadge /></h4>
                   <p className="mt-1 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Record each received batch separately so its item, optional quantity, full cost, downpayments, and supplier settlement remain traceable.</p>
-                  <p className="mt-1 text-[10px] font-semibold text-indigo-800 dark:text-indigo-200"><strong>Date of Purchase:</strong> use the date when the organization actually received the purchased goods.</p>
                 </div>
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -1756,6 +1791,18 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                 {merchandiseAcquisitionResult.posting && merchandiseAcquisitionResult.posting.merchandisePayable > 0 && <p className="rounded-lg bg-amber-50 p-3 text-[10px] font-semibold text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">The unpaid {formatCurrency(merchandiseAcquisitionResult.posting.merchandisePayable)} will be recorded in Accounts Payable - Merchandise for Review.</p>}
                 {merchandiseAcquisitionResult.posting && merchandiseAcquisitionResult.posting.supplierReceivable > 0 && <p className="rounded-lg bg-amber-50 p-3 text-[10px] font-semibold text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">The excess {formatCurrency(merchandiseAcquisitionResult.posting.supplierReceivable)} will be recorded in Accounts Receivable - Suppliers.</p>}
                 {merchandiseAcquisitionResult.error && amount > 0 && <p className="text-[10px] font-bold text-rose-700 dark:text-rose-300">{merchandiseAcquisitionResult.error}</p>}
+                <div>
+                  <label htmlFor="merchandise-purchase-date" className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Date of purchase (optional)</label>
+                  <input
+                    id="merchandise-purchase-date"
+                    type="date"
+                    value={date}
+                    onChange={event => setDate(event.target.value)}
+                    aria-describedby="merchandise-purchase-date-hint"
+                    className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100"
+                  />
+                  <p id="merchandise-purchase-date-hint" className="mt-1 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Use the date goods were actually received. If blank, the earliest dated payment is used, or today if there are none.</p>
+                </div>
               </div>
             )}
 
@@ -2087,10 +2134,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                     {activeAccounts.filter(account => account.type === 'Expenses' && account.code !== '5090' && account.code !== '5095').map(account => <option key={account.code} value={account.code}>{account.code} - {account.name}</option>)}
                   </select>
                 </div>}
-                {isOutrightExpense && <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Date <span className="normal-case font-medium">(optional; clear to use today)</span></label>
-                  <input type="date" value={date} onChange={event => setDate(event.target.value)} className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" />
-                </div>}
                 {isOutrightExpense && <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
                     <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Is this expense for an event?</label>
@@ -2100,11 +2143,15 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                   </div>
                   {expenseEvent === 'yes' && <div><label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Event name</label><input value={expenseEventName} onChange={event => setExpenseEventName(event.target.value)} placeholder="Name of event" className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required /></div>}
                 </div>}
+                {isOutrightExpense && <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Date <span className="normal-case font-medium">(optional; clear to use today)</span></label>
+                  <input type="date" value={date} onChange={event => setDate(event.target.value)} className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" />
+                </div>}
                 {isOutrightExpense && expenseEvent === 'no' && <p className="text-[10px] font-semibold text-indigo-800 dark:text-indigo-200">This will be classified as General and Administrative Expense.</p>}
                 <div><label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">{isPpeAcquisition ? 'Purchase price' : 'Total expense amount'}</label><div className="relative mt-1.5"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-indigo-500">{settings.currencySymbol}</span><input type="number" min="0" step="0.01" value={amount || ''} onChange={event => setAmount(Number(event.target.value))} placeholder="0.00" className="w-full rounded-lg border border-indigo-200 bg-white p-2.5 pl-8 text-xs font-bold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required /></div></div>
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Payment method</label>
-                  <select value={outrightPaymentMethod} onChange={event => setOutrightPaymentMethod(event.target.value as OutrightExpensePaymentMethod)} className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100">
+                  <select value={outrightPaymentMethod} onChange={event => changeOutrightPaymentMethod(event.target.value as OutrightExpensePaymentMethod)} className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100">
                     <option value="organization-funds">Paid directly by the organization</option><option value="officer-personal">Paid by an officer using personal money</option><option value="officer-advance">Paid using an officer cash advance</option><option value="combination">Combination of organization funds, officer money, and/or advance</option><option value="not-yet-paid">Not yet paid — will be paid next reporting period</option>
                   </select>
                 </div>
@@ -2113,7 +2160,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                 {(outrightPaymentMethod === 'officer-advance' || outrightPaymentMethod === 'combination') && <DatedAmountRows label={`Payments using ${outrightOfficer.trim() || 'this officer'}'s advance (available: ${formatCurrency(selectedOfficerAdvanceBalance)})`} rows={outrightAdvancePayments} onChange={setOutrightAdvancePayments} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={Math.min(amount || selectedOfficerAdvanceBalance, selectedOfficerAdvanceBalance)} addLabel="Add advance payment" allowBlankDates blankDateHelp="Date is optional and can be cleared. Entered dates cannot repeat." />}
                 {(outrightPaymentMethod === 'officer-personal' || outrightPaymentMethod === 'officer-advance' || outrightPaymentMethod === 'combination') && <div><label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Accountable officer</label><input value={outrightOfficer} onChange={event => setOutrightOfficer(event.target.value)} placeholder="Officer who paid or used the advance" className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" /></div>}
                 {outrightPaymentMethod === 'not-yet-paid' && <p className="rounded-lg bg-white/80 p-3 text-[10px] font-semibold text-indigo-800 dark:bg-slate-900/60 dark:text-indigo-200">Posts Debit to the selected {isPpeAcquisition ? 'asset' : 'expense'} account and Credit to {activeAccounts.find(account => account.code === guidedPayableAccountCode)?.name || 'Accounts Payable'}. The payable carries into the next reporting period and remains in Review until paid.</p>}
-                {outrightExpenseResult.posting && <div className="grid grid-cols-1 gap-2 sm:grid-cols-3"><div className="rounded-lg bg-white/80 p-3 text-[10px] dark:bg-slate-900/60"><span className="font-bold text-slate-500">Due to supplier</span><p className="mt-1 font-black text-rose-700">{formatCurrency(outrightExpenseResult.posting.dueToSupplier)}</p></div><div className="rounded-lg bg-white/80 p-3 text-[10px] dark:bg-slate-900/60"><span className="font-bold text-slate-500">Due to officer</span><p className="mt-1 font-black text-amber-700">{formatCurrency(outrightExpenseResult.posting.dueToOfficer)}</p></div><div className="rounded-lg bg-white/80 p-3 text-[10px] dark:bg-slate-900/60"><span className="font-bold text-slate-500">Advance used</span><p className="mt-1 font-black text-indigo-700">{formatCurrency(outrightExpenseResult.posting.advanceUsed)}</p></div></div>}
+                {outrightExpenseResult.posting && <div className="grid grid-cols-1 gap-2 sm:grid-cols-3"><div className="rounded-lg bg-white/80 p-3 text-[10px] dark:bg-slate-900/60"><span className="font-bold text-slate-500">{activeAccounts.find(account => account.code === guidedPayableAccountCode)?.name || 'Accounts Payable - Expense'}</span><p className="mt-1 font-black text-rose-700">{formatCurrency(outrightExpenseResult.posting.dueToSupplier)}</p></div><div className="rounded-lg bg-white/80 p-3 text-[10px] dark:bg-slate-900/60"><span className="font-bold text-slate-500">Due to officer</span><p className="mt-1 font-black text-amber-700">{formatCurrency(outrightExpenseResult.posting.dueToOfficer)}</p></div><div className="rounded-lg bg-white/80 p-3 text-[10px] dark:bg-slate-900/60"><span className="font-bold text-slate-500">Advance used</span><p className="mt-1 font-black text-indigo-700">{formatCurrency(outrightExpenseResult.posting.advanceUsed)}</p></div></div>}
                 {requiresExpenseDraftReview && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[10px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">Save as Draft to keep this balanced entry visible in the ledger. Add remaining payments from Review, then post the completed transaction.</p>}
                 {outrightExpenseResult.error && <p className="text-[10px] font-bold text-rose-700 dark:text-rose-300">{outrightExpenseResult.error}</p>}
               </div>
@@ -2147,8 +2194,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               />
             </div>}
 
-            {!isMerchandisePrepayment && !requiresAccrualCompletion && !isPriorMembershipCollection && !isMembershipRefundStatus && !isOutrightExpense && <div>
-              <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">{isMerchandiseAcquisition ? 'Date of Purchase' : isSupplierReceivableCollection ? 'Collection date' : 'Date'}</label>
+            {!isMerchandiseAcquisition && !isMerchandisePrepayment && !requiresAccrualCompletion && !isPriorMembershipCollection && !isMembershipRefundStatus && !isOutrightExpense && <div>
+              <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">{isSupplierReceivableCollection ? 'Collection date' : 'Date'}</label>
               <input
                 type="date"
                 value={date}

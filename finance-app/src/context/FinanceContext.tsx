@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useMemo, useEffect, useCallback } from 'react';
+import { isJournalEntryEditLocked } from '../lib/reviewEngine';
+import React, { createContext, useContext, useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import {
   Account,
   JournalEntry,
@@ -840,6 +841,7 @@ interface FinanceContextType {
   reportingPeriodWorkspaces: ReportingPeriodWorkspace[];
   openingBalances: OpeningBalances;
 
+  runAtomicPosting: <T,>(post: () => T) => T;
   addJournalEntry: (date: string, description: string, project: string, lines: JournalLine[], eventName?: string, settlesEntryId?: string, transactionMeta?: TransactionMetadata, isDraft?: boolean, draftId?: string, replaceDraftEntryId?: string) => JournalEntry;
   updateJournalEntry: (entry: JournalEntry) => void;
   finalizeDraftJournalEntry: (id: string) => void;
@@ -921,6 +923,9 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   // the starting books for a newly signed-in account.
   const [accounts, setAccounts] = useState<Account[]>(INITIAL_ACCOUNTS);
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
+  // Later batches in one event must see the entries queued by earlier batches.
+  const postingEntriesRef = useRef(journalEntries);
+  postingEntriesRef.current = journalEntries;
   const [projects, setProjects] = useState<Project[]>(DEFAULT_PROJECTS);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(INITIAL_LOGS);
   const [settings, setSettings] = useState<AppSettings>(() => createEmptyWorkspace('My Organization').settings);
@@ -1113,17 +1118,20 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     draftId?: string,
     replaceDraftEntryId?: string,
   ) => {
-    const replaced = replaceDraftEntryId ? journalEntries.find(entry => entry.id === replaceDraftEntryId && entry.isDraft) : undefined;
+    const postingEntries = postingEntriesRef.current;
+    const replaced = replaceDraftEntryId ? postingEntries.find(entry => entry.id === replaceDraftEntryId && entry.isDraft) : undefined;
     if (replaceDraftEntryId && !replaced) throw new Error('Draft journal entry not found.');
-    const activeEntries = journalEntries.filter(entry => !entry.isDraft && entry.id !== replaced?.id);
+    // Draft entries already sit in the ledger and in the cash shown on the
+    // form, so they count toward the balance a new posting is validated against.
+    const activeEntries = postingEntries.filter(entry => entry.id !== replaced?.id);
     const nextBalances = computeAccountBalances([...activeEntries, { id: 'pending-validation', reference: 'PENDING', date, description, project, lines } as JournalEntry], accounts);
     Object.entries(openingBalances).forEach(([code, balance]) => { nextBalances[code] = (nextBalances[code] || 0) + balance; });
     const changedCodes = new Set(lines.map(line => line.accountCode));
     const negativeAccount = !isDraft && accounts.find(account => changedCodes.has(account.code) && (nextBalances[account.code] || 0) < -0.005);
     if (negativeAccount) throw new Error(`This transaction would give ${negativeAccount.name} a negative balance. Please check the previous transactions and available balance.`);
-    const reference = replaced?.reference || generateNextReference(journalEntries);
+    const reference = replaced?.reference || generateNextReference(postingEntries);
     const newEntry: JournalEntry = {
-      id: replaced?.id || `je-${Date.now()}`,
+      id: replaced?.id || `je-${crypto.randomUUID()}`,
       reference,
       date,
       description,
@@ -1140,14 +1148,29 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       ...(draftId ? { draftId } : {})
     };
 
-    setJournalEntries(prev => replaced ? prev.map(entry => entry.id === replaced.id ? newEntry : entry) : [...prev, newEntry]);
+    postingEntriesRef.current = replaced ? postingEntries.map(entry => entry.id === replaced.id ? newEntry : entry) : [...postingEntries, newEntry];
+    setJournalEntries(postingEntriesRef.current);
     logAudit(isDraft ? (replaced ? 'Update Draft Journal Entry' : 'Create Draft Journal Entry') : 'Create Journal Entry', `${isDraft ? 'Saved draft' : 'Posted'} journal entry ${reference}: ${description} (${settings.currencySymbol}${lines.reduce((s, l) => s + l.debit, 0).toLocaleString()})`);
     return newEntry;
   };
 
+  // Runs several addJournalEntry calls as one posting: if any of them throws,
+  // the entries added so far (including a finalized draft) are rolled back so
+  // a failed batch never leaves a half-posted transaction behind.
+  const runAtomicPosting = <T,>(post: () => T): T => {
+    const snapshot = postingEntriesRef.current;
+    try {
+      return post();
+    } catch (error) {
+      postingEntriesRef.current = snapshot;
+      setJournalEntries(snapshot);
+      throw error;
+    }
+  };
+
   const updateJournalEntry = (entry: JournalEntry) => {
     const current = journalEntries.find(candidate => candidate.id === entry.id);
-    if (!current || current.reversalOfEntryId || current.reversedByEntryId || current.transactionDetails?.carriedForward || current.transactionDetails?.reviewFinalized || current.description.startsWith('Closing Entries')) {
+    if (!current || isJournalEntryEditLocked(current, closedFiscalYears) || isJournalEntryEditLocked(entry, closedFiscalYears)) {
       throw new Error('This posted transaction can no longer be edited.');
     }
     setJournalEntries(previous => previous.map(candidate => candidate.id === entry.id ? entry : candidate));
@@ -1792,6 +1815,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       financialStatementHistory,
       reportingPeriodWorkspaces,
       openingBalances,
+      runAtomicPosting,
       addJournalEntry,
       updateJournalEntry,
       finalizeDraftJournalEntry,

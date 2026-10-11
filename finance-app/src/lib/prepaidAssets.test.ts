@@ -1,7 +1,20 @@
 import { describe, expect, it } from 'vitest';
+import { splitBalancedJournalLinesByDate } from './outrightExpense';
 import { buildPrepaidAssetConsumptionPosting, buildPrepaidAssetDownpaymentPosting, buildPrepaidAssetPurchasePosting, PREPAID_ASSET_CATEGORIES, PREPAID_ASSET_ITEMS } from './prepaidAssets';
 
 describe('prepaid assets', () => {
+  it('splits purchase and dated settlements without repeating the purchased asset', () => {
+    const posting = buildPrepaidAssetPurchasePosting({
+      category: 'supplies', purchasePrice: 1000, purchaseDate: '2026-10-03', paymentMethod: 'combination',
+      organizationPayments: [{ date: '2026-10-04', amount: 300 }],
+      officerPayments: [{ date: '2026-10-05', amount: 200 }], availableCash: 300,
+    });
+    const batches = splitBalancedJournalLinesByDate(posting.lines, '2026-10-03');
+    expect(batches.map(batch => batch.date)).toEqual(['2026-10-03', '2026-10-04', '2026-10-05']);
+    expect(batches.slice(1).flatMap(batch => batch.lines).some(line => line.accountCode === '1285')).toBe(false);
+    expect(batches.every(batch => batch.lines.reduce((sum, line) => sum + line.debit - line.credit, 0) === 0)).toBe(true);
+    expect(posting.payable).toBe(500);
+  });
   it('keeps document items mapped to their allowed categories', () => {
     expect(PREPAID_ASSET_ITEMS.Plaques).toEqual(['awards', 'supplies']);
     expect(PREPAID_ASSET_ITEMS.Wifi).toBeUndefined();

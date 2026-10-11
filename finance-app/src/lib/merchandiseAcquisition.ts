@@ -64,6 +64,17 @@ export interface MerchandisePrepaymentTotal {
 
 const cents = (value: number): number => Math.round(value * 100) / 100;
 
+export function resolveMerchandisePurchaseDate(
+  purchaseDate: string,
+  payments: readonly { date: string; amount: number | string }[],
+  fallbackDate: string,
+): string {
+  return purchaseDate || payments
+    .filter(payment => Number(payment.amount) > 0 && payment.date)
+    .map(payment => payment.date)
+    .sort()[0] || fallbackDate;
+}
+
 function requireNonNegative(label: string, value: number): number {
   if (!Number.isFinite(value) || value < 0) throw new Error(`${label} cannot be negative.`);
   return cents(value);

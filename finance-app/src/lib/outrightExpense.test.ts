@@ -1,5 +1,35 @@
 import { describe, expect, it } from 'vitest';
-import { buildOutrightExpensePosting, splitBalancedJournalLinesByDate } from './outrightExpense';
+import { buildOutrightExpensePosting, selectExpensePaymentRows, splitBalancedJournalLinesByDate } from './outrightExpense';
+
+describe('selectExpensePaymentRows', () => {
+  const rows = {
+    organizationPayments: [{ date: '', amount: 100 }],
+    officerPayments: [{ date: '', amount: 250 }],
+    advancePayments: [{ date: '', amount: 50 }],
+  };
+
+  it('reproduces stale hidden payments and clears them when switching to personal money', () => {
+    const input = { expenseAccountCode: '5030', totalAmount: 250, paymentMethod: 'officer-personal' as const, transactionDate: '2026-10-11', ...rows };
+    expect(() => buildOutrightExpensePosting(input)).toThrow('Only enter payments for the selected payment method.');
+    const posting = buildOutrightExpensePosting({ ...input, ...selectExpensePaymentRows('officer-personal', rows) });
+    expect(posting.lines).toEqual([
+      { accountCode: '5030', debit: 250, credit: 0, date: '2026-10-11' },
+      { accountCode: '2050', debit: 0, credit: 250, date: '2026-10-11' },
+    ]);
+    expect(rows.organizationPayments).toHaveLength(1);
+  });
+
+  it.each([
+    ['organization-funds', 1, 0, 0],
+    ['officer-personal', 0, 1, 0],
+    ['officer-advance', 0, 0, 1],
+    ['combination', 1, 1, 1],
+    ['not-yet-paid', 0, 0, 0],
+  ] as const)('retains only sources selected by %s', (method, organization, officer, advance) => {
+    const selected = selectExpensePaymentRows(method, rows);
+    expect([selected.organizationPayments.length, selected.officerPayments.length, selected.advancePayments.length]).toEqual([organization, officer, advance]);
+  });
+});
 
 describe('buildOutrightExpensePosting', () => {
   it('posts a split expense and leaves the unpaid amount due to the supplier', () => {
@@ -87,6 +117,13 @@ describe('buildOutrightExpensePosting', () => {
 });
 
 describe('splitBalancedJournalLinesByDate', () => {
+  it('keeps independently balanced collections separate on the same date', () => {
+    const first = [{ accountCode: '1010', debit: 100, credit: 0 }, { accountCode: '1300', debit: 0, credit: 100 }];
+    const second = [{ accountCode: '1010', debit: 200, credit: 0 }, { accountCode: '1300', debit: 0, credit: 200 }];
+    expect(splitBalancedJournalLinesByDate([...first, ...second], '2026-01-01')).toEqual([
+      { date: '2026-01-01', lines: first }, { date: '2026-01-01', lines: second },
+    ]);
+  });
   it('returns a separate balanced journal batch for each date', () => {
     const batches = splitBalancedJournalLinesByDate([
       { accountCode: '5030', debit: 100, credit: 0, date: '2026-01-01' },

@@ -41,6 +41,11 @@ const isPurchaseAssetCode = (code: string): boolean => {
     || numericCode === 1650 || (numericCode >= 1651 && numericCode <= 1653);
 };
 
+export function isDepreciationPickerTypeVisible(description: string): boolean {
+  return description !== 'Depreciation Expense - Equipment'
+    && !/^Depreciation Expense - Furniture & Fixtures \((Chairs|Cabinet|Tables|Desks)\)$/.test(description);
+}
+
 export function categorizeTransactionRule(rule: Pick<ClassificationRule, 'debitAccountCode' | 'creditAccountCode' | 'description'>): Exclude<TransactionCategoryId, 'activity-fees'> {
   const description = rule.description.toLowerCase();
 

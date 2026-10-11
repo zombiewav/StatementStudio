@@ -13,7 +13,8 @@ import {
   PrepaidAssetPaymentMethod,
 } from '../lib/prepaidAssets';
 import { DatedAmountRecord, TransactionDraft } from '../types';
-import { reportingPeriodBounds } from '../lib/reportingPeriod';
+import { isDateWithinReportingPeriod, reportingPeriodBounds } from '../lib/reportingPeriod';
+import { splitBalancedJournalLinesByDate } from '../lib/outrightExpense';
 
 type Mode = 'purchase' | 'consumption' | 'downpayment';
 const GENERAL_FUND = 'General Fund Operations';
@@ -149,6 +150,8 @@ export function PrepaidAssetEntry({ draftToResume = null, onDraftResumed, onDraf
   const submit = (event: React.FormEvent) => {
     event.preventDefault(); setError(''); setMessage('');
     if (!settings.semester || !settings.reportingYear) return setError('Set the organization Semester and Year before posting.');
+    const semester = settings.semester;
+    const reportingYear = settings.reportingYear;
     if (mode !== 'consumption' && !date) return setError('Enter the transaction date.');
     try {
       if (mode === 'consumption') {
@@ -179,9 +182,22 @@ export function PrepaidAssetEntry({ draftToResume = null, onDraftResumed, onDraf
           const needsOfficer = paymentMethod === 'officer-personal' || paymentMethod === 'officer-advance' || paymentMethod === 'combination';
           if (needsOfficer && !officer.trim()) throw new Error('Select or enter the accountable officer.');
           const posting = buildPrepaidAssetPurchasePosting({ category, purchasePrice: value, purchaseDate: date, paymentMethod, organizationPayments, officerPayments, advancePayments, downpaymentAmount: selectedDownpayment?.remaining || 0, availableCash, availableAdvance });
-          addJournalEntry(date, `Purchase of ${item}`, GENERAL_FUND, posting.lines, purpose === 'event' ? eventName : undefined, undefined, {
+          const batches = splitBalancedJournalLinesByDate(posting.lines, date);
+          const purchaseBatch = batches.find(batch => batch.lines.some(line => line.accountCode === config?.assetCode && line.debit > 0));
+          if (!purchaseBatch) throw new Error('The prepaid-asset purchase batch is missing.');
+          if (batches.some(batch => !isDateWithinReportingPeriod(batch.date, semester, reportingYear))) {
+            throw new Error('All payment dates must be within the active reporting period.');
+          }
+          const purchase = addJournalEntry(purchaseBatch.date, `Purchase of ${item}`, GENERAL_FUND, purchaseBatch.lines, purpose === 'event' ? eventName : undefined, undefined, {
             transactionType: 'Purchase of Prepaid Assets', details: { eventRelated: purpose === 'event', receiptAttachmentIds: [], prepaidAssetCategory: category, prepaidAssetItem: item, prepaidAssetQuantity: quantity ? money(quantity) : undefined, prepaidAssetPurchasePrice: value, prepaidAssetPaymentMethod: paymentMethod, prepaidAssetExpenseAccountCode: config?.expenseCode, prepaidAssetDownpaymentEntryId: selectedDownpayment?.id, prepaidAssetDownpaymentAmount: selectedDownpayment?.remaining, prepaidAssetPayableAmount: posting.payable, prepaidAssetPurpose: purpose, counterpartyName: officer.trim() || item },
           });
+          batches.filter(batch => batch !== purchaseBatch).forEach((batch, index) => addJournalEntry(
+            batch.date, `Payment for ${item} - Batch ${index + 2}`, GENERAL_FUND, batch.lines,
+            purpose === 'event' ? eventName : undefined, purchase.id, {
+              transactionType: 'Prepaid Asset Payment Batch',
+              details: { eventRelated: purpose === 'event', receiptAttachmentIds: [], counterpartyName: officer.trim() || item },
+            },
+          ));
         }
       }
       setMessage('Prepaid-asset transaction posted successfully.');

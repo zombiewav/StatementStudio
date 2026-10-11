@@ -7,7 +7,7 @@
 // Pure, framework-free module, same pattern as journalEngine.ts and
 // activitiesBreakdown.ts: takes JournalEntry[]/Account[] in, plain values
 // out, independently testable.
-import { Account, JournalEntry, JournalLine } from '../types';
+import { Account, ClosingRecord, JournalEntry, JournalLine } from '../types';
 import { customerOrderFinalizationIssues, customerOrderState } from './customerOrders';
 import { PREPAID_ASSET_ACCOUNT_CODES } from './prepaidAssets';
 
@@ -54,6 +54,20 @@ export interface PendingObligation {
 
 const EPSILON = 0.005;
 
+export function isJournalEntryEditLocked(entry: JournalEntry, closings: ClosingRecord[]): boolean {
+  if (entry.reversalOfEntryId || entry.reversedByEntryId || entry.transactionDetails?.carriedForward ||
+    entry.transactionDetails?.reviewFinalized || entry.description.startsWith('Closing Entries')) return true;
+  return closings.some(record =>
+    [record.journalEntryId, record.revenueClosingEntryId, record.expenseClosingEntryId, record.incomeSummaryClosingEntryId].includes(entry.id) ||
+    (record.completed !== false && entry.date <= record.closingDate)
+  );
+}
+
+/** Acquisition supplier payments are entered in the acquisition workflow. */
+export function isReviewSettlementAvailable(accountCode: ObligationAccountCode, sourceEntry?: JournalEntry): boolean {
+  return !(accountCode === '2020' && sourceEntry?.lines.some(line => line.accountCode === '1700' && line.debit > 0));
+}
+
 function rootReviewEntryId(entry: JournalEntry, entries: JournalEntry[]): string {
   let current = entry;
   const seen = new Set<string>();
@@ -93,6 +107,11 @@ export function computePendingObligations(entries: JournalEntry[], accounts: Acc
     const obligationCodesInEntry = [...new Set(entry.lines.map(line => line.accountCode)
       .filter(accountCode => OBLIGATION_ACCOUNT_CODES.includes(accountCode as ObligationAccountCode)))] as ObligationAccountCode[];
     for (const accountCode of obligationCodesInEntry) {
+      // Standalone officer payments are complete transactions. Keep the same
+      // accounts reviewable when they arise from purchases or expenses.
+      const officerTransactionType = entry.transactionType || entry.description;
+      if ((accountCode === '1250' || accountCode === '2050') &&
+        ['Advances to Officers', 'Reimbursement to Officer', 'Reimbursement to Officers'].includes(officerTransactionType)) continue;
       if (PREPAID_ASSET_ACCOUNT_CODES.includes(accountCode) && currentReportingPeriod && entry.transactionDetails?.prepaidSemesterFinalized === currentReportingPeriod) continue;
       const account = accounts.find(a => a.code === accountCode);
       if (!account) continue;
