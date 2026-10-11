@@ -45,7 +45,9 @@ function NavActionButton({
 
 export function Navbar({ onMenuToggle, searchTerm, setSearchTerm, onSearchSubmit }: NavbarProps): React.ReactElement {
   const navigate = useNavigate();
-  const { settings, auditLogs, reportingPeriodWorkspaces, switchReportingPeriod } = useFinance();
+  const { settings, auditLogs, reportingPeriodWorkspaces, switchReportingPeriod, flushWorkspace } = useFinance();
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState('');
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false);
   const [showFiscalYearDropdown, setShowFiscalYearDropdown] = useState(false);
   const fiscalYearDropdownRef = useRef<HTMLDivElement>(null);
@@ -214,14 +216,29 @@ export function Navbar({ onMenuToggle, searchTerm, setSearchTerm, onSearchSubmit
         <NavActionButton
           variant="ghost"
           onClick={async () => {
-            await supabase.auth.signOut();
-            navigate('/login');
+            if (loggingOut) return;
+            setLoggingOut(true);
+            setLogoutError('');
+            try {
+              if (!await flushWorkspace()) {
+                setLogoutError('Logout paused because your changes could not be saved. Retry saving or export a backup.');
+                return;
+              }
+              const { error } = await supabase.auth.signOut();
+              if (error) throw error;
+              navigate('/login');
+            } catch (error) {
+              setLogoutError(error instanceof Error ? error.message : 'Could not log out. Try again.');
+            } finally {
+              setLoggingOut(false);
+            }
           }}
           ariaLabel="Logout"
         >
           <LogOut className="w-3.5 h-3.5" />
-          <span>Logout</span>
+          <span>{loggingOut ? 'Saving before logout…' : 'Logout'}</span>
         </NavActionButton>
+        {logoutError && <p role="alert" className="max-w-64 text-xs text-rose-700 dark:text-rose-300">{logoutError}</p>}
 
         {/* Notifications Dropdown */}
         <div className="relative">

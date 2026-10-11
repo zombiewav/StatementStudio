@@ -285,17 +285,6 @@ export function Settings(): React.ReactElement {
       currencySymbol: symbol
     });
 
-    // The login screen reads the organization's name from its own
-    // `orgAccount` record (outside FinanceContext, like the password), so a
-    // rename here has to be mirrored there or Login would keep showing the
-    // old name.
-    const rawOrgAccount = localStorage.getItem('orgAccount');
-    if (rawOrgAccount) {
-      const orgAccount = JSON.parse(rawOrgAccount);
-      orgAccount.organizationName = orgName;
-      localStorage.setItem('orgAccount', JSON.stringify(orgAccount));
-    }
-
     alert('General preferences updated successfully.');
   };
 
@@ -458,7 +447,7 @@ export function Settings(): React.ReactElement {
               <Database className="w-4.5 h-4.5 text-blue-900 dark:text-blue-400" /> Data Backup
             </h3>
             <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
-              Everything here is stored only in this browser. Export a backup regularly and keep it somewhere safe — clearing browser data or switching devices will otherwise lose everything.
+              Your workspace is saved to your signed-in account, with a recovery copy in this browser. Check the save status before leaving, and export a backup regularly. Unsaved browser changes may be lost if browser data is cleared.
             </p>
 
             {restoreError && (

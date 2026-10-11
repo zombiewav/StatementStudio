@@ -65,9 +65,6 @@ const UNRESTRICTED_REVENUE_CODE = '4030';
 const MEMBERSHIP_DUES_RECEIVABLE_CODE = '1300';
 const MERCHANDISE_ITEM_OPTIONS = ['Lanyard', 'Pins', 'Tote Bag', 'Mug', 'Shirt', 'Stickers', 'Others'] as const;
 const sumDatedAmounts = (rows: DatedAmountInputRow[]): number => rows.reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
-const MERCHANDISE_TYPES_HIDDEN_FROM_PICKER = new Set([
-  'Downpayment for Pre-ordered Merchandise',
-]);
 const MISC_TYPES_HIDDEN_FROM_PICKER = new Set([
   'Bank Loan Capital Funding', 'Client Consulting Services', 'Customer Invoice Billed',
   'Customer Milestone Invoice', 'Professional Services Rendered', 'Public Funding Grant Receipt',
@@ -298,7 +295,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     return Array.from(new Set(
       classificationRules
         .filter(rule => categorizeTransactionRule(rule) === selectedCategory && isRuleAvailable(rule)
-          && !(selectedCategory === 'merchandise' && MERCHANDISE_TYPES_HIDDEN_FROM_PICKER.has(rule.description))
           && !(selectedCategory === 'other' && MISC_TYPES_HIDDEN_FROM_PICKER.has(rule.description))
           && (selectedCategory !== 'ppe-transactions' || rule.description === 'Purchase Chairs' || rule.description.toLowerCase().startsWith('purchase of ')))
         .map(rule => rule.description)
@@ -1405,7 +1401,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                   .map(rule => rule.description),
               ]).size
               : new Set(classificationRules.filter(rule => categorizeTransactionRule(rule) === category.id
-                && !(category.id === 'merchandise' && MERCHANDISE_TYPES_HIDDEN_FROM_PICKER.has(rule.description))
                 && !(category.id === 'other' && MISC_TYPES_HIDDEN_FROM_PICKER.has(rule.description))
                 && (category.id !== 'ppe-transactions' || rule.description === 'Purchase Chairs' || rule.description.toLowerCase().startsWith('purchase of '))
                 && (category.id !== 'expense-transactions' || isRuleAvailable(rule)))

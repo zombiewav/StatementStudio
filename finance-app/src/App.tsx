@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useNavigate } from 'react-router';
 import { FinanceProvider, useFinance } from './context/FinanceContext';
 import { Sidebar } from './components/Sidebar';
 import { Navbar } from './components/Navbar';
+import { WorkspaceSyncStatus } from './components/WorkspaceSyncStatus';
 import { Dashboard } from './pages/Dashboard';
 import { Transactions } from './pages/Transactions';
 import { TransactionHistory } from './pages/TransactionHistory';
@@ -100,6 +101,7 @@ function DashboardLayout() {
         />
 
         {/* Scrollable Content Container */}
+        <WorkspaceSyncStatus />
         <main className="app-shell flex-1 overflow-y-auto px-4 py-4 md:px-6 md:py-5 z-10 custom-scrollbar select-none">
           <div className="max-w-[1520px] mx-auto pb-10">
             {renderActivePage()}

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useMemo, useEffect } from 'react';
+import React, { createContext, useContext, useState, useMemo, useEffect, useCallback } from 'react';
 import {
   Account,
   JournalEntry,
@@ -27,8 +27,7 @@ import { computeClosingStageLines, findFiscalCloseBlockers } from '../lib/closin
 import { linkReceiptIdsToEntry } from '../lib/receiptAttachments';
 import { getEffectiveClassificationRules, validateCustomTransactionRule } from '../lib/customTransactionRules';
 import { ActivityFeeFollowUp, ActivityFeeSchedule, buildActivityFeeFollowUp, buildActivityFeeReceivableCollections, buildInitialActivityFeeSchedule, buildScheduledActivityFeeRecognition } from '../lib/activityFees';
-import { useAuth } from './AuthContext';
-import { supabase } from '../lib/supabase';
+import { useWorkspaceSync } from '../hooks/useWorkspaceSync';
 import { carryForwardCustomerOrders, customerOrderFinalizationIssues, customerOrderReversalBlock } from '../lib/customerOrders';
 import { isDateWithinReportingPeriod, reportingPeriodBounds } from '../lib/reportingPeriod';
 
@@ -815,6 +814,17 @@ const INITIAL_LOGS: AuditLog[] = [
 interface FinanceContextType {
   workspaceStatus: 'idle' | 'loading' | 'ready' | 'error';
   workspaceError: string | null;
+  workspaceSaveStatus: 'saved' | 'saving' | 'error' | 'conflict';
+  workspaceSaveError: string | null;
+  workspaceLocalError: string | null;
+  hasWorkspaceServerCopy: boolean;
+  flushWorkspace: () => Promise<boolean>;
+  retryWorkspaceLoad: () => void;
+  downloadLocalBackup: () => void;
+  downloadServerBackup: () => void;
+  downloadLegacyBackup: () => void;
+  hasLegacyBackup: boolean;
+  resolveWorkspaceConflict: (choice: 'local' | 'remote') => Promise<void>;
   accounts: Account[];
   journalEntries: JournalEntry[];
   projects: Project[];
@@ -893,170 +903,39 @@ interface FinanceContextType {
   restoreBackupData: (payload: BackupPayload) => void;
 }
 
+function createEmptyWorkspace(organizationName: string): BackupPayload {
+  return {
+    schemaVersion: 1, exportedAt: new Date().toISOString(), organizationName,
+    accounts: INITIAL_ACCOUNTS.filter(account => !RETIRED_ACCOUNT_CODES.has(account.code)),
+    journalEntries: [], projects: DEFAULT_PROJECTS, auditLogs: INITIAL_LOGS,
+    settings: { fiscalYear: 'SY 2026-2027', organizationName, currencySymbol: '₱', currencyCode: 'PHP' },
+    closedFiscalYears: [], receiptAttachments: [], customClassificationRules: [],
+    activityFeeRecords: [], draftTransactions: [], financialStatementHistory: [], reportingPeriodWorkspaces: [],
+  };
+}
+
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
 
 export function FinanceProvider({ children }: { children: React.ReactNode }) {
-  const { user, loading: authLoading } = useAuth();
-  const [workspaceStatus, setWorkspaceStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
-  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
-  const [accounts, setAccounts] = useState<Account[]>(() => {
-    const local = localStorage.getItem('ss_accounts');
-    if (!local) return INITIAL_ACCOUNTS;
-
-    // Backfill any default accounts (e.g. newly added ones like Cash in
-    // Bank) that are missing from data already saved in this browser.
-    // Additive only — never overwrites or removes an account the user
-    // already has, so their own edits, custom accounts, and balances
-    // (driven by journalEntries, saved separately) are untouched.
-    const saved: Account[] = (JSON.parse(local) as Account[]).filter(account => !RETIRED_ACCOUNT_CODES.has(account.code)).map(account => {
-      if (account.code === '1270') return { ...account, name: 'Advances to Suppliers', description: 'Downpayments and advances made to suppliers before related goods, services, or other assets are received' };
-      if (account.code === '1360') return { ...account, name: 'Accounts Receivable - Suppliers', description: 'Payments made to suppliers in excess of the related merchandise, service, or asset cost' };
-      if (account.code === '2020') return { ...account, name: 'Accounts Payable - Merchandise', description: 'Unpaid cost of merchandise acquired for resale' };
-      if (account.code === '4035' && account.name === 'Contributions Revenue - Restricted') return { ...account, name: 'Contributions Revenue - Temporarily Restricted' };
-      if (account.code === '1200' && account.name === 'Receivables') return { ...account, name: 'Accounts Receivable', description: 'Amounts earned or billed but not yet collected from customers, sponsors, or partners' };
-      if (account.code === '2110' && account.name === 'Deferred Activity Fees') return { ...account, name: 'Unearned Activity Fees', description: 'Activity or event fees collected before the event date' };
-      const workingPaperExpense = INITIAL_ACCOUNTS.find(defaultAccount => defaultAccount.code === account.code && ['1350', '2010', '5050', '5070', '5080', '5120', '5150', '5160', '5230'].includes(account.code));
-      if (workingPaperExpense) return { ...account, name: workingPaperExpense.name, description: workingPaperExpense.description };
-      return account;
-    });
-    const savedCodes = new Set(saved.map(a => a.code));
-    const missingDefaults = INITIAL_ACCOUNTS.filter(a => !savedCodes.has(a.code));
-    return missingDefaults.length > 0
-      ? [...saved, ...missingDefaults].sort((a, b) => a.code.localeCompare(b.code))
-      : saved;
-  });
-
-  // New accounts start with an empty ledger, not the fabricated demo
-  // transaction history — INITIAL_JOURNALS still exists and is used, but
-  // only as the explicit, opt-in payload for loadSampleData() below.
-  const [journalEntries, setJournalEntries] = useState<JournalEntry[]>(() => {
-    const local = localStorage.getItem('ss_journals');
-    return local ? migrateRetiredAccountLines(JSON.parse(local) as JournalEntry[]) : [];
-  });
-
-  const [projects, setProjects] = useState<Project[]>(() => {
-    const local = localStorage.getItem('ss_projects');
-    return local ? JSON.parse(local) : DEFAULT_PROJECTS;
-  });
-
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => {
-    const local = localStorage.getItem('ss_audit_logs');
-    return local ? JSON.parse(local) : INITIAL_LOGS;
-  });
-
-  const [settings, setSettings] = useState<AppSettings>(() => {
-    const local = localStorage.getItem('ss_settings');
-    if (local) {
-      const saved = JSON.parse(local) as AppSettings;
-      if (saved.fiscalYear.startsWith('FY ')) {
-        const existingRange = saved.fiscalYear.match(/FY\s+(\d{4})-(\d{4})(.*)/);
-        const singleYear = saved.fiscalYear.match(/^FY\s+(\d{4})$/);
-        if (existingRange) saved.fiscalYear = `SY ${existingRange[1]}-${existingRange[2]}${existingRange[3]}`;
-        else if (singleYear) saved.fiscalYear = `SY ${singleYear[1]}-${Number(singleYear[1]) + 1}`;
-      }
-      return saved;
-    }
-    return {
-      fiscalYear: 'SY 2026-2027',
-      organizationName: 'Bicol University',
-      currencySymbol: '₱',
-      currencyCode: 'PHP',
-    };
-  });
-
-  const [customClassificationRules, setCustomClassificationRules] = useState<CustomClassificationRule[]>(() => {
-    const local = localStorage.getItem('ss_custom_rules');
-    return local ? JSON.parse(local) : [];
-  });
+  // Unowned legacy keys are preserved for explicit recovery, never used as
+  // the starting books for a newly signed-in account.
+  const [accounts, setAccounts] = useState<Account[]>(INITIAL_ACCOUNTS);
+  const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
+  const [projects, setProjects] = useState<Project[]>(DEFAULT_PROJECTS);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(INITIAL_LOGS);
+  const [settings, setSettings] = useState<AppSettings>(() => createEmptyWorkspace('My Organization').settings);
+  const [customClassificationRules, setCustomClassificationRules] = useState<CustomClassificationRule[]>([]);
   const classificationRules = useMemo<ClassificationRuleWithWorkflow[]>(
     () => getEffectiveClassificationRules(DEFAULT_RULES, customClassificationRules),
     [customClassificationRules]
   );
-
-  const [closedFiscalYears, setClosedFiscalYears] = useState<ClosingRecord[]>(() => {
-    const local = localStorage.getItem('ss_closings');
-    return local ? (JSON.parse(local) as ClosingRecord[]).map(record => record.completed === undefined && record.journalEntryId ? { ...record, completed: true } : record) : [];
-  });
-
-  const [receiptAttachments, setReceiptAttachments] = useState<ReceiptAttachment[]>(() => {
-    const local = localStorage.getItem('ss_receipts');
-    return local ? JSON.parse(local) : [];
-  });
-
-  const [activityFeeRecords, setActivityFeeRecords] = useState<ActivityFeeRecord[]>(() => {
-    const local = localStorage.getItem('ss_activity_fees');
-    return local ? JSON.parse(local) : [];
-  });
-
-  const [draftTransactions, setDraftTransactions] = useState<TransactionDraft[]>(() => {
-    const local = localStorage.getItem('ss_drafts');
-    return local ? JSON.parse(local) : [];
-  });
-
-  const [financialStatementHistory, setFinancialStatementHistory] = useState<FinancialStatementHistoryRecord[]>(() => {
-    const local = localStorage.getItem('ss_fs_history');
-    return local ? JSON.parse(local) : [];
-  });
-
-  const [reportingPeriodWorkspaces, setReportingPeriodWorkspaces] = useState<ReportingPeriodWorkspace[]>(() => {
-    const local = localStorage.getItem('ss_period_workspaces');
-    return local ? migrateReportingPeriodWorkspaces(JSON.parse(local) as ReportingPeriodWorkspace[]) : [];
-  });
-
-  const [openingBalances, setOpeningBalances] = useState<OpeningBalances>(() => {
-    if (!settings.semester || !settings.reportingYear) return {};
-    const schoolYear = `${settings.reportingYear}-${settings.reportingYear + 1}`;
-    return migrateRetiredOpeningBalances(reportingPeriodWorkspaces.find(workspace => workspace.key === `${schoolYear}::${settings.semester}`)?.openingBalances || {});
-  });
-
-  // Sync to LocalStorage
-  useEffect(() => {
-    localStorage.setItem('ss_accounts', JSON.stringify(accounts));
-  }, [accounts]);
-
-  useEffect(() => {
-    localStorage.setItem('ss_journals', JSON.stringify(journalEntries));
-  }, [journalEntries]);
-
-  useEffect(() => {
-    localStorage.setItem('ss_projects', JSON.stringify(projects));
-  }, [projects]);
-
-  useEffect(() => {
-    localStorage.setItem('ss_audit_logs', JSON.stringify(auditLogs));
-  }, [auditLogs]);
-
-  useEffect(() => {
-    localStorage.setItem('ss_settings', JSON.stringify(settings));
-  }, [settings]);
-
-  useEffect(() => {
-    localStorage.setItem('ss_closings', JSON.stringify(closedFiscalYears));
-  }, [closedFiscalYears]);
-
-  useEffect(() => {
-    localStorage.setItem('ss_receipts', JSON.stringify(receiptAttachments));
-  }, [receiptAttachments]);
-
-  useEffect(() => {
-    localStorage.setItem('ss_custom_rules', JSON.stringify(customClassificationRules));
-  }, [customClassificationRules]);
-
-  useEffect(() => {
-    localStorage.setItem('ss_activity_fees', JSON.stringify(activityFeeRecords));
-  }, [activityFeeRecords]);
-
-  useEffect(() => {
-    localStorage.setItem('ss_drafts', JSON.stringify(draftTransactions));
-  }, [draftTransactions]);
-
-  useEffect(() => {
-    localStorage.setItem('ss_fs_history', JSON.stringify(financialStatementHistory));
-  }, [financialStatementHistory]);
-
-  useEffect(() => {
-    localStorage.setItem('ss_period_workspaces', JSON.stringify(reportingPeriodWorkspaces));
-  }, [reportingPeriodWorkspaces]);
+  const [closedFiscalYears, setClosedFiscalYears] = useState<ClosingRecord[]>([]);
+  const [receiptAttachments, setReceiptAttachments] = useState<ReceiptAttachment[]>([]);
+  const [activityFeeRecords, setActivityFeeRecords] = useState<ActivityFeeRecord[]>([]);
+  const [draftTransactions, setDraftTransactions] = useState<TransactionDraft[]>([]);
+  const [financialStatementHistory, setFinancialStatementHistory] = useState<FinancialStatementHistoryRecord[]>([]);
+  const [reportingPeriodWorkspaces, setReportingPeriodWorkspaces] = useState<ReportingPeriodWorkspace[]>([]);
+  const [openingBalances, setOpeningBalances] = useState<OpeningBalances>({});
 
   const workspaceSnapshot = useMemo<BackupPayload>(() => ({
     schemaVersion: 1,
@@ -1076,103 +955,39 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     reportingPeriodWorkspaces,
   }), [accounts, journalEntries, projects, auditLogs, settings, closedFiscalYears, receiptAttachments, customClassificationRules, activityFeeRecords, draftTransactions, financialStatementHistory, reportingPeriodWorkspaces]);
 
-  // A Supabase workspace is the durable source of data. Local storage remains
-  // a browser cache and supplies a one-time import for the former local-only app.
-  useEffect(() => {
-    if (authLoading) return;
-    if (!user) {
-      setWorkspaceStatus('idle');
-      setWorkspaceError(null);
-      return;
+  const applyWorkspace = useCallback((saved: BackupPayload) => {
+    const activeSavedAccounts = saved.accounts.filter(account => !RETIRED_ACCOUNT_CODES.has(account.code)).map(account => {
+      const current = INITIAL_ACCOUNTS.find(defaultAccount => defaultAccount.code === account.code && ['1270', '1360', '2010', '2020'].includes(account.code));
+      return current ? { ...account, name: current.name, description: current.description } : account;
+    });
+    setAccounts([...activeSavedAccounts, ...INITIAL_ACCOUNTS.filter(a => BACKFILLED_DEFAULT_ACCOUNT_CODES.has(a.code) && !activeSavedAccounts.some(existing => existing.code === a.code))]);
+    setJournalEntries(migrateRetiredAccountLines(saved.journalEntries));
+    setProjects(saved.projects || []);
+    setAuditLogs(saved.auditLogs || []);
+    setSettings(saved.settings);
+    setClosedFiscalYears(saved.closedFiscalYears || []);
+    setReceiptAttachments(saved.receiptAttachments || []);
+    setCustomClassificationRules(saved.customClassificationRules || []);
+    setActivityFeeRecords(saved.activityFeeRecords || []);
+    setDraftTransactions(saved.draftTransactions || []);
+    setFinancialStatementHistory(saved.financialStatementHistory || []);
+    const savedWorkspaces = migrateReportingPeriodWorkspaces(saved.reportingPeriodWorkspaces || []);
+    setReportingPeriodWorkspaces(savedWorkspaces);
+    if (saved.settings.semester && saved.settings.reportingYear) {
+      const schoolYear = `${saved.settings.reportingYear}-${saved.settings.reportingYear + 1}`;
+      setOpeningBalances(savedWorkspaces.find(workspace => workspace.key === `${schoolYear}::${saved.settings.semester}`)?.openingBalances || {});
+    } else {
+      setOpeningBalances({});
     }
-
-    let active = true;
-    setWorkspaceStatus('loading');
-    setWorkspaceError(null);
-
-    const loadWorkspace = async () => {
-      const { data, error } = await supabase
-        .from('user_workspaces')
-        .select('data')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (!active) return;
-      if (error) {
-        setWorkspaceStatus('error');
-        setWorkspaceError(error.message);
-        return;
-      }
-
-      if (data) {
-        const saved = data.data as unknown as BackupPayload;
-        const validation = validateBackupPayload(saved);
-        if (!validation.valid) {
-          setWorkspaceStatus('error');
-          setWorkspaceError('Your saved workspace could not be read safely.');
-          return;
-        }
-        const activeSavedAccounts = saved.accounts.filter(account => !RETIRED_ACCOUNT_CODES.has(account.code)).map(account => {
-          const current = INITIAL_ACCOUNTS.find(defaultAccount => defaultAccount.code === account.code && ['1270', '1360', '2010', '2020'].includes(account.code));
-          return current ? { ...account, name: current.name, description: current.description } : account;
-        });
-        setAccounts([...activeSavedAccounts, ...INITIAL_ACCOUNTS.filter(a => BACKFILLED_DEFAULT_ACCOUNT_CODES.has(a.code) && !activeSavedAccounts.some(existing => existing.code === a.code))]);
-        setJournalEntries(migrateRetiredAccountLines(saved.journalEntries));
-        setProjects(saved.projects || []);
-        setAuditLogs(saved.auditLogs || []);
-        setSettings(saved.settings);
-        setClosedFiscalYears(saved.closedFiscalYears || []);
-        setReceiptAttachments(saved.receiptAttachments || []);
-        setCustomClassificationRules(saved.customClassificationRules || []);
-        setActivityFeeRecords(saved.activityFeeRecords || []);
-        setDraftTransactions(saved.draftTransactions || []);
-        setFinancialStatementHistory(saved.financialStatementHistory || []);
-        const savedWorkspaces = migrateReportingPeriodWorkspaces(saved.reportingPeriodWorkspaces || []);
-        setReportingPeriodWorkspaces(savedWorkspaces);
-        if (saved.settings.semester && saved.settings.reportingYear) {
-          const schoolYear = `${saved.settings.reportingYear}-${saved.settings.reportingYear + 1}`;
-          setOpeningBalances(savedWorkspaces.find(workspace => workspace.key === `${schoolYear}::${saved.settings.semester}`)?.openingBalances || {});
-        } else {
-          setOpeningBalances({});
-        }
-      } else {
-        const legacyWorkspaceExists = Boolean(localStorage.getItem('orgAccount'));
-        const organizationName = typeof user.user_metadata.organization_name === 'string'
-          ? user.user_metadata.organization_name
-          : workspaceSnapshot.organizationName;
-        const initialWorkspace = legacyWorkspaceExists
-          ? workspaceSnapshot
-          : { ...workspaceSnapshot, organizationName, settings: { ...workspaceSnapshot.settings, organizationName } };
-        if (!legacyWorkspaceExists) setSettings(previous => ({ ...previous, organizationName }));
-        const { error: createError } = await supabase.from('user_workspaces').insert({ user_id: user.id, data: initialWorkspace });
-        if (createError) {
-          setWorkspaceStatus('error');
-          setWorkspaceError(createError.message);
-          return;
-        }
-      }
-      if (active) setWorkspaceStatus('ready');
-    };
-
-    void loadWorkspace();
-    return () => { active = false; };
-  // The signed-in account decides when a remote workspace must be loaded.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading, user?.id]);
-
-  useEffect(() => {
-    if (!user || workspaceStatus !== 'ready') return;
-    const saveTimer = window.setTimeout(() => {
-      void supabase.from('user_workspaces').upsert({ user_id: user.id, data: workspaceSnapshot, updated_at: new Date().toISOString() });
-    }, 600);
-    return () => window.clearTimeout(saveTimer);
-  }, [user, workspaceStatus, workspaceSnapshot]);
+  }, []);
+  const workspaceSync = useWorkspaceSync(workspaceSnapshot, applyWorkspace, createEmptyWorkspace);
+  const { workspaceStatus } = workspaceSync;
 
   // Keep the active semester's complete editable books mirrored in the
   // workspace archive. Switching semesters therefore behaves like opening
   // another workbook instead of filtering one lifetime ledger.
   useEffect(() => {
-    if (!settings.semester || !settings.reportingYear) return;
+    if (workspaceStatus !== 'ready' || !settings.semester || !settings.reportingYear) return;
     const schoolYear = `${settings.reportingYear}-${settings.reportingYear + 1}`;
     const key = `${schoolYear}::${settings.semester}`;
     const now = new Date().toISOString();
@@ -1197,7 +1012,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         ? previous.map(workspace => workspace.key === key ? snapshot : workspace)
         : [snapshot, ...previous];
     });
-  }, [settings.semester, settings.reportingYear, journalEntries, projects, closedFiscalYears, receiptAttachments, activityFeeRecords, draftTransactions, openingBalances]);
+  }, [workspaceStatus, settings.semester, settings.reportingYear, journalEntries, projects, closedFiscalYears, receiptAttachments, activityFeeRecords, draftTransactions, openingBalances]);
 
   const logAudit = (action: string, details: string) => {
     const newLog: AuditLog = {
@@ -1962,8 +1777,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <FinanceContext.Provider value={{
-      workspaceStatus,
-      workspaceError,
+      ...workspaceSync,
       accounts,
       journalEntries,
       projects,
