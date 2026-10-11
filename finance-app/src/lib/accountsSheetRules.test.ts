@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_RULES, INITIAL_ACCOUNTS } from '../context/FinanceContext';
-import { PREPAID_ASSET_CATEGORIES, PREPAID_ASSET_ITEMS } from './prepaidAssets';
+import { DEFAULT_RULES, INITIAL_ACCOUNTS, restoreSavedAccounts } from '../context/FinanceContext';
+import { PREPAID_ASSET_CATEGORIES, PREPAID_ASSET_ITEMS, prepaidCategoryForAssetAccount } from './prepaidAssets';
 
 describe('Accounts spreadsheet mappings', () => {
   it('adds the shared Event Expense account and routes the event-program entry to cash', () => {
@@ -48,5 +48,29 @@ describe('Accounts spreadsheet mappings', () => {
     expect(INITIAL_ACCOUNTS.find(account => account.code === '1360')?.name).toBe('Accounts Receivable - Suppliers');
     expect(INITIAL_ACCOUNTS.find(account => account.code === '2020')?.name).toBe('Accounts Payable - Merchandise');
     expect(INITIAL_ACCOUNTS.some(account => ['1290', '1340', '1345', '2060'].includes(account.code))).toBe(false);
+  });
+
+  it('keeps Event Expense as the only 5300 account', () => {
+    expect(INITIAL_ACCOUNTS.filter(account => account.code === '5300').map(account => account.name)).toEqual(['Event Expense']);
+    expect(INITIAL_ACCOUNTS.some(account => account.name === 'Professional Fee Expense')).toBe(false);
+  });
+
+  it('links each prepaid asset account to its related expense account', () => {
+    const pairs = [['1280', '5120'], ['1285', '5290'], ['1295', '5020'], ['1298', '5180']];
+    pairs.forEach(([assetCode, expenseCode]) => {
+      const category = prepaidCategoryForAssetAccount(assetCode);
+      expect(category && PREPAID_ASSET_CATEGORIES[category].expenseCode).toBe(expenseCode);
+      expect(INITIAL_ACCOUNTS.find(account => account.code === expenseCode)?.type).toBe('Expenses');
+    });
+    expect(prepaidCategoryForAssetAccount('1260')).toBeUndefined();
+  });
+
+  it('drops a saved Professional Fee Expense row and backfills the prepaid expense accounts', () => {
+    const saved = INITIAL_ACCOUNTS
+      .filter(account => !['5300', '5290', '5120', '5180'].includes(account.code))
+      .concat({ code: '5300', name: 'Professional Fee Expense', type: 'Expenses', normalBalance: 'Debit', description: '', isActive: true });
+    const restored = restoreSavedAccounts(saved);
+    expect(restored.filter(account => account.code === '5300').map(account => account.name)).toEqual(['Event Expense']);
+    ['5120', '5180', '5290'].forEach(code => expect(restored.some(account => account.code === code)).toBe(true));
   });
 });

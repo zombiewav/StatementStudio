@@ -60,8 +60,6 @@ import { isDateWithinReportingPeriod, periodForSemester, reportingPeriodBounds }
 const GENERAL_FUND_PROJECT = 'General Fund Operations';
 // Working paper's Situation 5.1/5.2/5.3 branch: a donor-restricted
 // contribution whose event hasn't happened yet this period.
-const RESTRICTED_REVENUE_CODE = '4035';
-const PERMANENTLY_RESTRICTED_REVENUE_CODE = '4036';
 const UNRESTRICTED_REVENUE_CODE = '4030';
 const MEMBERSHIP_DUES_RECEIVABLE_CODE = '1300';
 const MERCHANDISE_ITEM_OPTIONS = ['Lanyard', 'Pins', 'Tote Bag', 'Mug', 'Shirt', 'Stickers', 'Others'] as const;
@@ -101,8 +99,6 @@ interface TransactionFormSnapshot {
   pendingReceipts: ReceiptAttachmentDraft[];
   fundingSourceId: string;
   counterpartyName: string;
-  restrictionAnswer: '' | 'no' | 'yes' | 'permanent';
-  samePeriodAnswer: '' | 'yes' | 'no';
   contributionPurpose: '' | 'donations' | 'sponsorships';
   membershipCollections: DatedAmountInputRow[];
   membershipRefundStatus: MembershipRefundStatus;
@@ -244,14 +240,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   const [fundingSourceId, setFundingSourceId] = useState<string>(FUNDING_SOURCE_OPTIONS[0].id);
   const [counterpartyName, setCounterpartyName] = useState('');
 
-  // Donation/Restriction branching (working paper Situations 5.1/5.2/5.3):
-  // two mandatory, chained questions, shown only for a cash contribution
-  // (Dr Cash / Cr Contributions Revenue - Unrestricted). The first
-  // ("restricted?") is asked whenever the question applies; the second
-  // ("same period?") only branches out once the first is answered "yes" —
-  // both must be answered before the transaction can post.
-  const [restrictionAnswer, setRestrictionAnswer] = useState<'' | 'no' | 'yes' | 'permanent'>('');
-  const [samePeriodAnswer, setSamePeriodAnswer] = useState<'' | 'yes' | 'no'>('');
   const [contributionPurpose, setContributionPurpose] = useState<'' | 'donations' | 'sponsorships'>('');
 
   const [membershipCollections, setMembershipCollections] = useState<DatedAmountInputRow[]>([
@@ -350,22 +338,11 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   const isMerchandiseAcquisition = selectedCategory === 'merchandise' && debitCode === '1700';
   const isMerchandisePrepayment = selectedCategory === 'merchandise' && debitCode === '1270';
 
-  // Only a cash contribution matched to Contributions Revenue - Unrestricted
-  // can raise the restriction question — a release-from-restriction entry
-  // (which also credits 4030, but debits 4035, not cash) is a different
-  // transaction and must not ask it again.
   const isCashSponsorshipDonation = classificationPreview?.defaultDesc === 'Sponsorships and Donations';
-  const showRestrictionQuestion = !!classificationPreview?.sponsorshipKind && (creditCode === UNRESTRICTED_REVENUE_CODE || isCashSponsorshipDonation);
-  const showSamePeriodQuestion = showRestrictionQuestion && restrictionAnswer === 'yes';
-  const isRestricted = showRestrictionQuestion && restrictionAnswer === 'yes' && samePeriodAnswer === 'no';
-  const isPermanentlyRestricted = showRestrictionQuestion && restrictionAnswer === 'permanent';
+  const isSponsorshipContribution = !!classificationPreview?.sponsorshipKind && (creditCode === UNRESTRICTED_REVENUE_CODE || isCashSponsorshipDonation);
   const isMembershipRefundStatus = classificationPreview?.defaultDesc === 'Excess Membership Fee Collection - Status';
-  const effectiveCreditCode = isPermanentlyRestricted
-    ? PERMANENTLY_RESTRICTED_REVENUE_CODE
-    : isRestricted
-    ? RESTRICTED_REVENUE_CODE
-    : isCashSponsorshipDonation
-      ? contributionPurpose === 'sponsorships' ? '4110' : '4100'
+  const effectiveCreditCode = isCashSponsorshipDonation
+    ? contributionPurpose === 'sponsorships' ? '4110' : '4100'
     : isMembershipRefundStatus && membershipRefundStatus === 'nonrefundable'
       ? '4050'
       : creditCode;
@@ -424,8 +401,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       if (match.requiresAccrualCompletion || (match.debitAccountCode === '1010' && match.creditAccountCode === MEMBERSHIP_DUES_RECEIVABLE_CODE)) {
         setPendingReceipts([]);
       }
-      setRestrictionAnswer('');
-      setSamePeriodAnswer('');
       setMembershipCollections([{ id: `membership-collection-${Date.now()}`, date: '', amount: '' }]);
       setMembershipRefundStatus('current');
       setNotYetUsedAmount('');
@@ -481,8 +456,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       setDebitCode('');
       setCreditCode('');
       setDescription('');
-      setRestrictionAnswer('');
-      setSamePeriodAnswer('');
       setMembershipCollections([{ id: `membership-collection-${Date.now()}`, date: '', amount: '' }]);
       setMembershipRefundStatus('current');
       setNotYetUsedAmount('');
@@ -558,8 +531,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     setPendingReceipts(snapshot.pendingReceipts || []);
     setFundingSourceId(snapshot.fundingSourceId || FUNDING_SOURCE_OPTIONS[0].id);
     setCounterpartyName(snapshot.counterpartyName || '');
-    setRestrictionAnswer(snapshot.restrictionAnswer || '');
-    setSamePeriodAnswer(snapshot.samePeriodAnswer || '');
     setContributionPurpose(snapshot.contributionPurpose || '');
     setMembershipCollections(snapshot.membershipCollections?.length ? snapshot.membershipCollections : [{ id: `membership-collection-${Date.now()}`, date: '', amount: '' }]);
     setMembershipRefundStatus(snapshot.membershipRefundStatus || 'current');
@@ -904,8 +875,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     pendingReceipts,
     fundingSourceId,
     counterpartyName,
-    restrictionAnswer,
-    samePeriodAnswer,
     contributionPurpose,
     membershipCollections,
     membershipRefundStatus,
@@ -1054,16 +1023,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       setErrorMessage('Debit and Credit accounts must be different for double-entry matching.');
       return;
     }
-    if (showRestrictionQuestion && restrictionAnswer === '') {
-      setErrorMessage('Please answer whether the donor imposed a strict restriction for a specific event.');
-      return;
-    }
     if (isCashSponsorshipDonation && contributionPurpose === '') {
       setErrorMessage('Please choose whether the amount received is a Donation or Sponsorship.');
-      return;
-    }
-    if (showSamePeriodQuestion && samePeriodAnswer === '') {
-      setErrorMessage('Please answer: will the event happen in the same reporting period the donation is received?');
       return;
     }
     if ((requiresAccrualCompletion || isPriorMembershipCollection) && membershipPostingResult.error) {
@@ -1207,18 +1168,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               ? merchandiseCollectionOfficer.trim()
               : counterpartyName.trim() || undefined,
             eventRelated: isEventProgramExpense || (isOutrightExpense && expenseEvent === 'yes'),
-            donorRestriction: showRestrictionQuestion
-              ? restrictionAnswer === 'no'
-                ? 'none'
-                : restrictionAnswer === 'permanent'
-                  ? 'permanent'
-                  : samePeriodAnswer === 'yes'
-                  ? 'satisfied-in-period'
-                  : 'temporary'
-              : undefined,
-            restrictionEventPeriod: restrictionAnswer === 'yes'
-              ? samePeriodAnswer === 'yes' ? 'same-period' : 'future'
-              : undefined,
+            donorRestriction: isSponsorshipContribution ? 'none' : undefined,
             membershipUnpaidAmount: requiresAccrualCompletion ? membershipPostingResult.posting?.amountStillReceivable : undefined,
             membershipTotalFees: requiresAccrualCompletion ? amount : undefined,
             membershipPeriodStartDate: requiresAccrualCompletion ? date : undefined,
@@ -1343,8 +1293,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       setAmount(0);
       setIsSmartMatched(false);
       setPurposeIndex(0);
-      setRestrictionAnswer('');
-      setSamePeriodAnswer('');
       setContributionPurpose('');
       setMembershipCollections([{ id: `membership-collection-${Date.now()}`, date: '', amount: '' }]);
       setNotYetUsedAmount('');
@@ -1848,51 +1796,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                   <option value="sponsorships">Sponsorships</option>
                 </select>
                 <p className="mt-1.5 text-[10px] font-medium text-emerald-800 dark:text-emerald-300">The selected purpose determines whether the credit goes to Donations or Sponsorships.</p>
-              </div>
-            )}
-
-            {showRestrictionQuestion && (
-              <div className="sm:col-span-2 space-y-3 p-3.5 bg-amber-50 border border-amber-100 rounded-xl dark:bg-amber-500/10 dark:border-amber-500/20">
-                <div>
-                  <label className="block text-[11px] font-bold text-amber-900 dark:text-amber-300 mb-1.5">Did the donor impose a strict restriction that this sponsorship be used only for a specific event? <span className="text-amber-600">*required</span></label>
-                  <select
-                    value={restrictionAnswer}
-                    onChange={(e) => { setRestrictionAnswer(e.target.value as '' | 'no' | 'yes' | 'permanent'); setSamePeriodAnswer(''); }}
-                    className="w-full bg-white border border-amber-200 text-slate-900 rounded-lg text-xs font-semibold p-2.5 outline-none dark:bg-slate-800 dark:border-amber-500/30 dark:text-slate-100"
-                    required
-                  >
-                    <option value="" disabled>Select an answer…</option>
-                    <option value="no">No</option>
-                    <option value="yes">Yes</option>
-                    <option value="permanent">Yes — permanently restricted</option>
-                  </select>
-                </div>
-
-                {showSamePeriodQuestion && (
-                  <div>
-                    <label className="block text-[11px] font-bold text-amber-900 dark:text-amber-300 mb-1.5">Will the event happen in the same reporting period the donation is received? <span className="text-amber-600">*required</span></label>
-                    <select
-                      value={samePeriodAnswer}
-                      onChange={(e) => setSamePeriodAnswer(e.target.value as '' | 'yes' | 'no')}
-                      className="w-full bg-white border border-amber-200 text-slate-900 rounded-lg text-xs font-semibold p-2.5 outline-none dark:bg-slate-800 dark:border-amber-500/30 dark:text-slate-100"
-                      required
-                    >
-                      <option value="" disabled>Select an answer…</option>
-                      <option value="yes">Yes</option>
-                      <option value="no">No</option>
-                    </select>
-                  </div>
-                )}
-
-                <p className="text-[10px] text-amber-700 dark:text-amber-400 font-medium">
-                  {isPermanentlyRestricted
-                    ? 'Recorded as permanently restricted contribution revenue and closed into Permanently Restricted Fund Balance.'
-                    : isRestricted
-                    ? 'Recorded against Contributions Revenue - Temporarily Restricted. Once the event happens, complete it in REVIEW to reclassify it as Unrestricted.'
-                    : isCashSponsorshipDonation
-                      ? `Recorded against ${contributionPurpose === 'sponsorships' ? 'Sponsorships' : 'Donations'}.`
-                      : 'Recorded against Contributions Revenue - Unrestricted.'}
-                </p>
               </div>
             )}
 

@@ -40,8 +40,24 @@ const GENERAL_FUND_PROJECT = 'General Fund Operations';
 const GENERAL_FUND_BALANCE_CODE = '3010';
 const INCOME_SUMMARY_ACCOUNT_CODE = '3000';
 const RETIRED_ACCOUNT_CODES = new Set(['1290', '1340', '1345', '1710', '1720', '2060']);
+// Professional Fee Expense once shared code 5300 with Event Expense, which made
+// both rows show the same balance. Event Expense is the only 5300 account.
+const isRetiredAccountRow = (account: Account) =>
+  RETIRED_ACCOUNT_CODES.has(account.code) || (account.code === '5300' && account.name === 'Professional Fee Expense');
+
+// Saved Chart of Accounts rows come back as-is, minus retired accounts, with
+// the current wording for renamed accounts and any newer default accounts
+// that an older workspace never had.
+export function restoreSavedAccounts(saved: Account[]): Account[] {
+  const active = saved.filter(account => !isRetiredAccountRow(account)).map(account => {
+    const current = INITIAL_ACCOUNTS.find(defaultAccount => defaultAccount.code === account.code && ['1270', '1360', '2010', '2020'].includes(account.code));
+    return current ? { ...account, name: current.name, description: current.description } : account;
+  });
+  return [...active, ...INITIAL_ACCOUNTS.filter(a => BACKFILLED_DEFAULT_ACCOUNT_CODES.has(a.code) && !active.some(existing => existing.code === a.code))];
+}
 const BACKFILLED_DEFAULT_ACCOUNT_CODES = new Set([
   '1210', '1220', '1230', '1270', '1280', '1285', '1295', '1298', '1330', '1360', '1370',
+  '5020', '5120', '5180', '5290',
   '1501', '1502', '1503', '1504', '1505', '1506', '1507', '1508', '1509', '1510', '1511', '1512', '1513', '1514', '1515', '1516',
   '1651', '1652', '1653', '2020', '2030', '2040', '2061', '2062', '2063', '2064', '2070', '2080', '2140', '2150', '4100', '4110', '5300',
 ]);
@@ -325,7 +341,6 @@ export const INITIAL_ACCOUNTS: Account[] = [
   { code: '5280', name: 'Printing Supplies Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Paper, ink, and other supplies consumed for printing work', isActive: true },
   { code: '5290', name: 'Supplies and Materials Expense', type: 'Expenses', normalBalance: 'Debit', description: 'General supplies and materials consumed outside a specific event', isActive: true },
   { code: '5300', name: 'Event Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Event and program expenses recorded under one account when per-event expense breakdowns are unavailable', isActive: true },
-  { code: '5300', name: 'Professional Fee Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Professional fees paid for specialized services', isActive: true },
   { code: '5310', name: 'Logistics and Venue Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Venue, logistics, and event coordination costs', isActive: true },
   { code: '5320', name: 'Assistance Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Financial or in-kind assistance provided by the organization', isActive: true },
 ];
@@ -961,11 +976,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   }), [accounts, journalEntries, projects, auditLogs, settings, closedFiscalYears, receiptAttachments, customClassificationRules, activityFeeRecords, draftTransactions, financialStatementHistory, reportingPeriodWorkspaces]);
 
   const applyWorkspace = useCallback((saved: BackupPayload) => {
-    const activeSavedAccounts = saved.accounts.filter(account => !RETIRED_ACCOUNT_CODES.has(account.code)).map(account => {
-      const current = INITIAL_ACCOUNTS.find(defaultAccount => defaultAccount.code === account.code && ['1270', '1360', '2010', '2020'].includes(account.code));
-      return current ? { ...account, name: current.name, description: current.description } : account;
-    });
-    setAccounts([...activeSavedAccounts, ...INITIAL_ACCOUNTS.filter(a => BACKFILLED_DEFAULT_ACCOUNT_CODES.has(a.code) && !activeSavedAccounts.some(existing => existing.code === a.code))]);
+    setAccounts(restoreSavedAccounts(saved.accounts));
     setJournalEntries(migrateRetiredAccountLines(saved.journalEntries));
     setProjects(saved.projects || []);
     setAuditLogs(saved.auditLogs || []);
@@ -1746,11 +1757,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       user: settings.organizationName,
     };
 
-    const restoredAccounts = payload.accounts.filter(account => !RETIRED_ACCOUNT_CODES.has(account.code)).map(account => {
-      const current = INITIAL_ACCOUNTS.find(defaultAccount => defaultAccount.code === account.code && ['1270', '1360', '2010', '2020'].includes(account.code));
-      return current ? { ...account, name: current.name, description: current.description } : account;
-    });
-    setAccounts([...restoredAccounts, ...INITIAL_ACCOUNTS.filter(a => BACKFILLED_DEFAULT_ACCOUNT_CODES.has(a.code) && !restoredAccounts.some(existing => existing.code === a.code))]);
+    setAccounts(restoreSavedAccounts(payload.accounts));
     setJournalEntries(migrateRetiredAccountLines(payload.journalEntries));
     setProjects(Array.isArray(payload.projects) ? payload.projects : []);
     setAuditLogs([restoreLogEntry, ...restoredLogs].slice(0, 100));

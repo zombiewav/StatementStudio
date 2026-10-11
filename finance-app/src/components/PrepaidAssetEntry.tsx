@@ -15,6 +15,7 @@ import {
 import { DatedAmountRecord, TransactionDraft } from '../types';
 import { isDateWithinReportingPeriod, reportingPeriodBounds } from '../lib/reportingPeriod';
 import { splitBalancedJournalLinesByDate } from '../lib/outrightExpense';
+import { FinancialPreviewPanels } from './FinancialPreviewPanels';
 
 type Mode = 'purchase' | 'consumption' | 'downpayment';
 const GENERAL_FUND = 'General Fund Operations';
@@ -258,19 +259,7 @@ export function PrepaidAssetEntry({ draftToResume = null, onDraftResumed, onDraf
         <div className="rounded-lg bg-slate-50 p-3 text-[10px] font-semibold text-slate-600 dark:bg-slate-800 sm:col-span-2">Total payments and applied downpayment: {formatCurrency(totalPaid)}{money(amount) > totalPaid && <span className="ml-2 text-amber-700">Unpaid balance: {formatCurrency(money(amount) - totalPaid)} will be recorded in {config ? `${config.payableCode} - ${accounts.find(account => account.code === config.payableCode)?.name || 'the related payable account'}` : 'the related payable account'} and can be settled later under Payables.</span>}{totalPaid > money(amount) && <span className="ml-2 text-blue-700">Excess payment: {formatCurrency(totalPaid - money(amount))} will be recorded as Accounts Receivable - Suppliers.</span>}</div>
       </>}
     </div>}</div>
-    <aside className="h-fit rounded-xl border border-blue-100 bg-blue-50/50 p-4 dark:border-blue-500/20 dark:bg-blue-500/5">
-      <h3 className="text-xs font-black uppercase tracking-wide text-blue-950 dark:text-blue-100">Journal Entry Preview</h3>
-      <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">Review the debit and credit before posting.</p>
-      {previewLines.length > 0 ? <div className="mt-3 space-y-2">
-        {previewLines.map((line, index) => {
-          const account = accounts.find(candidate => candidate.code === line.accountCode);
-          return <div key={`${line.accountCode}-${index}`} className="grid grid-cols-[1fr_auto] gap-3 rounded-lg bg-white p-2.5 text-[10px] shadow-sm dark:bg-slate-800">
-            <div><p className="font-black text-slate-800 dark:text-slate-100">{line.accountCode} - {account?.name || 'Account'}</p><p className="mt-0.5 font-semibold uppercase text-slate-400">{line.debit > 0 ? 'Debit' : 'Credit'}</p></div>
-            <p className="self-center font-black text-slate-900 dark:text-white">{formatCurrency(line.debit || line.credit)}</p>
-          </div>;
-        })}
-      </div> : <p className="mt-3 rounded-lg border border-dashed border-slate-300 p-4 text-center text-[10px] font-semibold text-slate-500 dark:border-slate-700 dark:text-slate-400">Enter the transaction details to preview the debit and credit.</p>}
-    </aside>
+    <div className="h-fit"><FinancialPreviewPanels lines={previewLines} fallbackDate={date || automaticPostingDate} accounts={accounts} accountBalances={accountBalances} formatCurrency={formatCurrency} /></div>
     </div>
     {error && <p className="mt-3 text-xs font-semibold text-rose-600">{error}</p>}{message && <p className="mt-3 text-xs font-semibold text-emerald-600">{message}</p>}
     <button type="submit" className="mt-4 rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-xs font-bold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">{editingDraftId ? 'Post Reviewed Prepaid Transaction' : 'Save as Draft'}</button>

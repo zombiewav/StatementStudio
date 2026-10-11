@@ -14,6 +14,11 @@ export const PREPAID_ASSET_CATEGORIES: Record<PrepaidAssetCategory, PrepaidAsset
 
 export const PREPAID_ASSET_ACCOUNT_CODES: string[] = Object.values(PREPAID_ASSET_CATEGORIES).map(category => category.assetCode);
 
+/** The consumption category whose asset account is `accountCode` (e.g. 1285 -> supplies). */
+export function prepaidCategoryForAssetAccount(accountCode: string): PrepaidAssetCategory | undefined {
+  return (Object.keys(PREPAID_ASSET_CATEGORIES) as PrepaidAssetCategory[]).find(category => PREPAID_ASSET_CATEGORIES[category].assetCode === accountCode);
+}
+
 const sharedItems = ['Plaques', 'Certificates', 'Medals', 'Trophies', 'Pins', 'Bondpaper', 'Printed Programs', 'Ballpens', 'Markers', 'Folder', 'Envelopes', 'Name Tags', 'Clipboards', 'Staplers', 'Staples', 'Scissors', 'Tape', 'Glue', 'Ribbon', 'Cutting Materials', 'Sticky Notes', 'Cloth', 'Bamboo Sticks', 'Metallic Foil'];
 
 export const PREPAID_ASSET_ITEMS: Record<string, PrepaidAssetCategory[]> = {

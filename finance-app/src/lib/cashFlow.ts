@@ -30,7 +30,7 @@ export const CASH_FLOW_EXPENSE_ROWS = [
   { key: 'depreciationFurniture', label: 'Depreciation Expense - Furniture and Fixtures', accountCodes: ['5095'] },
   { key: 'rent', label: 'Rent Expense', accountCodes: ['5020'] },
   { key: 'suppliesAndMaterials', label: 'Supplies and Materials Expense', accountCodes: ['5290'] },
-  { key: 'professionalFees', label: 'Professional Fee Expense', accountCodes: ['5300'] },
+  { key: 'eventExpense', label: 'Event Expense', accountCodes: ['5300'] },
   { key: 'logisticsAndVenue', label: 'Logistics and Venue Expense', accountCodes: ['5310'] },
   { key: 'bankCharges', label: 'Bank Charges', accountCodes: ['5100'] },
 ] as const;

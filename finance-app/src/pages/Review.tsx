@@ -10,27 +10,22 @@ import {
   computePendingObligations,
   isReviewSettlementAvailable,
   isJournalEntryEditLocked,
-  computeAdvanceSettlement,
-  buildAdvanceSettlementLines,
-  buildSimpleSettlementLines,
   buildPrepaidExpenseSettlementLines,
   obligationAccountLabel,
   PendingObligation,
-  AdvanceSettlementStatus,
   PREPAID_EXPENSE_CODE,
   computeTransactionReviewStates,
   buildRestrictionReleaseLines,
   ReviewStatus,
 } from '../lib/reviewEngine';
-import { PREPAID_ASSET_ACCOUNT_CODES } from '../lib/prepaidAssets';
+import { PREPAID_ASSET_ACCOUNT_CODES, PREPAID_ASSET_CATEGORIES, prepaidCategoryForAssetAccount } from '../lib/prepaidAssets';
 
-const ADVANCE_STATUS_OPTIONS: { value: AdvanceSettlementStatus; label: string; needsAmount: boolean }[] = [
-  { value: 'used-paid-wholly', label: 'Used, and fully covered by the advance', needsAmount: false },
-  { value: 'used-not-yet-paid', label: 'Used, but not yet paid — bought on credit from a supplier', needsAmount: false },
-  { value: 'not-used', label: 'Not used at all — returning the full amount', needsAmount: false },
-  { value: 'used-partly-paid', label: 'Used, but only partly covered by the advance', needsAmount: true },
-  { value: 'not-used-partly-paid', label: 'Only part of it was used — returning the rest', needsAmount: true },
-];
+// Prepaid Expenses and Other Assets are the only transactions that ask a
+// follow-up question inside Review. Every other open balance (payables, Due
+// to Officers, Advances to Officers) is settled from Transactions.
+function isPrepaidObligation(accountCode: string): boolean {
+  return accountCode === PREPAID_EXPENSE_CODE || PREPAID_ASSET_ACCOUNT_CODES.includes(accountCode);
+}
 
 function ObligationRow({
   obligation,
@@ -42,36 +37,22 @@ function ObligationRow({
   const { accounts, journalEntries, formatCurrency, addJournalEntry } = useFinance();
   const [isOpen, setIsOpen] = useState(false);
   const [rowMessage, setRowMessage] = useState('');
-  const finishSettlement = (entry?: JournalEntry) => {
-    setIsOpen(false);
-    if (entry) onSettlementPosted(entry);
-  };
+  const [prepaidAmount, setPrepaidAmount] = useState('');
+  const [purpose, setPurpose] = useState<'general' | 'event'>('general');
+  const [eventName, setEventName] = useState('');
 
-  // Due to Officers / Due to Supplier: single Full/None/Partial question.
-  const [simpleChoice, setSimpleChoice] = useState<'' | 'full' | 'none' | 'partial'>('');
-  const [simpleAmount, setSimpleAmount] = useState('');
-
-  // Advances to Officers: the 5-row status table.
-  const [advanceStatus, setAdvanceStatus] = useState<AdvanceSettlementStatus | ''>('');
-  const [advancePartial, setAdvancePartial] = useState('');
-  const [expenseAccountCode, setExpenseAccountCode] = useState('');
-
-  // Prepaid Expenses: "how much of this is now used?" + which account.
-  // Defaults the expense account to whatever the original entry already
-  // used (if any) — the same category almost always applies once more.
+  // The four prepaid asset accounts each have a related expense account, so
+  // consumption posts there automatically. Only the general Prepaid Expenses
+  // account (1260) has no link and still asks which expense it is.
   const originalEntry = journalEntries.find(je => je.id === obligation.entryId);
+  const relatedCategory = prepaidCategoryForAssetAccount(obligation.accountCode);
+  const relatedExpenseCode = relatedCategory ? PREPAID_ASSET_CATEGORIES[relatedCategory].expenseCode : '';
   const defaultExpenseAccountCode = originalEntry?.transactionDetails?.prepaidAssetExpenseAccountCode || originalEntry?.lines.find(
     l => l.debit > 0 && accounts.find(a => a.code === l.accountCode)?.type === 'Expenses'
   )?.accountCode || '';
-  const [prepaidAmount, setPrepaidAmount] = useState('');
-  const [prepaidExpenseAccountCode, setPrepaidExpenseAccountCode] = useState(defaultExpenseAccountCode);
-
+  const [expenseAccountCode, setExpenseAccountCode] = useState(defaultExpenseAccountCode);
   const expenseAccounts = accounts.filter(a => a.type === 'Expenses' && a.isActive);
-  const isAdvance = obligation.accountCode === '1250';
-  const isPrepaid = obligation.accountCode === PREPAID_EXPENSE_CODE || PREPAID_ASSET_ACCOUNT_CODES.includes(obligation.accountCode);
-  const cashAccountCode = '1010';
-  const obligationAccount = accounts.find(account => account.code === obligation.accountCode);
-  const isReceivable = obligationAccount?.normalBalance === 'Debit' && !isAdvance && !isPrepaid;
+  const resolvedExpenseCode = relatedExpenseCode || expenseAccountCode;
 
   const handlePrepaidSubmit = () => {
     const amount = Number(prepaidAmount) || 0;
@@ -79,95 +60,41 @@ function ObligationRow({
       setRowMessage(`Enter an amount greater than zero and no more than ${formatCurrency(obligation.remainingAmount)}.`);
       return;
     }
-    if (!prepaidExpenseAccountCode) {
+    if (!resolvedExpenseCode) {
       setRowMessage('Select the expense account before posting.');
       return;
     }
-    setRowMessage('');
-    const lines = buildPrepaidExpenseSettlementLines(prepaidExpenseAccountCode, amount, obligation.accountCode);
-    let postedEntry: JournalEntry | undefined;
-    if (lines.length > 0) {
-      postedEntry = addJournalEntry(
-        new Date().toISOString().slice(0, 10),
-        `Settlement of ${obligation.reference}: ${obligation.description}`,
-        obligation.project,
-        lines,
-        obligation.eventName,
-        obligation.entryId
-      );
-    }
-    setPrepaidAmount('');
-    setPrepaidExpenseAccountCode(defaultExpenseAccountCode);
-    finishSettlement(postedEntry);
-  };
-
-  const handleSimpleSubmit = () => {
-    let amount = 0;
-    if (simpleChoice === 'full') amount = obligation.remainingAmount;
-    else if (simpleChoice === 'partial') amount = Number(simpleAmount) || 0;
-    if (simpleChoice === 'none') {
-      setRowMessage('No payment was posted. This transaction remains incomplete.');
-      return;
-    }
-    if (amount <= 0 || amount > obligation.remainingAmount) {
-      setRowMessage(`Enter an amount greater than zero and no more than ${formatCurrency(obligation.remainingAmount)}.`);
+    if (purpose === 'event' && !eventName.trim()) {
+      setRowMessage('Enter the event name.');
       return;
     }
     setRowMessage('');
-
-    const lines = buildSimpleSettlementLines(obligation.accountCode, cashAccountCode, amount, obligationAccount?.normalBalance || 'Credit');
-    let postedEntry: JournalEntry | undefined;
-    if (lines.length > 0) {
-      postedEntry = addJournalEntry(
-        new Date().toISOString().slice(0, 10),
-        `Settlement of ${obligation.reference}: ${obligation.description}`,
-        obligation.project,
-        lines,
-        obligation.eventName,
-        obligation.entryId
-      );
-    }
-    setSimpleChoice('');
-    setSimpleAmount('');
-    finishSettlement(postedEntry);
-  };
-
-  const handleAdvanceSubmit = () => {
-    if (!advanceStatus) return;
-    const needsAmount = ADVANCE_STATUS_OPTIONS.find(o => o.value === advanceStatus)?.needsAmount;
-    const partial = needsAmount ? Number(advancePartial) || 0 : 0;
-    if (needsAmount && (partial <= 0 || partial > obligation.remainingAmount)) {
-      setRowMessage(`Enter an amount greater than zero and no more than ${formatCurrency(obligation.remainingAmount)}.`);
-      return;
-    }
-    setRowMessage('');
-    const result = computeAdvanceSettlement(advanceStatus, obligation.remainingAmount, partial);
-
-    const lines = buildAdvanceSettlementLines(
-      result.expenseAmount > 0 ? (expenseAccountCode || null) : null,
-      obligation.accountCode,
-      cashAccountCode,
-      '2010',
-      obligation.remainingAmount,
-      result
-    );
-    const postedEntry = addJournalEntry(
+    const posted = addJournalEntry(
       new Date().toISOString().slice(0, 10),
       `Settlement of ${obligation.reference}: ${obligation.description}`,
       obligation.project,
-      lines,
-      obligation.eventName,
-      obligation.entryId
+      buildPrepaidExpenseSettlementLines(resolvedExpenseCode, amount, obligation.accountCode),
+      purpose === 'event' ? eventName.trim() : undefined,
+      obligation.entryId,
+      {
+        transactionType: 'Consumption of Prepaid Assets',
+        details: {
+          eventRelated: purpose === 'event',
+          receiptAttachmentIds: [],
+          prepaidAssetCategory: relatedCategory,
+          prepaidAssetItem: originalEntry?.transactionDetails?.prepaidAssetItem,
+          prepaidAssetExpenseAccountCode: resolvedExpenseCode,
+          prepaidAssetPurpose: purpose,
+        },
+      }
     );
-    setAdvanceStatus('');
-    setAdvancePartial('');
-    setExpenseAccountCode('');
-    finishSettlement(postedEntry);
+    setPrepaidAmount('');
+    setPurpose('general');
+    setEventName('');
+    setExpenseAccountCode(defaultExpenseAccountCode);
+    setIsOpen(false);
+    onSettlementPosted(posted);
   };
-
-  const advanceNeedsExpenseAccount = advanceStatus && advanceStatus !== 'not-used' &&
-    computeAdvanceSettlement(advanceStatus, obligation.remainingAmount, Number(advancePartial) || 0).expenseAmount > 0;
-  const advanceNeedsAmount = advanceStatus ? ADVANCE_STATUS_OPTIONS.find(o => o.value === advanceStatus)?.needsAmount : false;
 
   return (
     <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
@@ -199,123 +126,46 @@ function ObligationRow({
           {rowMessage && (
             <div className="rounded-lg border border-rose-200 bg-rose-50 p-2.5 text-[10px] font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">{rowMessage}</div>
           )}
-          {isPrepaid ? (
-            <>
-              <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300">
-                How much of this is now used, consumed, or benefited from?
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                max={obligation.remainingAmount}
-                value={prepaidAmount}
-                onChange={(e) => setPrepaidAmount(e.target.value)}
-                placeholder={`0.00, up to ${formatCurrency(obligation.remainingAmount)}`}
-                className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold p-2.5 outline-none text-slate-900 dark:text-slate-100"
-              />
+          <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300">
+            How much of this has been used or consumed this semester?
+          </label>
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            max={obligation.remainingAmount}
+            value={prepaidAmount}
+            onChange={(e) => setPrepaidAmount(e.target.value)}
+            placeholder={`0.00, up to ${formatCurrency(obligation.remainingAmount)}`}
+            className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold p-2.5 outline-none text-slate-900 dark:text-slate-100"
+          />
 
-              {Number(prepaidAmount) > 0 && (
+          {Number(prepaidAmount) > 0 && (
+            <>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1">Purpose</label>
+                <select
+                  value={purpose}
+                  onChange={(e) => setPurpose(e.target.value as 'general' | 'event')}
+                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold p-2.5 outline-none text-slate-900 dark:text-slate-100"
+                >
+                  <option value="general">For a general purpose</option>
+                  <option value="event">For an event</option>
+                </select>
+              </div>
+              {purpose === 'event' && (
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1">Which expense is this?</label>
-                  <select
-                    value={prepaidExpenseAccountCode}
-                    onChange={(e) => setPrepaidExpenseAccountCode(e.target.value)}
+                  <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1">Event name</label>
+                  <input
+                    value={eventName}
+                    onChange={(e) => setEventName(e.target.value)}
                     className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold p-2.5 outline-none text-slate-900 dark:text-slate-100"
-                  >
-                    <option value="" disabled>Select an expense account…</option>
-                    {expenseAccounts.map(acc => (
-                      <option key={acc.code} value={acc.code}>{acc.code} - {acc.name}</option>
-                    ))}
-                  </select>
+                  />
                 </div>
               )}
-
-              <button
-                type="button"
-                disabled={!prepaidAmount || (Number(prepaidAmount) > 0 && !prepaidExpenseAccountCode)}
-                onClick={handlePrepaidSubmit}
-                className="w-full bg-blue-700 hover:bg-blue-800 disabled:opacity-40 text-white font-bold text-xs p-2.5 rounded-lg transition-colors"
-              >
-                Post Settlement
-              </button>
-            </>
-          ) : !isAdvance ? (
-            <>
-              <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300">
-                {isReceivable
-                  ? obligation.accountCode === '1320'
-                    ? 'How much has the accountable officer remitted to the organization?'
-                    : 'How much of this receivable has the organization collected?'
-                  : obligation.accountCode === '2050'
-                  ? "Did you reimburse this person/officer yet using the organization's funds?"
-                  : 'Have you paid this amount using the organization’s funds?'}
-              </label>
-              <select
-                value={simpleChoice}
-                onChange={(e) => setSimpleChoice(e.target.value as any)}
-                className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold p-2.5 outline-none text-slate-900 dark:text-slate-100"
-              >
-                <option value="" disabled>Select an answer…</option>
-                <option value="full">{isReceivable ? 'Collected/remitted in full' : 'Yes — paid in full'} ({formatCurrency(obligation.remainingAmount)})</option>
-                <option value="none">{isReceivable ? 'Nothing collected/remitted yet' : 'No — not yet'}</option>
-                <option value="partial">{isReceivable ? 'Partly collected/remitted — enter amount' : 'Partly — enter amount'}</option>
-              </select>
-
-              {simpleChoice === 'partial' && (
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max={obligation.remainingAmount}
-                  value={simpleAmount}
-                  onChange={(e) => setSimpleAmount(e.target.value)}
-                  placeholder={`Up to ${formatCurrency(obligation.remainingAmount)}`}
-                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold p-2.5 outline-none text-slate-900 dark:text-slate-100"
-                />
-              )}
-
-              <button
-                type="button"
-                disabled={!simpleChoice}
-                onClick={handleSimpleSubmit}
-                className="w-full bg-blue-700 hover:bg-blue-800 disabled:opacity-40 text-white font-bold text-xs p-2.5 rounded-lg transition-colors"
-              >
-                Post Settlement
-              </button>
-            </>
-          ) : (
-            <>
-              <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300">
-                Have the accountable officer actually used and/or paid this amount?
-              </label>
-              <select
-                value={advanceStatus}
-                onChange={(e) => setAdvanceStatus(e.target.value as AdvanceSettlementStatus)}
-                className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold p-2.5 outline-none text-slate-900 dark:text-slate-100"
-              >
-                <option value="" disabled>Select an answer…</option>
-                {ADVANCE_STATUS_OPTIONS.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-
-              {advanceNeedsAmount && (
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max={obligation.remainingAmount}
-                  value={advancePartial}
-                  onChange={(e) => setAdvancePartial(e.target.value)}
-                  placeholder={`Amount, up to ${formatCurrency(obligation.remainingAmount)}`}
-                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold p-2.5 outline-none text-slate-900 dark:text-slate-100"
-                />
-              )}
-
-              {advanceNeedsExpenseAccount && (
+              {!relatedExpenseCode && (
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1">What expense was this used for?</label>
+                  <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1">Which expense is this?</label>
                   <select
                     value={expenseAccountCode}
                     onChange={(e) => setExpenseAccountCode(e.target.value)}
@@ -328,17 +178,17 @@ function ObligationRow({
                   </select>
                 </div>
               )}
-
-              <button
-                type="button"
-                disabled={!advanceStatus || (advanceNeedsAmount && !advancePartial) || (!!advanceNeedsExpenseAccount && !expenseAccountCode)}
-                onClick={handleAdvanceSubmit}
-                className="w-full bg-blue-700 hover:bg-blue-800 disabled:opacity-40 text-white font-bold text-xs p-2.5 rounded-lg transition-colors"
-              >
-                Post Settlement
-              </button>
             </>
           )}
+
+          <button
+            type="button"
+            disabled={!prepaidAmount || (Number(prepaidAmount) > 0 && !resolvedExpenseCode)}
+            onClick={handlePrepaidSubmit}
+            className="w-full bg-blue-700 hover:bg-blue-800 disabled:opacity-40 text-white font-bold text-xs p-2.5 rounded-lg transition-colors"
+          >
+            Post Settlement
+          </button>
         </div>
       )}
     </div>
@@ -553,6 +403,7 @@ export function Review({ onContinueDraft }: ReviewProps): React.ReactElement {
           const amountEditable = state.entry.lines.filter(line => line.debit > 0).length === 1 && state.entry.lines.filter(line => line.credit > 0).length === 1;
           const entryObligations = pendingObligations.filter(obligation =>
             obligation.reviewEntryId === state.entry.id &&
+            isPrepaidObligation(obligation.accountCode) &&
             isReviewSettlementAvailable(obligation.accountCode, journalEntries.find(entry => entry.id === obligation.entryId))
           );
           return (
