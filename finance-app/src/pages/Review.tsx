@@ -8,7 +8,6 @@ import { ActivityFeeReview } from '../components/ActivityFeeReview';
 import { isActivityFeeIncomplete } from '../lib/activityFees';
 import {
   computePendingObligations,
-  isReviewSettlementAvailable,
   isJournalEntryEditLocked,
   buildPrepaidExpenseSettlementLines,
   obligationAccountLabel,
@@ -18,6 +17,7 @@ import {
   buildRestrictionReleaseLines,
   ReviewStatus,
 } from '../lib/reviewEngine';
+import { automaticPostingDate } from '../lib/reportingPeriod';
 import { PREPAID_ASSET_ACCOUNT_CODES, PREPAID_ASSET_CATEGORIES, prepaidCategoryForAssetAccount } from '../lib/prepaidAssets';
 
 // Prepaid Expenses and Other Assets are the only transactions that ask a
@@ -34,7 +34,7 @@ function ObligationRow({
   obligation: PendingObligation;
   onSettlementPosted: (entry: JournalEntry) => void;
 }): React.ReactElement {
-  const { accounts, journalEntries, formatCurrency, addJournalEntry } = useFinance();
+  const { accounts, journalEntries, settings, formatCurrency, addJournalEntry } = useFinance();
   const [isOpen, setIsOpen] = useState(false);
   const [rowMessage, setRowMessage] = useState('');
   const [prepaidAmount, setPrepaidAmount] = useState('');
@@ -70,7 +70,7 @@ function ObligationRow({
     }
     setRowMessage('');
     const posted = addJournalEntry(
-      new Date().toISOString().slice(0, 10),
+      automaticPostingDate(settings.semester, settings.reportingYear),
       `Settlement of ${obligation.reference}: ${obligation.description}`,
       obligation.project,
       buildPrepaidExpenseSettlementLines(resolvedExpenseCode, amount, obligation.accountCode),
@@ -271,7 +271,7 @@ export function Review({ onContinueDraft }: ReviewProps): React.ReactElement {
 
   const handleRestrictionRelease = (entry: JournalEntry, amount: number) => {
     const posted = addJournalEntry(
-      new Date().toISOString().slice(0, 10),
+      automaticPostingDate(settings.semester, settings.reportingYear),
       `Release from restriction for ${entry.reference}: ${entry.description}`,
       entry.project,
       buildRestrictionReleaseLines(amount),
@@ -403,8 +403,7 @@ export function Review({ onContinueDraft }: ReviewProps): React.ReactElement {
           const amountEditable = state.entry.lines.filter(line => line.debit > 0).length === 1 && state.entry.lines.filter(line => line.credit > 0).length === 1;
           const entryObligations = pendingObligations.filter(obligation =>
             obligation.reviewEntryId === state.entry.id &&
-            isPrepaidObligation(obligation.accountCode) &&
-            isReviewSettlementAvailable(obligation.accountCode, journalEntries.find(entry => entry.id === obligation.entryId))
+            isPrepaidObligation(obligation.accountCode)
           );
           return (
             <article key={state.entry.id} className={`rounded-xl border p-4 ${isIncomplete ? 'border-rose-200 bg-rose-50 dark:border-rose-500/30 dark:bg-rose-500/10' : state.status === 'complete' ? 'border-emerald-100 bg-white dark:border-emerald-500/20 dark:bg-slate-900' : 'border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900/70'}`}>

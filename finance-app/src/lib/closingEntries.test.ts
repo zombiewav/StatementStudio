@@ -100,18 +100,31 @@ describe('findFiscalCloseBlockers', () => {
   it('blocks closing while a Review obligation is open and clears after settlement', () => {
     const reviewAccounts: Account[] = [
       ...accounts,
+      { code: '1285', name: 'Supplies and Materials', type: 'Assets', normalBalance: 'Debit', description: '', isActive: true },
       { code: '2010', name: 'Due to Supplier', type: 'Liabilities', normalBalance: 'Credit', description: '', isActive: true },
     ];
     const original: JournalEntry = {
+      id: 'je-1', reference: 'JE-0001', date: '2026-01-01', description: 'Bought supplies', project: 'General Fund Operations',
+      lines: [{ accountCode: '1285', debit: 1000, credit: 0 }, { accountCode: '1010', debit: 0, credit: 1000 }],
+    };
+    const consumption: JournalEntry = {
+      id: 'je-2', reference: 'JE-0002', date: '2026-01-02', description: 'Used supplies', project: 'General Fund Operations', settlesEntryId: 'je-1',
+      lines: [{ accountCode: '5020', debit: 1000, credit: 0 }, { accountCode: '1285', debit: 0, credit: 1000 }],
+    };
+    expect(findFiscalCloseBlockers([original], reviewAccounts)).toHaveLength(1);
+    expect(findFiscalCloseBlockers([original, consumption], reviewAccounts)).toHaveLength(0);
+  });
+
+  it('does not block closing for unpaid payables, which carry to the next period', () => {
+    const reviewAccounts: Account[] = [
+      ...accounts,
+      { code: '2010', name: 'Accounts Payable - Expense', type: 'Liabilities', normalBalance: 'Credit', description: '', isActive: true },
+    ];
+    const unpaid: JournalEntry = {
       id: 'je-1', reference: 'JE-0001', date: '2026-01-01', description: 'Unpaid rent', project: 'General Fund Operations',
       lines: [{ accountCode: '5020', debit: 1000, credit: 0 }, { accountCode: '2010', debit: 0, credit: 1000 }],
     };
-    const settlement: JournalEntry = {
-      id: 'je-2', reference: 'JE-0002', date: '2026-01-02', description: 'Paid rent', project: 'General Fund Operations', settlesEntryId: 'je-1',
-      lines: [{ accountCode: '2010', debit: 1000, credit: 0 }, { accountCode: '1010', debit: 0, credit: 1000 }],
-    };
-    expect(findFiscalCloseBlockers([original], reviewAccounts)).toHaveLength(1);
-    expect(findFiscalCloseBlockers([original, settlement], reviewAccounts)).toHaveLength(0);
+    expect(findFiscalCloseBlockers([unpaid], reviewAccounts)).toHaveLength(0);
   });
 
   it('blocks closing while temporarily restricted revenue has not been released', () => {

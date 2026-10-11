@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isDateWithinReportingPeriod, parseReportingYear, parseSchoolYear, periodForSemester, reportingPeriodBounds, semesterForPeriod } from './reportingPeriod';
+import { automaticPostingDate, isDateWithinReportingPeriod, parseReportingYear, parseSchoolYear, periodForSemester, reportingPeriodBounds, semesterForPeriod } from './reportingPeriod';
 
 describe('reporting period fields', () => {
   it('keeps semester and period choices consistent', () => {
@@ -32,5 +32,20 @@ describe('reporting period fields', () => {
     expect(isDateWithinReportingPeriod('2022-01-01', '1st Semester', 2021)).toBe(false);
     expect(isDateWithinReportingPeriod('2022-01-01', '2nd Semester', 2021)).toBe(true);
     expect(isDateWithinReportingPeriod('2022-06-01', '2nd Semester', 2021)).toBe(false);
+  });
+});
+
+describe('automatic posting date', () => {
+  it('uses today when it is inside the reporting period', () => {
+    expect(automaticPostingDate('1st Semester', 2026, '2026-10-11')).toBe('2026-10-11');
+  });
+
+  it('uses the last day of the period when today is outside it', () => {
+    expect(automaticPostingDate('1st Semester', 2026, '2027-02-03')).toBe('2026-12-31');
+    expect(automaticPostingDate('2nd Semester', 2026, '2026-10-11')).toBe('2027-05-31');
+  });
+
+  it('falls back to today when no reporting period is set', () => {
+    expect(automaticPostingDate('', undefined, '2026-10-11')).toBe('2026-10-11');
   });
 });

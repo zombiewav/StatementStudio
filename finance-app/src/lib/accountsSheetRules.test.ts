@@ -73,4 +73,16 @@ describe('Accounts spreadsheet mappings', () => {
     expect(restored.filter(account => account.code === '5300').map(account => account.name)).toEqual(['Event Expense']);
     ['5120', '5180', '5290'].forEach(code => expect(restored.some(account => account.code === code)).toBe(true));
   });
+
+  it('uses a single "Others" item in every prepaid category and drops the two "Other ..." items', () => {
+    expect(PREPAID_ASSET_ITEMS.Others).toEqual(['awards', 'supplies', 'rent', 'uniform']);
+    expect(PREPAID_ASSET_ITEMS['Other Prizes and Awards']).toBeUndefined();
+    expect(PREPAID_ASSET_ITEMS['Other Materials and Supplies']).toBeUndefined();
+  });
+
+  it('names the clothing/uniform consumption expense as the Accounts sheet does, including saved workspaces', () => {
+    expect(INITIAL_ACCOUNTS.find(account => account.code === '5180')?.name).toBe('Clothing/Uniform Expense');
+    const saved = INITIAL_ACCOUNTS.map(account => account.code === '5180' ? { ...account, name: 'Uniform Expense' } : account);
+    expect(restoreSavedAccounts(saved).find(account => account.code === '5180')?.name).toBe('Clothing/Uniform Expense');
+  });
 });

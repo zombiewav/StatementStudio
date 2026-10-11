@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   computePendingObligations,
-  isReviewSettlementAvailable,
   isJournalEntryEditLocked,
   computeAdvanceSettlement,
   buildAdvanceSettlementLines,
@@ -20,6 +19,8 @@ const accounts: Account[] = [
   { code: '1320', name: 'Due from Officers', type: 'Assets', normalBalance: 'Debit', description: '', isActive: true },
   { code: '1250', name: 'Advances to Officers', type: 'Assets', normalBalance: 'Debit', description: '', isActive: true },
   { code: '1260', name: 'Prepaid Expenses', type: 'Assets', normalBalance: 'Debit', description: '', isActive: true },
+  { code: '1285', name: 'Supplies and Materials', type: 'Assets', normalBalance: 'Debit', description: '', isActive: true },
+  { code: '5290', name: 'Supplies and Materials Expense', type: 'Expenses', normalBalance: 'Debit', description: '', isActive: true },
   { code: '2010', name: 'Due to Supplier', type: 'Liabilities', normalBalance: 'Credit', description: '', isActive: true },
   { code: '2020', name: 'Accounts Payable - Merchandise', type: 'Liabilities', normalBalance: 'Credit', description: '', isActive: true },
   { code: '2050', name: 'Due to Officers', type: 'Liabilities', normalBalance: 'Credit', description: '', isActive: true },
@@ -60,45 +61,42 @@ describe('isJournalEntryEditLocked', () => {
   });
 });
 
-describe('isReviewSettlementAvailable', () => {
-  const acquisition = baseEntry({
-    lines: [
-      { accountCode: '1700', debit: 1000, credit: 0 },
-      { accountCode: '2020', debit: 0, credit: 700 },
-      { accountCode: '2050', debit: 0, credit: 300 },
-    ],
-  });
-
-  it('hides acquisition supplier settlement while retaining the open balance and incomplete status', () => {
-    expect(isReviewSettlementAvailable('2020', acquisition)).toBe(false);
-    expect(computePendingObligations([acquisition], accounts)).toEqual(expect.arrayContaining([
-      expect.objectContaining({ accountCode: '2020', remainingAmount: 700 }),
-    ]));
-    expect(computeTransactionReviewStates([acquisition], accounts)[0]).toMatchObject({
-      status: 'incomplete',
-      missing: expect.arrayContaining(['Accounts Payable - Merchandise still open: 700']),
-    });
-  });
-
-  it('keeps officer and other obligations available even on an acquisition', () => {
-    for (const code of ['2050', '1250', '1260', '1200', '2010', '2061'] as const) {
-      expect(isReviewSettlementAvailable(code, acquisition)).toBe(true);
-    }
-  });
-
-  it('keeps merchandise payables from other entries available', () => {
-    expect(isReviewSettlementAvailable('2020', baseEntry({
+describe('Review scope: only Prepaid Expenses and Other Assets hold a transaction open', () => {
+  it('never marks Due to Officers incomplete, even before the officer is reimbursed', () => {
+    const expense = baseEntry({
+      transactionType: 'Outright Expense Payment',
       lines: [
-        { accountCode: '2010', debit: 1000, credit: 0 },
-        { accountCode: '2020', debit: 0, credit: 1000 },
+        { accountCode: '5020', debit: 500, credit: 0 },
+        { accountCode: '2050', debit: 0, credit: 500 },
       ],
-    }))).toBe(true);
-    expect(isReviewSettlementAvailable('2020')).toBe(true);
+    });
+    expect(computePendingObligations([expense], accounts)).toEqual([]);
+    expect(computeTransactionReviewStates([expense], accounts)[0].status).toBe('complete');
   });
-});
 
-describe('computePendingObligations', () => {
-  it('completes a standalone officer advance without removing its available balance', () => {
+  it('keeps an officer-paid expense complete after a reimbursement is recorded as its own transaction', () => {
+    const expense = baseEntry({
+      transactionType: 'Outright Expense Payment',
+      transactionDetails: { counterpartyName: 'TEST officer', eventRelated: false, receiptAttachmentIds: [] },
+      lines: [
+        { accountCode: '5020', debit: 500, credit: 0 },
+        { accountCode: '2050', debit: 0, credit: 500 },
+      ],
+    });
+    const reimbursement = baseEntry({
+      id: 'reimbursement', transactionType: 'Reimbursement to Officers',
+      transactionDetails: { counterpartyName: 'TEST officer', eventRelated: false, receiptAttachmentIds: [] },
+      lines: [
+        { accountCode: '2050', debit: 200, credit: 0 },
+        { accountCode: '1010', debit: 0, credit: 200 },
+      ],
+    });
+    const states = computeTransactionReviewStates([expense, reimbursement], accounts);
+    expect(states.every(state => state.status === 'complete')).toBe(true);
+    expect(counterpartyBalance([expense, reimbursement], '2050', 'Credit', 'TEST officer')).toBe(300);
+  });
+
+  it('keeps a standalone officer advance complete without removing its available balance', () => {
     const entry = baseEntry({
       transactionType: 'Advances to Officers',
       transactionDetails: { counterpartyName: 'TEST officer', eventRelated: false, receiptAttachmentIds: [] },
@@ -112,148 +110,76 @@ describe('computePendingObligations', () => {
     expect(counterpartyBalance([entry], '1250', 'Debit', 'TEST officer')).toBe(500);
   });
 
-  it.each(['Reimbursement to Officer', 'Reimbursement to Officers'])('keeps %s separate from the original expense obligation', transactionType => {
-    const expense = baseEntry({
-      transactionType: 'Outright Expense Payment',
-      transactionDetails: { counterpartyName: 'TEST officer', eventRelated: false, receiptAttachmentIds: [] },
-      lines: [
-        { accountCode: '5020', debit: 500, credit: 0 },
-        { accountCode: '2050', debit: 0, credit: 500 },
-      ],
+  it.each([
+    ['unpaid merchandise payable', '2020', 'credit'],
+    ['unpaid expense payable', '2010', 'credit'],
+    ['accounts receivable', '1200', 'debit'],
+    ['due from officers', '1320', 'debit'],
+  ] as const)('does not hold a transaction open for an %s', (_label, accountCode, side) => {
+    const entry = baseEntry({
+      lines: side === 'credit'
+        ? [{ accountCode: '5020', debit: 1000, credit: 0 }, { accountCode, debit: 0, credit: 1000 }]
+        : [{ accountCode, debit: 1000, credit: 0 }, { accountCode: '1010', debit: 0, credit: 1000 }],
     });
-    const reimbursement = baseEntry({
-      id: 'reimbursement', transactionType,
-      transactionDetails: { counterpartyName: 'TEST officer', eventRelated: false, receiptAttachmentIds: [] },
-      lines: [
-        { accountCode: '2050', debit: 200, credit: 0 },
-        { accountCode: '1010', debit: 0, credit: 200 },
-      ],
-    });
-    const entries = [expense, reimbursement];
-    expect(computePendingObligations(entries, accounts)).toEqual([
-      expect.objectContaining({ entryId: expense.id, accountCode: '2050', remainingAmount: 500 }),
-    ]);
-    expect(computeTransactionReviewStates(entries, accounts).find(state => state.entry.id === reimbursement.id)?.status).toBe('complete');
-    expect(counterpartyBalance(entries, '2050', 'Credit', 'TEST officer')).toBe(300);
+    expect(computePendingObligations([entry], accounts)).toEqual([]);
+    expect(computeTransactionReviewStates([entry], accounts)[0].status).toBe('complete');
+  });
+});
+
+describe('computePendingObligations', () => {
+  const purchase = (overrides: Partial<JournalEntry> = {}) => baseEntry({
+    id: 'je-1',
+    lines: [
+      { accountCode: '1285', debit: 1000, credit: 0 },
+      { accountCode: '1010', debit: 0, credit: 1000 },
+    ],
+    ...overrides,
+  });
+  const consumption = (id: string, amount: number, overrides: Partial<JournalEntry> = {}) => baseEntry({
+    id,
+    settlesEntryId: 'je-1',
+    lines: [
+      { accountCode: '5290', debit: amount, credit: 0 },
+      { accountCode: '1285', debit: 0, credit: amount },
+    ],
+    ...overrides,
   });
 
-  it('recognizes exact legacy officer labels without suppressing other flows', () => {
-    const lines = [{ accountCode: '1250', debit: 100, credit: 0 }, { accountCode: '1010', debit: 0, credit: 100 }];
-    expect(computePendingObligations([baseEntry({ description: 'Advances to Officers', lines })], accounts)).toEqual([]);
-    const purchase = baseEntry({ transactionType: 'Acquisition of Merchandise', description: 'Advances to Officers', lines });
-    expect(computePendingObligations([purchase], accounts)).toEqual([expect.objectContaining({ accountCode: '1250', remainingAmount: 100 })]);
-  });
-
-  it('finds an obligation-creating entry with no settlement as fully open', () => {
-    const entries = [
-      baseEntry({
-        lines: [
-          { accountCode: '5020', debit: 1000, credit: 0 },
-          { accountCode: '2050', debit: 0, credit: 1000 },
-        ],
-      }),
-    ];
-    const pending = computePendingObligations(entries, accounts);
+  it('finds a prepaid purchase with no consumption as fully open', () => {
+    const pending = computePendingObligations([purchase()], accounts);
     expect(pending).toHaveLength(1);
-    expect(pending[0].remainingAmount).toBe(1000);
-    expect(pending[0].accountCode).toBe('2050');
+    expect(pending[0]).toMatchObject({ accountCode: '1285', remainingAmount: 1000 });
   });
 
-  it('nets a settlement entry against its original via settlesEntryId', () => {
-    const entries = [
-      baseEntry({
-        id: 'je-1',
-        lines: [
-          { accountCode: '5020', debit: 1000, credit: 0 },
-          { accountCode: '2050', debit: 0, credit: 1000 },
-        ],
-      }),
-      baseEntry({
-        id: 'je-2',
-        settlesEntryId: 'je-1',
-        lines: [
-          { accountCode: '2050', debit: 500, credit: 0 },
-          { accountCode: '1010', debit: 0, credit: 500 },
-        ],
-      }),
-    ];
-    const pending = computePendingObligations(entries, accounts);
+  it('nets a consumption entry against its purchase via settlesEntryId', () => {
+    const pending = computePendingObligations([purchase(), consumption('je-2', 400)], accounts);
     expect(pending).toHaveLength(1);
-    expect(pending[0].settledAmount).toBe(500);
-    expect(pending[0].remainingAmount).toBe(500);
+    expect(pending[0].settledAmount).toBe(400);
+    expect(pending[0].remainingAmount).toBe(600);
   });
 
-  it('drops an obligation once fully settled', () => {
-    const entries = [
-      baseEntry({
-        id: 'je-1',
-        lines: [
-          { accountCode: '5020', debit: 1000, credit: 0 },
-          { accountCode: '2010', debit: 0, credit: 1000 },
-        ],
-      }),
-      baseEntry({
-        id: 'je-2',
-        settlesEntryId: 'je-1',
-        lines: [
-          { accountCode: '2010', debit: 1000, credit: 0 },
-          { accountCode: '1010', debit: 0, credit: 1000 },
-        ],
-      }),
-    ];
+  it('drops an obligation once fully consumed and completes the purchase on the last consumption date', () => {
+    const entries = [purchase({ date: '2026-01-01' }), consumption('je-2', 1000, { date: '2026-01-03' })];
     expect(computePendingObligations(entries, accounts)).toHaveLength(0);
+    const state = computeTransactionReviewStates(entries, accounts)[0];
+    expect(state.status).toBe('complete');
+    expect(state.completedOn).toBe('2026-01-03');
   });
 
-  it('tracks an unpaid merchandise acquisition until it is settled', () => {
+  it('restores an obligation when its consumption is reversed', () => {
     const entries = [
-      baseEntry({
-        lines: [
-          { accountCode: '1700', debit: 1000, credit: 0 },
-          { accountCode: '2020', debit: 0, credit: 1000 },
-        ],
-      }),
-    ];
-    const pending = computePendingObligations(entries, accounts);
-    expect(pending).toHaveLength(1);
-    expect(pending[0]).toMatchObject({ accountCode: '2020', remainingAmount: 1000 });
-  });
-
-  it('collects a debit-normal receivable with debit Cash and credit Receivable', () => {
-    expect(buildSimpleSettlementLines('1200', '1010', 400, 'Debit')).toEqual([
-      { accountCode: '1010', debit: 400, credit: 0 },
-      { accountCode: '1200', debit: 0, credit: 400 },
-    ]);
-  });
-
-  it('restores an obligation when its settlement is reversed', () => {
-    const entries = [
-      baseEntry({
-        id: 'je-1',
-        lines: [
-          { accountCode: '5020', debit: 1000, credit: 0 },
-          { accountCode: '2010', debit: 0, credit: 1000 },
-        ],
-      }),
-      baseEntry({
-        id: 'je-2',
-        settlesEntryId: 'je-1',
-        reversedByEntryId: 'je-3',
-        lines: [
-          { accountCode: '2010', debit: 1000, credit: 0 },
-          { accountCode: '1010', debit: 0, credit: 1000 },
-        ],
-      }),
+      purchase(),
+      consumption('je-2', 1000, { reversedByEntryId: 'je-3' }),
       baseEntry({
         id: 'je-3',
         settlesEntryId: 'je-1',
         reversalOfEntryId: 'je-2',
         lines: [
-          { accountCode: '2010', debit: 0, credit: 1000 },
-          { accountCode: '1010', debit: 1000, credit: 0 },
+          { accountCode: '5290', debit: 0, credit: 1000 },
+          { accountCode: '1285', debit: 1000, credit: 0 },
         ],
       }),
     ];
-
     const pending = computePendingObligations(entries, accounts);
     expect(pending).toHaveLength(1);
     expect(pending[0].settledAmount).toBe(0);
@@ -262,124 +188,21 @@ describe('computePendingObligations', () => {
 
   it('does not keep an obligation open after its creating entry is reversed', () => {
     const entries = [
-      baseEntry({
-        id: 'je-1',
-        reversedByEntryId: 'je-2',
-        lines: [
-          { accountCode: '5020', debit: 1000, credit: 0 },
-          { accountCode: '2050', debit: 0, credit: 1000 },
-        ],
-      }),
+      purchase({ reversedByEntryId: 'je-2' }),
       baseEntry({
         id: 'je-2',
         reversalOfEntryId: 'je-1',
         lines: [
-          { accountCode: '5020', debit: 0, credit: 1000 },
-          { accountCode: '2050', debit: 1000, credit: 0 },
-        ],
-      }),
-    ];
-
-    expect(computePendingObligations(entries, accounts)).toHaveLength(0);
-  });
-
-  it('detects an Advances to Officers obligation on its DEBIT side (it is a debit-normal asset, not a liability)', () => {
-    const entries = [
-      baseEntry({
-        id: 'je-1',
-        lines: [
-          { accountCode: '1250', debit: 1000, credit: 0 },
-          { accountCode: '1010', debit: 0, credit: 1000 },
-        ],
-      }),
-    ];
-    const pending = computePendingObligations(entries, accounts);
-    expect(pending).toHaveLength(1);
-    expect(pending[0].accountCode).toBe('1250');
-    expect(pending[0].remainingAmount).toBe(1000);
-  });
-
-  it('nets an Advances to Officers settlement, which clears it via a CREDIT', () => {
-    const entries = [
-      baseEntry({
-        id: 'je-1',
-        lines: [
-          { accountCode: '1250', debit: 1000, credit: 0 },
-          { accountCode: '1010', debit: 0, credit: 1000 },
-        ],
-      }),
-      baseEntry({
-        id: 'je-2',
-        settlesEntryId: 'je-1',
-        lines: [
-          { accountCode: '5020', debit: 1000, credit: 0 },
-          { accountCode: '1250', debit: 0, credit: 1000 },
+          { accountCode: '1285', debit: 0, credit: 1000 },
+          { accountCode: '1010', debit: 1000, credit: 0 },
         ],
       }),
     ];
     expect(computePendingObligations(entries, accounts)).toHaveLength(0);
   });
 
-  it('never treats a settlement entry itself as a new obligation', () => {
-    // A settlement entry's own lines debit the obligation account (to clear
-    // it) and credit cash — it has no line that CREDITS an obligation
-    // account, so it can never be mistaken for a new one regardless of
-    // settlesEntryId.
-    const entries = [
-      baseEntry({
-        id: 'je-2',
-        settlesEntryId: 'je-1',
-        lines: [
-          { accountCode: '2050', debit: 500, credit: 0 },
-          { accountCode: '1010', debit: 0, credit: 500 },
-        ],
-      }),
-    ];
-    expect(computePendingObligations(entries, accounts)).toHaveLength(0);
-  });
-
-  it('keeps a supplier balance created while liquidating an advance in Review', () => {
-    const entries = [
-      baseEntry({ id: 'je-1', lines: [
-        { accountCode: '1250', debit: 1000, credit: 0 },
-        { accountCode: '1010', debit: 0, credit: 1000 },
-      ] }),
-      baseEntry({ id: 'je-2', settlesEntryId: 'je-1', lines: [
-        { accountCode: '5020', debit: 1000, credit: 0 },
-        { accountCode: '1010', debit: 1000, credit: 0 },
-        { accountCode: '1250', debit: 0, credit: 1000 },
-        { accountCode: '2010', debit: 0, credit: 1000 },
-      ] }),
-    ];
-    const pending = computePendingObligations(entries, accounts);
-    expect(pending).toHaveLength(1);
-    expect(pending[0].accountCode).toBe('2010');
-    expect(pending[0].entryId).toBe('je-2');
-    expect(pending[0].reviewEntryId).toBe('je-1');
-    expect(computeTransactionReviewStates(entries, accounts)[0].status).toBe('incomplete');
-  });
-
-  it('completes the original advance only after its follow-up supplier balance is paid', () => {
-    const entries = [
-      baseEntry({ id: 'je-1', date: '2026-01-01', lines: [
-        { accountCode: '1250', debit: 1000, credit: 0 },
-        { accountCode: '1010', debit: 0, credit: 1000 },
-      ] }),
-      baseEntry({ id: 'je-2', date: '2026-01-02', settlesEntryId: 'je-1', lines: [
-        { accountCode: '5020', debit: 1000, credit: 0 },
-        { accountCode: '1010', debit: 1000, credit: 0 },
-        { accountCode: '1250', debit: 0, credit: 1000 },
-        { accountCode: '2010', debit: 0, credit: 1000 },
-      ] }),
-      baseEntry({ id: 'je-3', date: '2026-01-03', settlesEntryId: 'je-2', lines: [
-        { accountCode: '2010', debit: 1000, credit: 0 },
-        { accountCode: '1010', debit: 0, credit: 1000 },
-      ] }),
-    ];
-    expect(computePendingObligations(entries, accounts)).toHaveLength(0);
-    const state = computeTransactionReviewStates(entries, accounts)[0];
-    expect(state.status).toBe('complete');
-    expect(state.completedOn).toBe('2026-01-03');
+  it('never treats a consumption entry itself as a new obligation', () => {
+    expect(computePendingObligations([consumption('je-2', 500)], accounts)).toHaveLength(0);
   });
 });
 
@@ -504,23 +327,6 @@ describe('Prepaid Expenses (1260) as an obligation account', () => {
   });
 });
 
-describe('multi-batch payable netting', () => {
-  it('leaves only the payable balance remaining after later batches in the same journal entry', () => {
-    const entries: JournalEntry[] = [baseEntry({
-      id: 'je-batched',
-      lines: [
-        { accountCode: '5030', debit: 1000, credit: 0, date: '2026-01-01' },
-        { accountCode: '1010', debit: 0, credit: 300, date: '2026-01-01' },
-        { accountCode: '2010', debit: 0, credit: 700, date: '2026-01-01' },
-        { accountCode: '2010', debit: 200, credit: 0, date: '2026-01-02' },
-        { accountCode: '1010', debit: 0, credit: 200, date: '2026-01-02' },
-      ],
-    })];
-    const pending = computePendingObligations(entries, accounts);
-    expect(pending.find(item => item.accountCode === '2010')?.remainingAmount).toBe(500);
-  });
-});
-
 describe('buildPrepaidExpenseSettlementLines', () => {
   it('returns nothing when nothing is used yet', () => {
     expect(buildPrepaidExpenseSettlementLines('5160', 0)).toEqual([]);
@@ -536,11 +342,11 @@ describe('buildPrepaidExpenseSettlementLines', () => {
 });
 
 describe('transaction review status', () => {
-  it('keeps completed transactions in Review and marks open obligations incomplete', () => {
+  it('keeps completed transactions in Review and marks open prepaid balances incomplete', () => {
     const entries = [
-      baseEntry({ id: 'je-1', transactionType: 'Rent', lines: [
-        { accountCode: '5020', debit: 1000, credit: 0 },
-        { accountCode: '2010', debit: 0, credit: 1000 },
+      baseEntry({ id: 'je-1', transactionType: 'Purchase of Prepaid Assets', lines: [
+        { accountCode: '1285', debit: 1000, credit: 0 },
+        { accountCode: '1010', debit: 0, credit: 1000 },
       ] }),
       baseEntry({ id: 'je-2', reference: 'JE-0002', transactionType: 'Supplies', lines: [
         { accountCode: '5160', debit: 200, credit: 0 },

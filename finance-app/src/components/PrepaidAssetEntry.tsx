@@ -13,7 +13,7 @@ import {
   PrepaidAssetPaymentMethod,
 } from '../lib/prepaidAssets';
 import { DatedAmountRecord, TransactionDraft } from '../types';
-import { isDateWithinReportingPeriod, reportingPeriodBounds } from '../lib/reportingPeriod';
+import { automaticPostingDate as resolveAutomaticPostingDate, isDateWithinReportingPeriod } from '../lib/reportingPeriod';
 import { splitBalancedJournalLinesByDate } from '../lib/outrightExpense';
 import { FinancialPreviewPanels } from './FinancialPreviewPanels';
 
@@ -29,10 +29,6 @@ const paymentMethods: { value: PrepaidAssetPaymentMethod; label: string }[] = [
 
 const money = (value: string) => Number(value) || 0;
 const rowsTotal = (rows: DatedAmountRecord[]) => rows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
-const localToday = () => {
-  const now = new Date();
-  return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
-};
 
 function PaymentRows({ label, rows, setRows, defaultDate }: { label: string; rows: DatedAmountRecord[]; setRows: (rows: DatedAmountRecord[]) => void; defaultDate: string }) {
   return <div className="space-y-2">
@@ -108,12 +104,10 @@ export function PrepaidAssetEntry({ draftToResume = null, onDraftResumed, onDraf
   const availableAdvance = officer ? counterpartyBalance(journalEntries, '1250', 'Debit', officer) : 0;
   const availableCash = Math.max(0, accountBalances['1010'] || 0);
   const config = category ? PREPAID_ASSET_CATEGORIES[category] : null;
-  const automaticPostingDate = useMemo(() => {
-    const today = localToday();
-    if (!settings.semester || !settings.reportingYear) return today;
-    const bounds = reportingPeriodBounds(settings.semester, settings.reportingYear);
-    return today >= bounds.startDate && today <= bounds.endDate ? today : bounds.endDate;
-  }, [settings.reportingYear, settings.semester]);
+  const automaticPostingDate = useMemo(
+    () => resolveAutomaticPostingDate(settings.semester, settings.reportingYear),
+    [settings.reportingYear, settings.semester],
+  );
 
   const downpayments = useMemo(() => journalEntries.flatMap(entry => {
     const entryCategory = entry.transactionDetails?.prepaidAssetCategory;

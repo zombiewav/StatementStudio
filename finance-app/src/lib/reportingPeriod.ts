@@ -34,6 +34,18 @@ export function reportingPeriodBounds(semester: Semester, reportingYear: number)
     : { startDate: `${reportingYear + 1}-01-01`, endDate: `${reportingYear + 1}-05-31` };
 }
 
+/** Local calendar date as YYYY-MM-DD. toISOString() is UTC, a day behind in the Philippines before 8am. */
+export function localDateString(now: Date = new Date()): string {
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
+}
+
+/** Date for entries the system dates itself: today if it falls in the reporting period, else the period's last day. */
+export function automaticPostingDate(semester: Semester | '' | undefined, reportingYear: number | undefined, today: string = localDateString()): string {
+  if (!semester || !reportingYear) return today;
+  const { startDate, endDate } = reportingPeriodBounds(semester, reportingYear);
+  return today >= startDate && today <= endDate ? today : endDate;
+}
+
 export function isDateWithinReportingPeriod(date: string, semester: Semester, reportingYear: number): boolean {
   const { startDate, endDate } = reportingPeriodBounds(semester, reportingYear);
   return date >= startDate && date <= endDate;

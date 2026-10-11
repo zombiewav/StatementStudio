@@ -23,8 +23,6 @@ const sharedItems = ['Plaques', 'Certificates', 'Medals', 'Trophies', 'Pins', 'B
 
 export const PREPAID_ASSET_ITEMS: Record<string, PrepaidAssetCategory[]> = {
   ...Object.fromEntries(sharedItems.map(item => [item, ['awards', 'supplies'] as PrepaidAssetCategory[]])),
-  'Other Prizes and Awards': ['awards'],
-  'Other Materials and Supplies': ['supplies'],
   'Decoration Materials': ['supplies'],
   'Booth Materials': ['supplies'],
   'First Aid Kit': ['supplies'],
@@ -36,6 +34,7 @@ export const PREPAID_ASSET_ITEMS: Record<string, PrepaidAssetCategory[]> = {
   'Light and Sound System Rental': ['rent'],
   Uniform: ['uniform'],
   Clothing: ['uniform'],
+  Others: ['awards', 'supplies', 'rent', 'uniform'],
 };
 
 const cents = (value: number) => Math.round(value * 100) / 100;

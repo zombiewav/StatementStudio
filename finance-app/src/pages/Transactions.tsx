@@ -274,7 +274,14 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   // classification-match effect below (keyed on txName, which hydration
   // also sets) doesn't immediately wipe the just-restored fields back to
   // their blank defaults.
-  const justHydratedDraftRef = useRef(false);
+  // Holds the txName a resumed draft restored. It is matched against txName
+  // rather than consumed by whichever effect pass runs first, because React
+  // StrictMode re-runs the mount effects and would otherwise use it up before
+  // the restored values render.
+  const justHydratedDraftRef = useRef<string | null>(null);
+  // The txName the classification effect last handled, so a StrictMode re-run
+  // with an unchanged txName does not re-apply blank defaults over a draft.
+  const lastClassifiedTxNameRef = useRef<string | null>(null);
   const appliedDraftIdRef = useRef<string | null>(null);
 
   const [classificationPreview, setClassificationPreview] = useState<{
@@ -380,12 +387,14 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
 
   // Trigger classification suggestion on Name input change
   useEffect(() => {
-    if (justHydratedDraftRef.current) {
+    if (lastClassifiedTxNameRef.current === txName) return;
+    lastClassifiedTxNameRef.current = txName;
+    if (justHydratedDraftRef.current !== null && txName === justHydratedDraftRef.current) {
       // A draft-resume effect just set every field directly (including
       // txName, which is this effect's own dependency) — skip this one
       // pass so its destructive "clear everything else" branch below
       // doesn't immediately undo what was just restored.
-      justHydratedDraftRef.current = false;
+      justHydratedDraftRef.current = null;
       return;
     }
     const match = selectedTransactionType === 'Outright Expense Payment' && selectedCategory === 'expense-transactions'
@@ -509,9 +518,10 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       return;
     }
     appliedDraftIdRef.current = draftToResume.id;
-    justHydratedDraftRef.current = true;
 
     const snapshot = draftToResume.formState as Partial<TransactionFormSnapshot>;
+    // Only needed when txName will change; otherwise the classification effect never runs for it.
+    justHydratedDraftRef.current = (snapshot.txName || '') !== lastClassifiedTxNameRef.current ? snapshot.txName || '' : null;
     const fallbackDate = snapshot.date || '';
     setEditingDraftId(draftToResume.id);
     setSelectedCategory((draftToResume.category as TransactionCategoryId) || null);

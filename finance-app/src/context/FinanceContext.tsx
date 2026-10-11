@@ -50,7 +50,7 @@ const isRetiredAccountRow = (account: Account) =>
 // that an older workspace never had.
 export function restoreSavedAccounts(saved: Account[]): Account[] {
   const active = saved.filter(account => !isRetiredAccountRow(account)).map(account => {
-    const current = INITIAL_ACCOUNTS.find(defaultAccount => defaultAccount.code === account.code && ['1270', '1360', '2010', '2020'].includes(account.code));
+    const current = INITIAL_ACCOUNTS.find(defaultAccount => defaultAccount.code === account.code && ['1270', '1360', '2010', '2020', '5180'].includes(account.code));
     return current ? { ...account, name: current.name, description: current.description } : account;
   });
   return [...active, ...INITIAL_ACCOUNTS.filter(a => BACKFILLED_DEFAULT_ACCOUNT_CODES.has(a.code) && !active.some(existing => existing.code === a.code))];
@@ -328,7 +328,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
   { code: '5150', name: 'Delivery Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Freight, shipping, and delivery costs', isActive: true },
   { code: '5160', name: 'Event Supplies Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Supplies consumed specifically for an event or program', isActive: true },
   { code: '5170', name: 'Loss from Spoilage', type: 'Expenses', normalBalance: 'Debit', description: 'Donated food or supplies that expired, spoiled, or became unusable', isActive: true },
-  { code: '5180', name: 'Uniform Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Uniforms and organization apparel for members and officers', isActive: true },
+  { code: '5180', name: 'Clothing/Uniform Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Uniforms and organization apparel for members and officers', isActive: true },
   { code: '5190', name: 'Tokens & Recognition Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Tokens, certificates, and recognition items for volunteers and participants', isActive: true },
   { code: '5200', name: 'Honoraria Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Honoraria paid to guest speakers and resource persons', isActive: true },
   { code: '5210', name: 'Membership Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Dues and fees the organization itself pays to join another association or federation', isActive: true },

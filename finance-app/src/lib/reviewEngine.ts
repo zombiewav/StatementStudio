@@ -11,11 +11,12 @@ import { Account, ClosingRecord, JournalEntry, JournalLine } from '../types';
 import { customerOrderFinalizationIssues, customerOrderState } from './customerOrders';
 import { PREPAID_ASSET_ACCOUNT_CODES } from './prepaidAssets';
 
-// The accounts a transaction can leave open, each answering a different
-// REVIEW question ("did you reimburse them yet?", "have you paid the
-// supplier?", "did the officer actually use/settle the advance?", "has
-// this now been used/consumed/benefited from?").
-export const OBLIGATION_ACCOUNT_CODES = ['2050', '2010', '2020', '2030', '2040', '2061', '2062', '2063', '2064', '1200', '1320', '1250', '1260', ...PREPAID_ASSET_ACCOUNT_CODES] as const;
+// The only accounts that still ask a follow-up question in Review: Prepaid
+// Expenses and Other Assets ("how much has been used or consumed this
+// semester?"). Every other open balance (payables, Due to Officers, Advances
+// to Officers, receivables) is settled from Transactions or carried to the
+// next period, so it never holds a transaction at Incomplete.
+export const OBLIGATION_ACCOUNT_CODES = ['1260', ...PREPAID_ASSET_ACCOUNT_CODES] as const;
 export type ObligationAccountCode = typeof OBLIGATION_ACCOUNT_CODES[number];
 
 // Prepaid Expenses: the general "not yet used" holding account any
@@ -63,11 +64,6 @@ export function isJournalEntryEditLocked(entry: JournalEntry, closings: ClosingR
   );
 }
 
-/** Acquisition supplier payments are entered in the acquisition workflow. */
-export function isReviewSettlementAvailable(accountCode: ObligationAccountCode, sourceEntry?: JournalEntry): boolean {
-  return !(accountCode === '2020' && sourceEntry?.lines.some(line => line.accountCode === '1700' && line.debit > 0));
-}
-
 function rootReviewEntryId(entry: JournalEntry, entries: JournalEntry[]): string {
   let current = entry;
   const seen = new Set<string>();
@@ -107,11 +103,6 @@ export function computePendingObligations(entries: JournalEntry[], accounts: Acc
     const obligationCodesInEntry = [...new Set(entry.lines.map(line => line.accountCode)
       .filter(accountCode => OBLIGATION_ACCOUNT_CODES.includes(accountCode as ObligationAccountCode)))] as ObligationAccountCode[];
     for (const accountCode of obligationCodesInEntry) {
-      // Standalone officer payments are complete transactions. Keep the same
-      // accounts reviewable when they arise from purchases or expenses.
-      const officerTransactionType = entry.transactionType || entry.description;
-      if ((accountCode === '1250' || accountCode === '2050') &&
-        ['Advances to Officers', 'Reimbursement to Officer', 'Reimbursement to Officers'].includes(officerTransactionType)) continue;
       if (PREPAID_ASSET_ACCOUNT_CODES.includes(accountCode) && currentReportingPeriod && entry.transactionDetails?.prepaidSemesterFinalized === currentReportingPeriod) continue;
       const account = accounts.find(a => a.code === accountCode);
       if (!account) continue;
