@@ -21,6 +21,7 @@ import { LandingPage } from './pages/LandingPage';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { RedirectIfSignedIn } from './components/auth/RedirectIfSignedIn';
 import { AuthProvider } from './context/AuthContext';
 
 function DashboardLayout() {
@@ -119,10 +120,10 @@ function AppRoutes(): React.ReactElement {
     <Routes>
       <Route
         path="/"
-        element={<LandingPage onEnterApp={() => navigate('/login')} />}
+        element={<RedirectIfSignedIn><LandingPage onEnterApp={() => navigate('/login')} /></RedirectIfSignedIn>}
       />
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
+      <Route path="/login" element={<RedirectIfSignedIn><LoginPage /></RedirectIfSignedIn>} />
+      <Route path="/register" element={<RedirectIfSignedIn><RegisterPage /></RedirectIfSignedIn>} />
       <Route
         path="/app/*"
         element={
