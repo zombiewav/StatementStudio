@@ -29,6 +29,7 @@ import { linkReceiptIdsToEntry } from '../lib/receiptAttachments';
 import { getEffectiveClassificationRules, validateCustomTransactionRule } from '../lib/customTransactionRules';
 import { ActivityFeeFollowUp, ActivityFeeSchedule, buildActivityFeeFollowUp, buildActivityFeeReceivableCollections, buildInitialActivityFeeSchedule, buildScheduledActivityFeeRecognition } from '../lib/activityFees';
 import { useWorkspaceSync } from '../hooks/useWorkspaceSync';
+import { downpaymentAmountChangeBlock, downpaymentLinkBlock } from '../lib/merchandiseAcquisition';
 import { carryForwardCustomerOrders, customerOrderFinalizationIssues, customerOrderReversalBlock } from '../lib/customerOrders';
 import { isDateWithinReportingPeriod, reportingPeriodBounds } from '../lib/reportingPeriod';
 
@@ -50,14 +51,14 @@ const isRetiredAccountRow = (account: Account) =>
 // that an older workspace never had.
 export function restoreSavedAccounts(saved: Account[]): Account[] {
   const active = saved.filter(account => !isRetiredAccountRow(account)).map(account => {
-    const current = INITIAL_ACCOUNTS.find(defaultAccount => defaultAccount.code === account.code && ['1270', '1360', '2010', '2020', '5180'].includes(account.code));
+    const current = INITIAL_ACCOUNTS.find(defaultAccount => defaultAccount.code === account.code && ['1270', '1360', '2010', '2020', '5080', '5180', '5200'].includes(account.code));
     return current ? { ...account, name: current.name, description: current.description } : account;
   });
   return [...active, ...INITIAL_ACCOUNTS.filter(a => BACKFILLED_DEFAULT_ACCOUNT_CODES.has(a.code) && !active.some(existing => existing.code === a.code))];
 }
 const BACKFILLED_DEFAULT_ACCOUNT_CODES = new Set([
   '1210', '1220', '1230', '1270', '1280', '1285', '1295', '1298', '1330', '1360', '1370',
-  '5020', '5120', '5180', '5290',
+  '5020', '5120', '5180', '5290', '5330', '5340', '5350', '5360',
   '1501', '1502', '1503', '1504', '1505', '1506', '1507', '1508', '1509', '1510', '1511', '1512', '1513', '1514', '1515', '1516',
   '1651', '1652', '1653', '2020', '2030', '2040', '2061', '2062', '2063', '2064', '2070', '2080', '2140', '2150', '4100', '4110', '5300',
 ]);
@@ -317,7 +318,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
   // Added to support the "meal(s)" classification rule below, the concrete
   // example (working paper Sheet2, "Payment for Meals") that demonstrates
   // the purpose question (Question A) — see purposeOptions on that rule.
-  { code: '5080', name: 'Meals and Refreshments Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Meals and refreshments for meetings, events, participants, speakers, and organizers', isActive: true },
+  { code: '5080', name: 'Food and Meals Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Meals and refreshments for meetings, events, participants, speakers, and organizers', isActive: true },
   { code: '5090', name: 'Depreciation Expense - Equipment', type: 'Expenses', normalBalance: 'Debit', description: 'Periodic depreciation charged against Equipment & Tools', isActive: true },
   { code: '5095', name: 'Depreciation Expense - Furniture & Fixtures', type: 'Expenses', normalBalance: 'Debit', description: 'Periodic depreciation charged against Furniture & Fixtures', isActive: true },
   { code: '5100', name: 'Bank Charges', type: 'Expenses', normalBalance: 'Debit', description: 'Bank fees, service charges, and transaction fees', isActive: true },
@@ -330,7 +331,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
   { code: '5170', name: 'Loss from Spoilage', type: 'Expenses', normalBalance: 'Debit', description: 'Donated food or supplies that expired, spoiled, or became unusable', isActive: true },
   { code: '5180', name: 'Clothing/Uniform Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Uniforms and organization apparel for members and officers', isActive: true },
   { code: '5190', name: 'Tokens & Recognition Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Tokens, certificates, and recognition items for volunteers and participants', isActive: true },
-  { code: '5200', name: 'Honoraria Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Honoraria paid to guest speakers and resource persons', isActive: true },
+  { code: '5200', name: 'Honorarium Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Honoraria paid to guest speakers and resource persons', isActive: true },
   { code: '5210', name: 'Membership Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Dues and fees the organization itself pays to join another association or federation', isActive: true },
   { code: '5220', name: 'Service Charge', type: 'Expenses', normalBalance: 'Debit', description: 'Third-party service charges (distinct from Bank Charges)', isActive: true },
   { code: '5230', name: 'Donations and Contributions Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Donations and contributions given by the organization', isActive: true },
@@ -342,6 +343,10 @@ export const INITIAL_ACCOUNTS: Account[] = [
   { code: '5290', name: 'Supplies and Materials Expense', type: 'Expenses', normalBalance: 'Debit', description: 'General supplies and materials consumed outside a specific event', isActive: true },
   { code: '5300', name: 'Event Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Event and program expenses recorded under one account when per-event expense breakdowns are unavailable', isActive: true },
   { code: '5310', name: 'Logistics and Venue Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Venue, logistics, and event coordination costs', isActive: true },
+  { code: '5330', name: 'Cleaning Supplies Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Cleaning supplies bought and used right away', isActive: true },
+  { code: '5340', name: 'Registration Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Registration fees for seminars, conferences, and competitions', isActive: true },
+  { code: '5350', name: 'Permits and Licenses Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Permit fees and licenses', isActive: true },
+  { code: '5360', name: 'Medical Supplies Expense', type: 'Expenses', normalBalance: 'Debit', description: 'First aid kits and medical supplies bought and used right away', isActive: true },
   { code: '5320', name: 'Assistance Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Financial or in-kind assistance provided by the organization', isActive: true },
 ];
 
@@ -562,10 +567,10 @@ export const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   // else in this file — and bare 'depreciation' falls back to Equipment,
   // matching the paper's own explicitly worked example (row 20) rather than
   // an invented default.
-  { keyword: 'depreciation of chair', debitAccountCode: '5095', creditAccountCode: '1660', description: 'Depreciation Expense - Furniture & Fixtures (Chairs)' },
-  { keyword: 'depreciation of cabinet', debitAccountCode: '5095', creditAccountCode: '1660', description: 'Depreciation Expense - Furniture & Fixtures (Cabinet)' },
-  { keyword: 'depreciation of table', debitAccountCode: '5095', creditAccountCode: '1660', description: 'Depreciation Expense - Furniture & Fixtures (Tables)' },
-  { keyword: 'depreciation of desk', debitAccountCode: '5095', creditAccountCode: '1660', description: 'Depreciation Expense - Furniture & Fixtures (Desks)' },
+  { keyword: 'depreciation of chair', debitAccountCode: '5095', creditAccountCode: '1660', description: 'Depreciation of Chairs' },
+  { keyword: 'depreciation of cabinet', debitAccountCode: '5095', creditAccountCode: '1660', description: 'Depreciation of Cabinet' },
+  { keyword: 'depreciation of table', debitAccountCode: '5095', creditAccountCode: '1660', description: 'Depreciation of Tables/Desk' },
+  { keyword: 'depreciation of desk', debitAccountCode: '5095', creditAccountCode: '1660', description: 'Depreciation of Tables/Desk' },
   { keyword: 'depreciation of laptop', debitAccountCode: '5090', creditAccountCode: '1550', description: 'Depreciation of Laptop' },
   { keyword: 'depreciation of projector', debitAccountCode: '5090', creditAccountCode: '1550', description: 'Depreciation of Projector' },
   { keyword: 'depreciation of printer', debitAccountCode: '5090', creditAccountCode: '1550', description: 'Depreciation of Printer' },
@@ -862,7 +867,7 @@ interface FinanceContextType {
   finalizeDraftJournalEntry: (id: string) => void;
   finalizeJournalEntry: (id: string) => void;
   reverseJournalEntry: (id: string) => void;
-  deleteJournalEntry: (id: string) => void;
+  deleteJournalEntry: (id: string) => boolean;
   postClosingStage: (fiscalYear: string, closingDate: string, stage: 'revenue' | 'expense' | 'income-summary') => void;
   attachReceiptsToEntry: (entryId: string, receipts: ReceiptAttachmentDraft[]) => void;
   addCustomClassificationRule: (description: string, debitAccountCode: string, creditAccountCode: string) => void;
@@ -878,7 +883,7 @@ interface FinanceContextType {
   // Saves (or, when an id already exists, overwrites) an in-progress
   // Stores a balanced draft ledger entry and form state for later finalization.
   saveDraftTransaction: (draft: { id?: string; category: string | null; label: string; formState: Record<string, unknown>; journalEntryId?: string }) => string;
-  deleteDraftTransaction: (id: string, preserveJournalEntryIds?: string[]) => void;
+  deleteDraftTransaction: (id: string, preserveJournalEntryIds?: string[]) => boolean;
   recordFinancialStatementHistory: (record: Omit<FinancialStatementHistoryRecord, 'id' | 'generatedAt'>) => FinancialStatementHistoryRecord;
   deleteSemester: (key: string) => void;
   switchReportingPeriod: (schoolYear: string, semester: '1st Semester' | '2nd Semester', reportingYear: number) => void;
@@ -1132,6 +1137,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     const postingEntries = postingEntriesRef.current;
     const replaced = replaceDraftEntryId ? postingEntries.find(entry => entry.id === replaceDraftEntryId && entry.isDraft) : undefined;
     if (replaceDraftEntryId && !replaced) throw new Error('Draft journal entry not found.');
+    const linkBlock = replaced ? downpaymentAmountChangeBlock(replaced, postingEntries, lines) : undefined;
+    if (linkBlock) throw new Error(linkBlock);
     // Draft entries already sit in the ledger and in the cash shown on the
     // form, so they count toward the balance a new posting is validated against.
     const activeEntries = postingEntries.filter(entry => entry.id !== replaced?.id);
@@ -1184,6 +1191,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     if (!current || isJournalEntryEditLocked(current, closedFiscalYears) || isJournalEntryEditLocked(entry, closedFiscalYears)) {
       throw new Error('This posted transaction can no longer be edited.');
     }
+    const linkBlock = downpaymentAmountChangeBlock(current, journalEntries, entry.lines);
+    if (linkBlock) throw new Error(linkBlock);
     setJournalEntries(previous => previous.map(candidate => candidate.id === entry.id ? entry : candidate));
     logAudit('Edit Journal Entry', `Updated posted journal entry ${entry.reference}: ${entry.description}.`);
   };
@@ -1226,6 +1235,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     if (!entry || entry.reversedByEntryId || entry.description.startsWith('Closing Entries')) return;
     const orderBlock = customerOrderReversalBlock(entry, journalEntries);
     if (orderBlock) { window.alert(orderBlock); return; }
+    const linkBlock = downpaymentLinkBlock(entry, journalEntries);
+    if (linkBlock) { window.alert(linkBlock); return; }
 
     const reference = generateNextReference(journalEntries);
     const reversalEntry: JournalEntry = {
@@ -1251,14 +1262,16 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     logAudit('Reverse Journal Entry', `Reversed ${entry.reference}: ${entry.description} (via new entry ${reference})`);
   };
 
-  const deleteJournalEntry = (id: string) => {
+  const deleteJournalEntry = (id: string): boolean => {
     const entry = journalEntries.find(candidate => candidate.id === id);
-    if (!entry || entry.description.startsWith('Closing Entries')) return;
-    if (entry.transactionDetails?.carriedForward) return;
+    if (!entry || entry.description.startsWith('Closing Entries')) return false;
+    if (entry.transactionDetails?.carriedForward) return false;
     if (!entry.transactionDetails?.customerOrder) {
       const orderBlock = customerOrderReversalBlock(entry, journalEntries);
-      if (orderBlock) { window.alert(orderBlock); return; }
+      if (orderBlock) { window.alert(orderBlock); return false; }
     }
+    const linkBlock = downpaymentLinkBlock(entry, journalEntries);
+    if (linkBlock) { window.alert(linkBlock); return false; }
 
     // Deleting an original also removes its linked reversal; deleting only a
     // reversal reactivates the original by clearing reversedByEntryId.
@@ -1286,6 +1299,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       return [{ ...record, history, updatedAt: new Date().toISOString() }];
     }));
     logAudit('Delete Posted Transaction', `Permanently deleted ${entry.reference}${idsToDelete.size > 1 ? ' and its linked reversal' : ''}: ${entry.description}.`);
+    return true;
   };
 
   const commitActivityFeeSchedule = (schedule: ActivityFeeSchedule, eventName: string, reportingPeriod: string) => {
@@ -1563,8 +1577,14 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     return id;
   };
 
-  const deleteDraftTransaction = (id: string, preserveJournalEntryIds: string[] = []) => {
+  const deleteDraftTransaction = (id: string, preserveJournalEntryIds: string[] = []): boolean => {
     const preserved = new Set(preserveJournalEntryIds);
+    const draftToDelete = draftTransactions.find(d => d.id === id);
+    const draftEntry = draftToDelete?.journalEntryId && !preserved.has(draftToDelete.journalEntryId)
+      ? journalEntries.find(entry => entry.id === draftToDelete.journalEntryId)
+      : undefined;
+    const linkBlock = draftEntry ? downpaymentLinkBlock(draftEntry, journalEntries) : undefined;
+    if (linkBlock) { window.alert(linkBlock); return false; }
     setDraftTransactions(prev => {
       const existing = prev.find(d => d.id === id);
       if (existing) logAudit('Discard Draft Transaction', `Discarded draft "${existing.label}".`);
@@ -1574,6 +1594,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       }
       return prev.filter(d => d.id !== id);
     });
+    return true;
   };
 
   const recordFinancialStatementHistory = (record: Omit<FinancialStatementHistoryRecord, 'id' | 'generatedAt'>): FinancialStatementHistoryRecord => {

@@ -5,6 +5,19 @@ export type PayablePaymentMethod = 'organization-funds' | 'officer-personal' | '
 export const PRIOR_PERIOD_PAYABLE_CODES = ['2010', '2020', '2030', '2040', '2061', '2062', '2063', '2064'] as const;
 export type PriorPeriodPayableCode = typeof PRIOR_PERIOD_PAYABLE_CODES[number];
 
+// The Payables dropdown exactly as the client's Accounts sheet lists it,
+// each choice paired with the payable account it settles.
+export const PRIOR_PERIOD_PAYABLE_CHOICES: readonly { code: PriorPeriodPayableCode; label: string }[] = [
+  { code: '2010', label: 'Payment of Accounts Payable from Previous Period – Expenses' },
+  { code: '2030', label: 'Payment of Accounts Payable from Previous Period – PPE' },
+  { code: '2040', label: 'Payment of Accounts Payable from Previous Period – Furniture and Fixtures' },
+  { code: '2020', label: 'Payment of Accounts Payable from Previous Period – Merchandise' },
+  { code: '2061', label: 'Payment of Accounts Payable from Previous Period - Awards and Prizes' },
+  { code: '2062', label: 'Payment of Accounts Payable from Previous Period - Supplies and Materials' },
+  { code: '2063', label: 'Payment of Accounts Payable from Previous Period - Prepaid Rent' },
+  { code: '2064', label: 'Payment of Accounts Payable from Previous Period - Clothing/Uniform' },
+];
+
 export interface PayablePaymentInput {
   payableAccountCode: PriorPeriodPayableCode;
   paymentMethod: PayablePaymentMethod;

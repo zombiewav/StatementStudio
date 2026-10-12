@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildPriorPeriodPayablePayment, PRIOR_PERIOD_PAYABLE_CODES, remainingPriorPeriodPayable } from './payablePayments';
+import { buildPriorPeriodPayablePayment, PRIOR_PERIOD_PAYABLE_CHOICES, PRIOR_PERIOD_PAYABLE_CODES, remainingPriorPeriodPayable } from './payablePayments';
 
 describe('prior-period payable payments', () => {
   it('posts a mixed payment against the selected payable', () => {
@@ -36,5 +36,14 @@ describe('prior-period payable payments', () => {
       { accountCode: '2062', debit: 300, credit: 0, date: '2026-10-03' },
       { accountCode: '1010', debit: 0, credit: 300, date: '2026-10-03' },
     ]);
+  });
+});
+
+describe('Payables dropdown choices', () => {
+  it('lists the 8 choices from the sheet in order, one per payable account', () => {
+    expect(PRIOR_PERIOD_PAYABLE_CHOICES.map(choice => choice.code)).toEqual(['2010', '2030', '2040', '2020', '2061', '2062', '2063', '2064']);
+    expect([...PRIOR_PERIOD_PAYABLE_CHOICES.map(choice => choice.code)].sort()).toEqual([...PRIOR_PERIOD_PAYABLE_CODES].sort());
+    expect(PRIOR_PERIOD_PAYABLE_CHOICES[0].label).toBe('Payment of Accounts Payable from Previous Period – Expenses');
+    expect(PRIOR_PERIOD_PAYABLE_CHOICES[7].label).toBe('Payment of Accounts Payable from Previous Period - Clothing/Uniform');
   });
 });

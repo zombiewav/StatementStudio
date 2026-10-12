@@ -41,9 +41,23 @@ const isPurchaseAssetCode = (code: string): boolean => {
     || numericCode === 1650 || (numericCode >= 1651 && numericCode <= 1653);
 };
 
+// Items an older Revisions file asked for that the client's current Accounts
+// sheet no longer lists. Their rules stay so saved entries and drafts still
+// resolve, but they are not offered in the PPE or Depreciation dropdowns.
+const RETIRED_ASSET_ITEMS = ['Computer Hardware', 'Extension Wire', 'Other Small Equipment'];
+
+export function isRetiredAssetPickerType(description: string): boolean {
+  return RETIRED_ASSET_ITEMS.some(item => description === `Purchase of ${item}` || description === `Depreciation of ${item}`);
+}
+
+// Paying a previous-period Merchandise payable happens in the Payables category, where the carried-forward
+// balance is tracked. The rule stays so older entries and drafts still resolve.
+export function isRetiredMerchandisePickerType(description: string): boolean {
+  return description === 'Payment for Unpaid Merchandise Purchased and Received in Previous Period/Semester';
+}
+
 export function isDepreciationPickerTypeVisible(description: string): boolean {
-  return description !== 'Depreciation Expense - Equipment'
-    && !/^Depreciation Expense - Furniture & Fixtures \((Chairs|Cabinet|Tables|Desks)\)$/.test(description);
+  return description !== 'Depreciation Expense - Equipment' && !isRetiredAssetPickerType(description);
 }
 
 export function categorizeTransactionRule(rule: Pick<ClassificationRule, 'debitAccountCode' | 'creditAccountCode' | 'description'>): Exclude<TransactionCategoryId, 'activity-fees'> {

@@ -35,6 +35,8 @@ export interface ReceiptAttachment extends ReceiptAttachmentDraft {
 export interface DatedAmountRecord {
   date: string;
   amount: number;
+  /** Merchandise acquisition only: entered as a payment made after the goods were received. */
+  later?: boolean;
 }
 
 export interface TransactionDetails {

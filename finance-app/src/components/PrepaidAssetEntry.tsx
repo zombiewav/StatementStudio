@@ -147,7 +147,8 @@ export function PrepaidAssetEntry({ draftToResume = null, onDraftResumed, onDraf
     if (!settings.semester || !settings.reportingYear) return setError('Set the organization Semester and Year before posting.');
     const semester = settings.semester;
     const reportingYear = settings.reportingYear;
-    if (mode !== 'consumption' && !date) return setError('Enter the transaction date.');
+    // A blank date is dated automatically (today, kept inside the reporting period).
+    const entryDate = date || automaticPostingDate;
     try {
       if (mode === 'consumption') {
         if (!selectedPurchase?.entry) throw new Error('Select a prepaid-asset purchase with an unused balance.');
@@ -168,7 +169,7 @@ export function PrepaidAssetEntry({ draftToResume = null, onDraftResumed, onDraf
         const value = money(amount);
         if (mode === 'downpayment') {
           if (value > availableCash) throw new Error('Downpayment cannot exceed the available cash balance.');
-          addJournalEntry(date, `Downpayment for ${item}`, GENERAL_FUND, buildPrepaidAssetDownpaymentPosting(category, value, date), purpose === 'event' ? eventName : undefined, undefined, {
+          addJournalEntry(entryDate, `Downpayment for ${item}`, GENERAL_FUND, buildPrepaidAssetDownpaymentPosting(category, value, entryDate), purpose === 'event' ? eventName : undefined, undefined, {
             transactionType: 'Downpayment of Prepaid Assets', details: { eventRelated: purpose === 'event', receiptAttachmentIds: [], prepaidAssetCategory: category, prepaidAssetItem: item, prepaidAssetPurpose: purpose, counterpartyName: item },
           });
         } else {
@@ -176,8 +177,8 @@ export function PrepaidAssetEntry({ draftToResume = null, onDraftResumed, onDraf
           if (quantity && (!Number.isInteger(money(quantity)) || money(quantity) <= 0)) throw new Error('If entered, quantity must be a whole number greater than zero.');
           const needsOfficer = paymentMethod === 'officer-personal' || paymentMethod === 'officer-advance' || paymentMethod === 'combination';
           if (needsOfficer && !officer.trim()) throw new Error('Select or enter the accountable officer.');
-          const posting = buildPrepaidAssetPurchasePosting({ category, purchasePrice: value, purchaseDate: date, paymentMethod, organizationPayments, officerPayments, advancePayments, downpaymentAmount: selectedDownpayment?.remaining || 0, availableCash, availableAdvance });
-          const batches = splitBalancedJournalLinesByDate(posting.lines, date);
+          const posting = buildPrepaidAssetPurchasePosting({ category, purchasePrice: value, purchaseDate: entryDate, paymentMethod, organizationPayments, officerPayments, advancePayments, downpaymentAmount: selectedDownpayment?.remaining || 0, availableCash, availableAdvance });
+          const batches = splitBalancedJournalLinesByDate(posting.lines, entryDate);
           const purchaseBatch = batches.find(batch => batch.lines.some(line => line.accountCode === config?.assetCode && line.debit > 0));
           if (!purchaseBatch) throw new Error('The prepaid-asset purchase batch is missing.');
           if (batches.some(batch => !isDateWithinReportingPeriod(batch.date, semester, reportingYear))) {
@@ -240,7 +241,7 @@ export function PrepaidAssetEntry({ draftToResume = null, onDraftResumed, onDraf
     </div> : <div className="grid gap-3 sm:grid-cols-2">
       <label className="text-[10px] font-bold uppercase text-slate-600">Item<select value={item} onChange={event => chooseItem(event.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white p-2.5 text-xs dark:border-slate-700 dark:bg-slate-800"><option value="">Select an item…</option>{availableItems.map(value => <option key={value}>{value}</option>)}</select></label>
       <label className="text-[10px] font-bold uppercase text-slate-600">Category<select value={category} onChange={event => { setCategory(event.target.value as PrepaidAssetCategory); setSelectedDownpaymentId(''); }} disabled={!item} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white p-2.5 text-xs disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800"><option value="">Select a category…</option>{allowedCategories.map(value => <option key={value} value={value}>{PREPAID_ASSET_CATEGORIES[value].label}</option>)}</select></label>
-      <label className="text-[10px] font-bold uppercase text-slate-600">Date<input type="date" value={date} onChange={event => setDate(event.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white p-2.5 text-xs dark:border-slate-700 dark:bg-slate-800" /></label>
+      <label className="text-[10px] font-bold uppercase text-slate-600">Date (optional - set automatically)<input type="date" value={date} onChange={event => setDate(event.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white p-2.5 text-xs dark:border-slate-700 dark:bg-slate-800" /></label>
       <label className="text-[10px] font-bold uppercase text-slate-600">{mode === 'purchase' ? 'Purchase price' : 'Initial downpayment'}<input type="number" min="0" step="0.01" value={amount} onChange={event => setAmount(event.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white p-2.5 text-xs dark:border-slate-700 dark:bg-slate-800" /></label>
       {mode === 'purchase' && (category === 'awards' || category === 'supplies') && <label className="text-[10px] font-bold uppercase text-slate-600">Quantity (optional)<input type="number" min="1" step="1" value={quantity} onChange={event => setQuantity(event.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white p-2.5 text-xs dark:border-slate-700 dark:bg-slate-800" /></label>}
       {mode === 'purchase' && <>

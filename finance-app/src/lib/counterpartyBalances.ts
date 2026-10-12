@@ -9,9 +9,9 @@ export interface CounterpartyBalance {
 
 const cents = (value: number): number => Math.round(value * 100) / 100;
 
-/** Builds a running subledger from the counterparty saved on each transaction.
- * `normalBalance` controls whether debit or credit activity increases the balance. */
-export function counterpartyBalances(
+/** Every counterparty with activity on the account, including those whose
+ * balance has dropped to zero (e.g. an officer who used the whole advance). */
+export function counterpartySummary(
   entries: JournalEntry[],
   accountCode: string,
   normalBalance: 'Debit' | 'Credit',
@@ -19,6 +19,8 @@ export function counterpartyBalances(
   const totals = new Map<string, CounterpartyBalance>();
 
   entries.forEach(entry => {
+    // A reversed entry is cancelled by its reversal, which carries no counterparty.
+    if (entry.reversedByEntryId) return;
     const name = entry.transactionDetails?.counterpartyName?.trim();
     if (!name) return;
     entry.lines.filter(line => line.accountCode === accountCode).forEach(line => {
@@ -33,9 +35,17 @@ export function counterpartyBalances(
     });
   });
 
-  return [...totals.values()]
-    .filter(item => item.balance > 0)
-    .sort((a, b) => a.name.localeCompare(b.name));
+  return [...totals.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** Builds a running subledger from the counterparty saved on each transaction.
+ * `normalBalance` controls whether debit or credit activity increases the balance. */
+export function counterpartyBalances(
+  entries: JournalEntry[],
+  accountCode: string,
+  normalBalance: 'Debit' | 'Credit',
+): CounterpartyBalance[] {
+  return counterpartySummary(entries, accountCode, normalBalance).filter(item => item.balance > 0);
 }
 
 export function counterpartyBalance(

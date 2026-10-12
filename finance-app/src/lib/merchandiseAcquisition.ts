@@ -60,6 +60,8 @@ export interface MerchandisePrepaymentInput {
 export interface MerchandisePrepaymentTotal {
   entryIds: string[];
   amount: number;
+  /** How many of the combined downpayments are still saved drafts. */
+  draftCount: number;
 }
 
 const cents = (value: number): number => Math.round(value * 100) / 100;
@@ -85,6 +87,7 @@ function datedAmounts(label: string, records: DatedAmountRecord[] | undefined, f
   return source.map(record => ({
     date: record.date || fallbackDate || '',
     amount: requireNonNegative(label, record.amount),
+    ...(record.later ? { later: true } : {}),
   })).filter(record => record.amount > 0);
 }
 
@@ -110,18 +113,52 @@ function addLine(lines: JournalLine[], accountCode: string, debit: number, credi
   lines.push({ accountCode, debit: normalizedDebit, credit: normalizedCredit, ...(date ? { date } : {}) });
 }
 
+const sameText = (left: string | undefined, right: string): boolean => (left || '').trim().toLocaleLowerCase() === right.trim().toLocaleLowerCase();
+const isActiveEntry = (entry: JournalEntry): boolean => !entry.reversalOfEntryId && !entry.reversedByEntryId;
+const linkedDownpaymentIds = (entry: JournalEntry): string[] => [
+  entry.transactionDetails?.merchandisePrepaymentEntryId,
+  ...(entry.transactionDetails?.merchandisePrepaymentEntryIds || []),
+].filter((id): id is string => Boolean(id));
+
+/** The active acquisition, if any, that already uses this downpayment. */
+export function acquisitionLinkedToDownpayment(downpayment: JournalEntry, entries: JournalEntry[]): JournalEntry | undefined {
+  return entries.find(candidate => candidate.id !== downpayment.id && isActiveEntry(candidate) && linkedDownpaymentIds(candidate).includes(downpayment.id));
+}
+
+/** Why a downpayment cannot be deleted or reversed, when an acquisition uses it. */
+export function downpaymentLinkBlock(downpayment: JournalEntry, entries: JournalEntry[]): string | undefined {
+  const acquisition = acquisitionLinkedToDownpayment(downpayment, entries);
+  return acquisition
+    ? `${downpayment.reference} is already linked to ${acquisition.reference}. Undo or delete that acquisition of merchandise first.`
+    : undefined;
+}
+
+const downpaymentAmount = (lines: { accountCode: string; debit: number; credit: number }[]): number =>
+  cents(lines.filter(line => line.accountCode === ADVANCES_TO_SUPPLIERS_ACCOUNT_CODE).reduce((sum, line) => sum + line.debit - line.credit, 0));
+
+/** Why a linked downpayment's amount cannot change: the acquisition already applied it. */
+export function downpaymentAmountChangeBlock(downpayment: JournalEntry, entries: JournalEntry[], nextLines: { accountCode: string; debit: number; credit: number }[]): string | undefined {
+  const acquisition = acquisitionLinkedToDownpayment(downpayment, entries);
+  if (!acquisition || downpaymentAmount(downpayment.lines) === downpaymentAmount(nextLines)) return undefined;
+  return `${downpayment.reference} is already linked to ${acquisition.reference}, so its amount cannot change. Undo or delete that acquisition of merchandise first.`;
+}
+
+/** Every downpayment for this merchandise and batch that no acquisition has used yet. Saved drafts count
+ * because a draft already sits in the ledger as if it were posted. */
 export function aggregateAvailableMerchandisePrepayments(entries: JournalEntry[], item: string, batch: string): MerchandisePrepaymentTotal {
-  if (!item.trim() || !batch.trim()) return { entryIds: [], amount: 0 };
-  const used = new Set(entries.flatMap(entry => [
-    entry.transactionDetails?.merchandisePrepaymentEntryId,
-    ...(entry.transactionDetails?.merchandisePrepaymentEntryIds || []),
-  ]).filter((id): id is string => Boolean(id)));
-  const matching = entries.filter(entry => !entry.isDraft && !entry.reversalOfEntryId && !entry.reversedByEntryId && !used.has(entry.id)
-    && entry.transactionDetails?.merchandiseItem === item
-    && entry.transactionDetails?.merchandiseBatch === batch);
+  if (!item.trim() || !batch.trim()) return { entryIds: [], amount: 0, draftCount: 0 };
+  const used = new Set(entries.filter(isActiveEntry).flatMap(linkedDownpaymentIds));
+  const matching = entries
+    .filter(entry => isActiveEntry(entry) && !used.has(entry.id)
+      && sameText(entry.transactionDetails?.merchandiseItem, item)
+      && sameText(entry.transactionDetails?.merchandiseBatch, batch))
+    .map(entry => ({ entry, amount: downpaymentAmount(entry.lines) }))
+    // An acquisition of the same batch carries the same item and batch; only real downpayments belong here.
+    .filter(candidate => candidate.amount > 0);
   return {
-    entryIds: matching.map(entry => entry.id),
-    amount: cents(matching.reduce((sum, entry) => sum + entry.lines.filter(line => line.accountCode === ADVANCES_TO_SUPPLIERS_ACCOUNT_CODE).reduce((lineSum, line) => lineSum + line.debit - line.credit, 0), 0)),
+    entryIds: matching.map(candidate => candidate.entry.id),
+    amount: cents(matching.reduce((sum, candidate) => sum + candidate.amount, 0)),
+    draftCount: matching.filter(candidate => candidate.entry.isDraft).length,
   };
 }
 
@@ -203,8 +240,10 @@ export function buildMerchandiseAcquisitionPosting(input: MerchandiseAcquisition
   addLine(lines, MERCHANDISE_INVENTORY_ACCOUNT_CODE, totalCost, 0, input.transactionDate);
   addLine(lines, ADVANCES_TO_SUPPLIERS_ACCOUNT_CODE, 0, prepaymentAmount, input.transactionDate);
 
-  const purchaseDatePayments = (records: DatedAmountRecord[]) => records.filter(record => !purchaseDate || !record.date || record.date === purchaseDate);
-  const laterPayments = (records: DatedAmountRecord[]) => records.filter(record => purchaseDate && record.date && record.date > purchaseDate);
+  // Payments entered under "on a later date" are always their own batch, even
+  // when their date was left blank or matches the receipt date.
+  const purchaseDatePayments = (records: DatedAmountRecord[]) => records.filter(record => !record.later && (!purchaseDate || !record.date || record.date === purchaseDate));
+  const laterPayments = (records: DatedAmountRecord[]) => records.filter(record => record.later || (purchaseDate && record.date && record.date > purchaseDate));
 
   if (allowedOrganization) {
     purchaseDatePayments(organizationPayments).forEach(payment => addLine(lines, cashAccountCode, 0, payment.amount, payment.date));
@@ -234,9 +273,10 @@ export function buildMerchandiseAcquisitionPosting(input: MerchandiseAcquisition
   const laterPaymentBatches = new Map<string, { accountCode: string; amount: number }[]>();
   const addLaterPayments = (payments: DatedAmountRecord[], accountCode: string) => {
     laterPayments(payments).forEach(payment => {
-      const batch = laterPaymentBatches.get(payment.date) || [];
+      const batchDate = payment.date || purchaseDate;
+      const batch = laterPaymentBatches.get(batchDate) || [];
       batch.push({ accountCode, amount: payment.amount });
-      laterPaymentBatches.set(payment.date, batch);
+      laterPaymentBatches.set(batchDate, batch);
     });
   };
   if (allowedOrganization) addLaterPayments(organizationPayments, cashAccountCode);
@@ -247,9 +287,12 @@ export function buildMerchandiseAcquisitionPosting(input: MerchandiseAcquisition
     const batchTotal = cents(payments.reduce((sum, payment) => sum + payment.amount, 0));
     const payableSettled = Math.min(batchTotal, remainingPayable);
     const excessPayment = cents(batchTotal - payableSettled);
-    addLine(lines, MERCHANDISE_PAYABLE_ACCOUNT_CODE, payableSettled, 0, paymentDate);
-    addLine(lines, RECEIVABLE_FROM_SUPPLIER_ACCOUNT_CODE, excessPayment, 0, paymentDate);
-    payments.forEach(payment => addLine(lines, payment.accountCode, 0, payment.amount, paymentDate));
+    // Built apart from the receipt-date lines so a batch never merges into them.
+    const batchLines: JournalLine[] = [];
+    addLine(batchLines, MERCHANDISE_PAYABLE_ACCOUNT_CODE, payableSettled, 0, paymentDate);
+    addLine(batchLines, RECEIVABLE_FROM_SUPPLIER_ACCOUNT_CODE, excessPayment, 0, paymentDate);
+    payments.forEach(payment => addLine(batchLines, payment.accountCode, 0, payment.amount, paymentDate));
+    lines.push(...batchLines);
     remainingPayable = cents(remainingPayable - payableSettled);
     supplierReceivable = cents(supplierReceivable + excessPayment);
   });
@@ -261,21 +304,23 @@ export function buildMerchandiseAcquisitionPosting(input: MerchandiseAcquisition
   return { lines, merchandisePayable: remainingPayable, dueToOfficer, advanceUsed, cashPaid, prepaymentApplied: prepaymentAmount, supplierReceivable };
 }
 
-/** Splits a received-merchandise posting into one balanced journal entry per payment batch. */
+/** Splits a received-merchandise posting into one balanced journal entry per
+ * payment batch. A batch ends as soon as the running total of its lines
+ * balances, so batches that share a date (or have none) still stay separate. */
 export function splitMerchandiseAcquisitionPosting(posting: MerchandiseAcquisitionPosting, purchaseDate: string): MerchandiseAcquisitionBatchPosting[] {
-  const batches = new Map<string, JournalLine[]>();
+  const batches: MerchandiseAcquisitionBatchPosting[] = [];
+  let pending: JournalLine[] = [];
+  let balance = 0;
   posting.lines.forEach(line => {
-    const date = line.date || purchaseDate;
-    const batch = batches.get(date) || [];
-    batch.push(line);
-    batches.set(date, batch);
+    pending.push(line);
+    balance = cents(balance + line.debit - line.credit);
+    if (balance === 0) {
+      batches.push({ date: pending[0].date || purchaseDate, lines: pending });
+      pending = [];
+    }
   });
-  return [...batches.entries()].map(([date, lines]) => {
-    const debits = cents(lines.reduce((sum, line) => sum + line.debit, 0));
-    const credits = cents(lines.reduce((sum, line) => sum + line.credit, 0));
-    if (debits !== credits) throw new Error(`Merchandise payment batch on ${date || 'the purchase date'} is not balanced.`);
-    return { date, lines };
-  });
+  if (pending.length > 0) throw new Error(`Merchandise payment batch on ${pending[0].date || purchaseDate || 'the purchase date'} is not balanced.`);
+  return batches;
 }
 
 export function buildSupplierReceivableCollectionPosting(amount: number, date: string, availableReceivable: number): JournalLine[] {

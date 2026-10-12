@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { categorizeTransactionRule, isDepreciationPickerTypeVisible, TRANSACTION_CATEGORIES } from './transactionCategories';
+import { categorizeTransactionRule, isDepreciationPickerTypeVisible, isRetiredAssetPickerType, isRetiredMerchandisePickerType, TRANSACTION_CATEGORIES } from './transactionCategories';
 
 const rule = (debitAccountCode: string, creditAccountCode: string, description: string) => ({
   debitAccountCode,
@@ -8,13 +8,19 @@ const rule = (debitAccountCode: string, creditAccountCode: string, description: 
 });
 
 describe('transaction categories', () => {
-  it('hides only the five retired generic depreciation picker choices', () => {
-    for (const name of ['Depreciation Expense - Equipment', ...['Chairs', 'Cabinet', 'Tables', 'Desks'].map(item => `Depreciation Expense - Furniture & Fixtures (${item})`)]) {
+  it('hides the generic and retired depreciation choices and shows the sheet items', () => {
+    for (const name of ['Depreciation Expense - Equipment', ...['Computer Hardware', 'Extension Wire', 'Other Small Equipment'].map(item => `Depreciation of ${item}`)]) {
       expect(isDepreciationPickerTypeVisible(name)).toBe(false);
     }
-    for (const item of ['Computer Hardware', 'Extension Wire', 'Other Small Equipment', 'Laptop']) {
+    for (const item of ['Laptop', 'Cabinet', 'Chairs', 'Tables/Desk']) {
       expect(isDepreciationPickerTypeVisible(`Depreciation of ${item}`)).toBe(true);
     }
+  });
+  it('hides the retired purchase choices from PPE', () => {
+    for (const item of ['Computer Hardware', 'Extension Wire', 'Other Small Equipment']) {
+      expect(isRetiredAssetPickerType(`Purchase of ${item}`)).toBe(true);
+    }
+    expect(isRetiredAssetPickerType('Purchase of Laptop')).toBe(false);
   });
   it('groups inventory purchases and merchandise sales together', () => {
     expect(categorizeTransactionRule(rule('1700', '1010', 'Merchandise Inventory Purchase'))).toBe('merchandise');
@@ -72,5 +78,12 @@ describe('transaction categories', () => {
     expect(categorizeTransactionRule(rule('1010', '4050', 'Advertising Revenue'))).toBe('other');
     expect(categorizeTransactionRule(rule('1010', '4050', 'Income from Cash Prizes Received'))).toBe('other');
     expect(categorizeTransactionRule(rule('1010', '4060', 'Interest Earned from Bank Savings'))).toBe('other');
+  });
+});
+
+describe('merchandise payables', () => {
+  it('are paid in Payables, so that Merchandise type is no longer offered', () => {
+    expect(isRetiredMerchandisePickerType('Payment for Unpaid Merchandise Purchased and Received in Previous Period/Semester')).toBe(true);
+    expect(isRetiredMerchandisePickerType('Sale of Merchandise')).toBe(false);
   });
 });

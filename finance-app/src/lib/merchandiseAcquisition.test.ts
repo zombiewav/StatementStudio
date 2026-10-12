@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { aggregateAvailableMerchandisePrepayments, buildMerchandiseAcquisitionPosting, buildMerchandisePrepaymentPosting, buildSupplierReceivableCollectionPosting, resolveMerchandisePurchaseDate, splitMerchandiseAcquisitionPosting } from './merchandiseAcquisition';
+import { acquisitionLinkedToDownpayment, aggregateAvailableMerchandisePrepayments, downpaymentAmountChangeBlock, downpaymentLinkBlock, buildMerchandiseAcquisitionPosting, buildMerchandisePrepaymentPosting, buildSupplierReceivableCollectionPosting, resolveMerchandisePurchaseDate, splitMerchandiseAcquisitionPosting } from './merchandiseAcquisition';
 
 describe('optional merchandise purchase date', () => {
   it('keeps an explicit receipt date even when payments are later', () => {
@@ -267,7 +267,7 @@ describe('merchandise acquisition posting', () => {
       { ...base, id: 'acquisition', transactionDetails: { eventRelated: false, receiptAttachmentIds: [], merchandisePrepaymentEntryIds: ['dp-used'] }, lines: [{ accountCode: '1700', debit: 50, credit: 0 }] },
       { ...base, id: 'dp-used', transactionDetails: { eventRelated: false, receiptAttachmentIds: [], merchandiseItem: 'Lanyard', merchandiseBatch: 'Batch 1' }, lines: [{ accountCode: '1270', debit: 50, credit: 0 }] },
     ], 'Lanyard', 'Batch 1');
-    expect(result).toEqual({ entryIds: ['dp-1', 'dp-2'], amount: 250 });
+    expect(result).toEqual({ entryIds: ['dp-1', 'dp-2'], amount: 250, draftCount: 0 });
   });
 });
 
@@ -288,5 +288,107 @@ describe('merchandise supplier prepayment', () => {
   it('requires source totals to equal the downpayment and enforces the officer advance balance', () => {
     expect(() => buildMerchandisePrepaymentPosting({ amount: 100, paymentMethod: 'organization-funds', organizationPayments: [{ date: '', amount: 90 }], availableCash: 100 })).toThrow(/must equal/i);
     expect(() => buildMerchandisePrepaymentPosting({ amount: 100, paymentMethod: 'organization-advance', advancePayments: [{ date: '', amount: 100 }], availableAdvance: 99 })).toThrow(/advance balance/i);
+  });
+});
+
+describe('payments entered as "on a later date"', () => {
+  const base = { totalCost: 1000, paymentMethod: 'organization-funds' as const, transactionDate: '2026-03-01', availableCash: 5000 };
+
+  it('keeps a later payment as its own batch even when its date is blank', () => {
+    const posting = buildMerchandiseAcquisitionPosting({
+      ...base,
+      organizationPayments: [{ date: '', amount: 400 }, { date: '', amount: 300, later: true }],
+    });
+    expect(posting.merchandisePayable).toBe(300);
+    const batches = splitMerchandiseAcquisitionPosting(posting, '2026-03-01');
+    expect(batches).toHaveLength(2);
+    expect(batches[0].lines).toEqual([
+      { accountCode: '1700', debit: 1000, credit: 0, date: '2026-03-01' },
+      { accountCode: '1010', debit: 0, credit: 400, date: '2026-03-01' },
+      { accountCode: '2020', debit: 0, credit: 600, date: '2026-03-01' },
+    ]);
+    expect(batches[1].lines).toEqual([
+      { accountCode: '2020', debit: 300, credit: 0, date: '2026-03-01' },
+      { accountCode: '1010', debit: 0, credit: 300, date: '2026-03-01' },
+    ]);
+  });
+
+  it('sends the part of a later payment beyond the payable to Receivable from Supplier', () => {
+    const posting = buildMerchandiseAcquisitionPosting({
+      ...base,
+      organizationPayments: [{ date: '', amount: 800 }, { date: '2026-03-09', amount: 500, later: true }],
+    });
+    expect(posting.merchandisePayable).toBe(0);
+    expect(posting.supplierReceivable).toBe(300);
+    const batches = splitMerchandiseAcquisitionPosting(posting, '2026-03-01');
+    expect(batches.map(batch => batch.date)).toEqual(['2026-03-01', '2026-03-09']);
+    expect(batches[1].lines).toEqual([
+      { accountCode: '2020', debit: 200, credit: 0, date: '2026-03-09' },
+      { accountCode: '1360', debit: 300, credit: 0, date: '2026-03-09' },
+      { accountCode: '1010', debit: 0, credit: 500, date: '2026-03-09' },
+    ]);
+  });
+
+  it('books each later batch separately when several share one date', () => {
+    const posting = buildMerchandiseAcquisitionPosting({
+      ...base,
+      organizationPayments: [{ date: '', amount: 200 }, { date: '', amount: 100, later: true }, { date: '', amount: 150, later: true }],
+    });
+    expect(splitMerchandiseAcquisitionPosting(posting, '2026-03-01')).toHaveLength(2);
+    expect(posting.merchandisePayable).toBe(550);
+  });
+});
+
+describe('draft downpayments and their links', () => {
+  const entry = (id: string, extra: Record<string, unknown> = {}, lines = [{ accountCode: '1270', debit: 100, credit: 0 }], details: Record<string, unknown> = {}) => ({
+    id, reference: id.toUpperCase(), date: '2026-10-01', description: 'Downpayment', project: 'General Fund Operations',
+    transactionDetails: { eventRelated: false, receiptAttachmentIds: [], merchandiseItem: 'Lanyard', merchandiseBatch: 'Lanyard Batch 1', ...details },
+    lines, ...extra,
+  }) as unknown as import('../types').JournalEntry;
+
+  it('counts saved drafts together with posted downpayments', () => {
+    const result = aggregateAvailableMerchandisePrepayments([
+      entry('dp-1', { isDraft: true }, [{ accountCode: '1270', debit: 1000, credit: 0 }]),
+      entry('dp-2', { isDraft: true }, [{ accountCode: '1270', debit: 200, credit: 0 }]),
+      entry('dp-3', {}, [{ accountCode: '1270', debit: 50, credit: 0 }]),
+    ], 'Lanyard', 'Lanyard Batch 1');
+    expect(result).toEqual({ entryIds: ['dp-1', 'dp-2', 'dp-3'], amount: 1250, draftCount: 2 });
+  });
+
+  it('matches the item and batch without caring about case or spaces', () => {
+    expect(aggregateAvailableMerchandisePrepayments([entry('dp-1')], ' lanyard ', 'lanyard batch 1').entryIds).toEqual(['dp-1']);
+  });
+
+  it('ignores the acquisition of the same batch and reversed downpayments', () => {
+    const result = aggregateAvailableMerchandisePrepayments([
+      entry('dp-1'),
+      entry('acq', {}, [{ accountCode: '1700', debit: 500, credit: 0 }, { accountCode: '1270', debit: 0, credit: 100 }], { merchandisePrepaymentEntryIds: ['dp-used'] }),
+      entry('dp-rev', { reversedByEntryId: 'x' }),
+    ], 'Lanyard', 'Lanyard Batch 1');
+    expect(result).toEqual({ entryIds: ['dp-1'], amount: 100, draftCount: 0 });
+  });
+
+  it('frees a downpayment again once the acquisition using it is reversed', () => {
+    const downpayment = entry('dp-1');
+    const acquisition = entry('acq', {}, [{ accountCode: '1700', debit: 500, credit: 0 }], { merchandisePrepaymentEntryIds: ['dp-1'] });
+    expect(aggregateAvailableMerchandisePrepayments([downpayment, acquisition], 'Lanyard', 'Lanyard Batch 1').entryIds).toEqual([]);
+    const reversed = { ...acquisition, reversedByEntryId: 'rev' };
+    expect(aggregateAvailableMerchandisePrepayments([downpayment, reversed], 'Lanyard', 'Lanyard Batch 1').entryIds).toEqual(['dp-1']);
+  });
+
+  it('blocks deleting or changing the amount of a downpayment that an acquisition uses', () => {
+    const downpayment = entry('dp-1', { isDraft: true });
+    const acquisition = entry('acq', {}, [{ accountCode: '1700', debit: 500, credit: 0 }], { merchandisePrepaymentEntryIds: ['dp-1'] });
+    const entries = [downpayment, acquisition];
+    expect(acquisitionLinkedToDownpayment(downpayment, entries)?.id).toBe('acq');
+    expect(downpaymentLinkBlock(downpayment, entries)).toContain('already linked to ACQ');
+    expect(downpaymentAmountChangeBlock(downpayment, entries, [{ accountCode: '1270', debit: 300, credit: 0 }])).toContain('amount cannot change');
+    expect(downpaymentAmountChangeBlock(downpayment, entries, [{ accountCode: '1270', debit: 100, credit: 0 }])).toBeUndefined();
+  });
+
+  it('allows changes when nothing uses the downpayment', () => {
+    const downpayment = entry('dp-1');
+    expect(downpaymentLinkBlock(downpayment, [downpayment])).toBeUndefined();
+    expect(downpaymentAmountChangeBlock(downpayment, [downpayment], [{ accountCode: '1270', debit: 999, credit: 0 }])).toBeUndefined();
   });
 });

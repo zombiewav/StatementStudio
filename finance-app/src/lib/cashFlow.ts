@@ -14,7 +14,7 @@ export const CASH_FLOW_OPERATING_ROWS = [
 
 export const CASH_FLOW_EXPENSE_ROWS = [
   { key: 'costOfSales', label: 'Cost of Sales', accountCodes: ['5240'] },
-  { key: 'mealsAndRefreshments', label: 'Meals and Refreshments Expense', accountCodes: ['5080'] },
+  { key: 'mealsAndRefreshments', label: 'Food and Meals Expense', accountCodes: ['5080'] },
   { key: 'officeSupplies', label: 'Office Supplies Expense', accountCodes: ['5040'] },
   { key: 'transportation', label: 'Transportation Expense', accountCodes: ['5050'] },
   { key: 'awardsAndPrizes', label: 'Awards and Prizes Expense', accountCodes: ['5120'] },

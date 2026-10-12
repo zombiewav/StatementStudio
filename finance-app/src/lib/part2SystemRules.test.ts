@@ -18,6 +18,6 @@ describe('StatementStudio Part 2 system rules', () => {
 
   it('keeps semester depreciation mapped to the existing contra-assets', () => {
     expect(DEFAULT_RULES.find(rule => rule.description === 'Depreciation Expense - Equipment')).toMatchObject({ debitAccountCode: '5090', creditAccountCode: '1550' });
-    expect(DEFAULT_RULES.find(rule => rule.description.includes('Furniture & Fixtures (Chairs)'))).toMatchObject({ debitAccountCode: '5095', creditAccountCode: '1660' });
+    expect(DEFAULT_RULES.find(rule => rule.description === 'Depreciation of Chairs')).toMatchObject({ debitAccountCode: '5095', creditAccountCode: '1660' });
   });
 });

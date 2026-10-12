@@ -283,7 +283,7 @@ export function Review({ onContinueDraft }: ReviewProps): React.ReactElement {
 
   const handleDeleteDraft = (id: string, label: string) => {
     if (!window.confirm(`Delete the draft "${label}"? Its draft journal entry will also be removed from the ledger.`)) return;
-    deleteDraftTransaction(id);
+    if (!deleteDraftTransaction(id)) return;
     setSettlementMessage(`Draft "${label}" was deleted.`);
     setLastPostedSettlement(null);
   };
@@ -291,7 +291,7 @@ export function Review({ onContinueDraft }: ReviewProps): React.ReactElement {
   const handleDeletePostedTransaction = (entry: JournalEntry) => {
     const pairWarning = entry.transactionDetails?.customerOrder ? ' All linked deliveries, collections, refunds, and their inventory movements will also be deleted.' : entry.reversedByEntryId ? ' Its linked reversing entry will also be deleted.' : entry.reversalOfEntryId ? ' The original transaction will become active again.' : '';
     if (!window.confirm(`Permanently delete ${entry.reference}?${pairWarning} This removes it from the journal and ledger, but the deletion remains in the audit log.`)) return;
-    deleteJournalEntry(entry.id);
+    if (!deleteJournalEntry(entry.id)) return;
     setSettlementMessage(`${entry.reference} was permanently deleted.`);
     setLastPostedSettlement(null);
   };
