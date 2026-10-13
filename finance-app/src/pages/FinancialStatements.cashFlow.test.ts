@@ -54,3 +54,25 @@ describe('Financial Statements page', () => {
     expect(renderer.root.findAllByType('button').some(button => text(button).includes('Changes in Fund Balance'))).toBe(false);
   });
 });
+
+describe('Statement of Functional Expenses', () => {
+  it('lists event expenses in their event column and leaves out expenses with a zero balance', () => {
+    act(() => { renderer = create(createElement(FinanceProvider, null, createElement(Probe))); });
+    act(() => {
+      finance.updateSettings({ semester: '1st Semester', reportingYear: 2026 } as never);
+      finance.addJournalEntry('2026-10-01', 'Capital', 'General Fund Operations', [{ accountCode: '1010', debit: 5000, credit: 0 }, { accountCode: '4030', debit: 0, credit: 5000 }]);
+      finance.addJournalEntry('2026-10-02', 'Event Expense - October Fest', 'General Fund Operations', [{ accountCode: '5300', debit: 700, credit: 0 }, { accountCode: '1010', debit: 0, credit: 700 }], 'October Fest');
+      finance.addJournalEntry('2026-10-03', 'Office supplies', 'General Fund Operations', [{ accountCode: '5040', debit: 200, credit: 0 }, { accountCode: '1010', debit: 0, credit: 200 }]);
+    });
+    const tab = renderer.root.findAllByType('button').find(button => text(button).trim() === 'Statement of Functional Expenses');
+    act(() => { tab!.props.onClick(); });
+    const rows = renderer.root.findAllByType('tr').map(row => text(row));
+    const labels = rows.map(row => row.trim().split(/\s+/).slice(0, 3).join(' '));
+    expect(rows.some(row => row.includes('Event Expense') && row.includes('700'))).toBe(true);
+    expect(rows.some(row => row.includes('Office Supplies') && row.includes('200'))).toBe(true);
+    expect(rows.some(row => row.includes('Bank Charges'))).toBe(false);
+    expect(rows.some(row => row.includes('Rent Expense'))).toBe(false);
+    expect(labels.length).toBeLessThan(8);
+    expect(text(renderer.root)).toContain('October Fest');
+  });
+});

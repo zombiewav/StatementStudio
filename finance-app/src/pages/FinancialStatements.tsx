@@ -159,6 +159,14 @@ export function FinancialStatements(): React.ReactElement {
     () => computeActivitiesExpenseBreakdown(performanceEntries, accounts),
     [performanceEntries, accounts]
   );
+  // The Statement of Functional Expenses lists only expenses that have a balance.
+  const functionalExpenseAccounts = useMemo(
+    () => accounts.filter(account => account.type === 'Expenses' && (
+      (activitiesExpenseBreakdown.generalAdminByAccount[account.code] || 0) !== 0
+      || activitiesExpenseBreakdown.eventNames.some(name => (activitiesExpenseBreakdown.eventGroups[name][account.code] || 0) !== 0)
+    )),
+    [accounts, activitiesExpenseBreakdown]
+  );
   const negativeBalanceAccounts = useMemo(
     () => accounts.filter(account => (cumulativeToEndBalances[account.code] || 0) < -0.005),
     [accounts, cumulativeToEndBalances]
@@ -293,7 +301,7 @@ export function FinancialStatements(): React.ReactElement {
       } else if (activeTab === 'functional') {
         csvContent += 'FUNCTIONAL EXPENSES\n';
         csvContent += `"Expense Category",${activitiesExpenseBreakdown.eventNames.map(name => `"${name}"`).join(',')},"Total Program Services","General & Administrative","Total Expenses"\n`;
-        accounts.filter(account => account.type === 'Expenses').forEach(account => {
+        functionalExpenseAccounts.forEach(account => {
           const programAmounts = activitiesExpenseBreakdown.eventNames.map(name => activitiesExpenseBreakdown.eventGroups[name][account.code] || 0);
           const totalPrograms = programAmounts.reduce((total, amount) => total + amount, 0);
           const generalAdmin = activitiesExpenseBreakdown.generalAdminByAccount[account.code] || 0;
@@ -740,7 +748,10 @@ export function FinancialStatements(): React.ReactElement {
                       </tr>
                     </thead>
                     <tbody>
-                      {accounts.filter(account => account.type === 'Expenses').map(account => {
+                      {functionalExpenseAccounts.length === 0 && (
+                        <tr><td colSpan={activitiesExpenseBreakdown.eventNames.length + 4} className="px-3 py-4 text-center text-slate-500 dark:text-slate-400">No expenses with a balance in this period.</td></tr>
+                      )}
+                      {functionalExpenseAccounts.map(account => {
                         const programAmounts = activitiesExpenseBreakdown.eventNames.map(name => activitiesExpenseBreakdown.eventGroups[name][account.code] || 0);
                         const totalPrograms = programAmounts.reduce((total, amount) => total + amount, 0);
                         const generalAdmin = activitiesExpenseBreakdown.generalAdminByAccount[account.code] || 0;
