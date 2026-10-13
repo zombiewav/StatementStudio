@@ -118,14 +118,26 @@ export function buildCompoundJournalLines(pairs: JournalLinePair[]): JournalLine
 }
 
 /**
- * Journal entries read debits first, then credits. The builders emit lines in
- * posting order (a payment's debit and credit, then the next), which can
- * interleave the sides, so screens show this ordering instead. The stored
- * order is left alone because batch-splitting relies on it. The order within
- * each side is unchanged.
+ * Journal entries read as one block per posting date (oldest first), with each
+ * block listing its debits before its credits - so a collection on a later date
+ * is its own balanced block instead of being interleaved with the first date.
+ * Lines without a date use `fallbackDate` (the entry date), or sort first when
+ * none is given; if no line is dated this is plain debits-then-credits. The
+ * builders emit lines in posting order (a payment's debit and credit, then the
+ * next), so screens show this ordering instead. The stored order is left alone
+ * because batch-splitting relies on it. The order within each side of a block
+ * is unchanged.
  */
-export function orderLinesDebitsFirst<T extends { debit: number; credit: number }>(lines: readonly T[]): T[] {
-  return [...lines.filter(line => line.debit > 0), ...lines.filter(line => !(line.debit > 0))];
+export function orderLinesDebitsFirst<T extends { debit: number; credit: number; date?: string }>(
+  lines: readonly T[],
+  fallbackDate = '',
+): T[] {
+  const dateOf = (line: T) => line.date || fallbackDate;
+  const dates = [...new Set(lines.map(dateOf))].sort();
+  return dates.flatMap(date => {
+    const block = lines.filter(line => dateOf(line) === date);
+    return [...block.filter(line => line.debit > 0), ...block.filter(line => !(line.debit > 0))];
+  });
 }
 
 export interface ProjectedAccountImpact {

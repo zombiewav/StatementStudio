@@ -248,7 +248,7 @@ export function JournalEntries({ searchTerm: controlledSearchTerm, onSearchTermC
                               </div>
 
                               {/* lines */}
-                              {orderLinesDebitsFirst(je.lines).map((line, idx) => {
+                              {orderLinesDebitsFirst(je.lines, je.date).map((line, idx) => {
                                 const acc = accounts.find(a => a.code === line.accountCode);
                                 const isCredit = line.credit > 0;
                                 return (

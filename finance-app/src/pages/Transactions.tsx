@@ -2330,7 +2330,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                 <div className="p-4 text-center text-[11px] font-medium text-slate-400 dark:text-slate-500">
                   Select a transaction type and enter an amount to preview its journal lines.
                 </div>
-              ) : orderLinesDebitsFirst(previewLines).map((line, index) => {
+              ) : orderLinesDebitsFirst(previewLines, date).map((line, index) => {
                 const account = activeAccounts.find(a => a.code === line.accountCode);
                 return (
                   <div key={`${line.accountCode}-${index}`} className={`grid grid-cols-[1fr_7rem] items-center gap-3 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800/50 p-2 rounded-xl ${line.credit > 0 ? 'pl-6' : ''}`}>

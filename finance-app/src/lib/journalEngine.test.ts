@@ -139,6 +139,29 @@ describe('orderLinesDebitsFirst', () => {
     expect(orderLinesDebitsFirst(lines).map(line => line.accountCode)).toEqual(['1700', '1360', '1270', '2050']);
   });
 
+  it('keeps each posting date as its own block, debits first within the block', () => {
+    const lines = [
+      { accountCode: '1010', debit: 15000, credit: 0, date: '2026-10-01' },
+      { accountCode: '1300', debit: 5000, credit: 0, date: '2026-10-01' },
+      { accountCode: '1010', debit: 2000, credit: 0, date: '2026-10-02' },
+      { accountCode: '4040', debit: 0, credit: 20000, date: '2026-10-01' },
+      { accountCode: '1300', debit: 0, credit: 2000, date: '2026-10-02' },
+    ];
+    expect(orderLinesDebitsFirst(lines).map(line => `${line.date}:${line.accountCode}`)).toEqual([
+      '2026-10-01:1010', '2026-10-01:1300', '2026-10-01:4040',
+      '2026-10-02:1010', '2026-10-02:1300',
+    ]);
+  });
+
+  it('treats undated lines as the fallback date', () => {
+    const lines = [
+      { accountCode: 'a', debit: 0, credit: 5 },
+      { accountCode: 'b', debit: 5, credit: 0, date: '2026-10-02' },
+      { accountCode: 'c', debit: 5, credit: 0 },
+    ];
+    expect(orderLinesDebitsFirst(lines, '2026-10-01').map(line => line.accountCode)).toEqual(['c', 'a', 'b']);
+  });
+
   it('does not change the stored lines', () => {
     const lines = [{ accountCode: 'a', debit: 0, credit: 5 }, { accountCode: 'b', debit: 5, credit: 0 }];
     orderLinesDebitsFirst(lines);
