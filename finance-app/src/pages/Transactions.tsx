@@ -61,6 +61,7 @@ import {
 import { buildOutrightExpensePosting, selectExpensePaymentRows, splitBalancedJournalLinesByDate, OutrightExpensePaymentMethod } from '../lib/outrightExpense';
 import { counterpartyBalance, counterpartyBalances, counterpartySummary } from '../lib/counterpartyBalances';
 import { ledgerWithoutDraftEntry } from '../lib/draftLedger';
+import { creditCodesForPaymentMethod } from '../lib/paymentCreditAccounts';
 import { automaticPostingDate, isDateWithinReportingPeriod, periodForSemester, reportingPeriodBounds } from '../lib/reportingPeriod';
 
 const GENERAL_FUND_PROJECT = 'General Fund Operations';
@@ -674,6 +675,12 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   const reimbursementAmountError = isOfficerReimbursement && amount > totalDueToOfficers
     ? 'Reimbursement cannot exceed the total Due to Officers balance.'
     : '';
+  // These types hand cash out of the organization (Dr Due to Officers / Advances to
+  // Officers / Loans to Organizations, Cr Cash on Hand), so they can never exceed it.
+  const paysOutCash = isOfficerReimbursement || isOfficerAdvance || isLoanToOrganization;
+  const cashLimitError = paysOutCash && amount > cashAvailable
+    ? `Amount cannot exceed the available cash balance of ${formatCurrency(cashAvailable)}.`
+    : '';
   // Membership Fees collections are never paid via an officer's cash
   // advance (they're money coming in from members, not an expense paid
   // out), so this warning must never apply there regardless of whatever
@@ -905,17 +912,35 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   // advances, payables and receivables change which accounts really get posted,
   // so once the preview has lines the read-only fields list the accounts used there.
   const accountLabel = (account: { code: string; name: string; type: string }) => `${account.code} - ${account.name} (${account.type})`;
-  const accountsOnSide = (side: 'debit' | 'credit', fallback: typeof debitAccount): string[] => {
+  // Until every amount is valid the preview is empty; a purchase then still shows
+  // the account its chosen payment method uses (Due to Officers for officer-paid, ...).
+  const creditFallbackCodes = isGuidedPurchase
+    ? creditCodesForPaymentMethod(outrightPaymentMethod,
+      { organization: sumDatedAmounts(outrightOrganizationPayments), officer: outrightOfficerTotal, advance: outrightAdvanceTotal },
+      guidedPayableAccountCode, effectiveCreditCode)
+    : isMerchandiseAcquisition
+      ? creditCodesForPaymentMethod(merchandisePaymentMethod,
+        { organization: merchandiseOrganizationPaymentTotal, officer: merchandiseOfficerPaymentTotal, advance: merchandiseAdvancePaymentTotal },
+        '2020', effectiveCreditCode)
+      : isMerchandisePrepayment
+        ? creditCodesForPaymentMethod(merchandisePaymentMethod,
+          { organization: merchandiseOrganizationPaymentTotal, officer: merchandiseOfficerPaymentTotal, advance: merchandiseAdvancePaymentTotal },
+          undefined, effectiveCreditCode)
+        : [];
+  const accountsOnSide = (side: 'debit' | 'credit', fallback: typeof debitAccount, fallbackCodes: string[] = []): string[] => {
     const codes = [...new Set(previewLines.filter(line => line[side] > 0).map(line => line.accountCode))];
-    const labels = codes.flatMap(code => {
+    const labelsFor = (list: string[]) => list.flatMap(code => {
       const account = activeAccounts.find(a => a.code === code);
       return account ? [accountLabel(account)] : [];
     });
+    const labels = labelsFor(codes);
     if (labels.length) return labels;
+    const fallbackLabels = labelsFor(fallbackCodes);
+    if (fallbackLabels.length) return fallbackLabels;
     return fallback ? [accountLabel(fallback)] : [];
   };
   const debitAccountLabels = accountsOnSide('debit', debitAccount);
-  const creditAccountLabels = accountsOnSide('credit', creditAccount);
+  const creditAccountLabels = accountsOnSide('credit', creditAccount, creditFallbackCodes);
 
   const projectedImpacts = useMemo(
     () => projectJournalLineImpacts(previewLines, activeAccounts, ledgerBalances),
@@ -1150,8 +1175,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       setErrorMessage(`Please enter the ${counterpartyLabel.toLowerCase()} for this transaction.`);
       return;
     }
-    if (reimbursementAmountError) {
-      setErrorMessage(reimbursementAmountError);
+    if (reimbursementAmountError || cashLimitError) {
+      setErrorMessage(reimbursementAmountError || cashLimitError);
       return;
     }
     if (isLoanCollection && amount > selectedOrganizationLoanBalance) {
@@ -2245,7 +2270,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               />
             </div>}
 
-            {reimbursementAmountError && <p role="alert" className="sm:col-span-2 text-[10px] font-bold text-rose-700 dark:text-rose-300">{reimbursementAmountError}</p>}
+            {(reimbursementAmountError || cashLimitError) && <p role="alert" className="sm:col-span-2 text-[10px] font-bold text-rose-700 dark:text-rose-300">{reimbursementAmountError || cashLimitError}</p>}
 
             {!requiresAccrualCompletion && !isPriorMembershipCollection && !isMembershipRefundStatus && (
               <div className="sm:col-span-2 rounded-xl border border-dashed border-slate-300 bg-slate-50/70 p-3.5 dark:border-slate-700 dark:bg-slate-950/30">

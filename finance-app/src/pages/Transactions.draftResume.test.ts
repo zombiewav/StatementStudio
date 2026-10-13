@@ -143,6 +143,32 @@ describe('resuming a saved draft', () => {
     expect(finance.journalEntries.filter(entry => entry.description === 'Reimbursement to Officer')).toHaveLength(1);
   });
 
+  it('blocks a reimbursement larger than the available cash even when the officer is owed more', () => {
+    start(() => {
+      finance.addJournalEntry('2026-10-05', 'Spend down', PROJECT, [{ accountCode: '5030', debit: 49800, credit: 0 }, { accountCode: '1010', debit: 0, credit: 49800 }]);
+      officerPurchase();
+    });
+    saveDraft('Reimbursement to Officer', 'reimbursements-to-officers',
+      [{ accountCode: '2050', debit: 700, credit: 0 }, { accountCode: '1010', debit: 0, credit: 700 }],
+      { counterpartyName: 'Alpha' }, { amount: 700, date: '2026-10-12', counterpartyName: 'Alpha' });
+    expect(alerts().length).toBeGreaterThan(0);
+    expect(alerts()[0]).toMatch(/cannot exceed the available cash balance of .*200\.00/);
+    expect(posted).toEqual([]);
+    expect(finance.draftTransactions).toHaveLength(1);
+  });
+
+  it('blocks an officer cash advance larger than the available cash', () => {
+    start(() => {
+      finance.addJournalEntry('2026-10-05', 'Spend down', PROJECT, [{ accountCode: '5030', debit: 49800, credit: 0 }, { accountCode: '1010', debit: 0, credit: 49800 }]);
+    });
+    saveDraft('Cash Advances Given to Organization Officers', 'miscellaneous',
+      [{ accountCode: '1250', debit: 500, credit: 0 }, { accountCode: '1010', debit: 0, credit: 500 }],
+      { counterpartyName: 'Alpha' }, { amount: 500, date: '2026-10-12', counterpartyName: 'Alpha' });
+    expect(alerts()[0]).toContain('cannot exceed the available cash balance');
+    expect(posted).toEqual([]);
+    expect(finance.draftTransactions).toHaveLength(1);
+  });
+
   it('posts an organization-paid purchase whose draft already used all the available cash', () => {
     start(() => {
       finance.addJournalEntry('2026-10-05', 'Spend down', PROJECT, [{ accountCode: '5030', debit: 49500, credit: 0 }, { accountCode: '1010', debit: 0, credit: 49500 }]);
