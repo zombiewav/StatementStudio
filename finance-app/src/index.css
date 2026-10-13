@@ -151,17 +151,17 @@ button:is(.bg-blue-600, .bg-blue-700, .bg-blue-800, .bg-blue-900).text-white:is(
 
 :root {
   color-scheme: light;
-  --bg: #f4f1ea;
+  --bg: #ebe6d8;
   --card: #ffffff;
-  --card-muted: #efebe3;
+  --card-muted: #f4f1ea;
   --text: #14161c;
   --text-muted: #565963;
   --text-soft: #8a8d96;
-  --border: #e0dbcf;
-  --border-strong: #c9c5ba;
-  --hover: #ece8df;
-  --scrollbar: #c9c5ba;
-  --scrollbar-track: #f4f1ea;
+  --border: #d3ccba;
+  --border-strong: #bcb49f;
+  --hover: #e4dfd0;
+  --scrollbar: #bcb49f;
+  --scrollbar-track: #ebe6d8;
   --scrollbar-thumb: #cfc9bb;
   --scrollbar-thumb-hover: #b9b2a1;
 }
@@ -425,6 +425,28 @@ button:not(:disabled):active {
     animation-delay: 0ms !important;
     transition-duration: 1ms !important;
   }
+}
+
+/* Light mode separation: the page sits one step darker than the white
+   cards, borders are visible, and cards get a soft lift. Dark mode is
+   untouched (every rule is scoped to :not(.dark)). */
+:root:not(.dark) .app-shell {
+  background-color: var(--bg);
+}
+:root:not(.dark) .border-slate-200,
+:root:not(.dark) .border-slate-100 {
+  border-color: var(--border);
+}
+:root:not(.dark) .border-slate-300 {
+  border-color: var(--border-strong);
+}
+:root:not(.dark) .divide-slate-100 > :not(:last-child),
+:root:not(.dark) .divide-slate-200 > :not(:last-child) {
+  border-color: var(--border);
+}
+:root:not(.dark) .bg-white.border:is(.rounded-xl, .rounded-2xl, .rounded-3xl),
+:root:not(.dark) .app-surface {
+  box-shadow: 0 1px 2px rgba(60, 45, 15, 0.06), 0 6px 16px -8px rgba(60, 45, 15, 0.14);
 }
 
 /* A hairline divider between stacked payment groups (organization / advance / personal). */

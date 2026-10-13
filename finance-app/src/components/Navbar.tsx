@@ -117,7 +117,7 @@ export function Navbar({ onMenuToggle, searchTerm, setSearchTerm, onSearchSubmit
   };
 
   return (
-    <header className="h-16 border-b border-slate-200 bg-white/80 dark:bg-slate-950/80 dark:border-slate-800 backdrop-blur-md px-6 flex items-center justify-between sticky top-0 z-30 select-none">
+    <header className="h-16 border-b border-slate-200 bg-white/95 dark:bg-slate-950/80 dark:border-slate-800 backdrop-blur-md px-6 flex items-center justify-between sticky top-0 z-30 select-none">
       {/* Left: Mobile Menu Trigger & Search */}
       <div className="flex items-center gap-4 flex-1">
         <button
