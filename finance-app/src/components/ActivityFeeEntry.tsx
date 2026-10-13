@@ -395,7 +395,7 @@ export function ActivityFeeEntry({ defaultOpen = false, draftToResume = null, on
               {error && <p className="sm:col-span-2 rounded-lg bg-rose-100 p-2 text-[10px] font-bold text-rose-700 dark:bg-rose-500/10 dark:text-rose-300">{error}</p>}
               {message && <p className="sm:col-span-2 rounded-lg bg-emerald-100 p-2 text-[10px] font-bold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">{message}</p>}
               <div className="sm:col-span-2 flex flex-col gap-2 sm:flex-row">
-                <button type="submit" disabled={!selectedReceivable} className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-3 text-xs font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50">Save as Draft</button>
+                <button type="submit" disabled={!selectedReceivable} className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-3 text-xs font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">Save as Draft</button>
               </div>
             </form>
           ) : (
@@ -408,7 +408,7 @@ export function ActivityFeeEntry({ defaultOpen = false, draftToResume = null, on
               {excessStatus !== 'next' && <><label className="text-[10px] font-bold uppercase text-slate-500">{excessStatus === 'current' ? 'Amount refunded' : 'Amount not refunded'}<input type="number" min="0.01" step="0.01" max={selectedExcess?.refundLiabilityBalance} value={excessAmount} onChange={event => setExcessAmount(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-xs dark:border-slate-700 dark:bg-slate-900" required /></label><label className="text-[10px] font-bold uppercase text-slate-500">{excessStatus === 'current' ? 'Date of refund (optional)' : 'Date recognized (optional)'}<input type="date" value={excessDate} onChange={event => setExcessDate(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-xs dark:border-slate-700 dark:bg-slate-900" /><span className="mt-1 block normal-case font-medium">Leave blank if unavailable. If entered, it must fall within the selected reporting period.</span></label></>}
               {excessStatus === 'next' && <p className="sm:col-span-2 rounded-lg bg-indigo-50 p-3 text-[10px] font-semibold text-indigo-800 dark:bg-indigo-500/10 dark:text-indigo-200">No journal entry is posted. The refund liability remains open in Review for the next reporting period.</p>}
               {error && <p className="sm:col-span-2 rounded-lg bg-rose-100 p-2 text-[10px] font-bold text-rose-700">{error}</p>}{message && <p className="sm:col-span-2 rounded-lg bg-emerald-100 p-2 text-[10px] font-bold text-emerald-700">{message}</p>}
-              <div className="sm:col-span-2 flex flex-col gap-2 sm:flex-row"><button type="submit" disabled={!selectedExcess} className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-3 text-xs font-bold text-slate-700 disabled:opacity-50">Save as Draft</button></div>
+              <div className="sm:col-span-2 flex flex-col gap-2 sm:flex-row"><button type="submit" disabled={!selectedExcess} className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-3 text-xs font-bold text-slate-700 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">Save as Draft</button></div>
             </form>
           )}
           </div>

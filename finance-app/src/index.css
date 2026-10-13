@@ -464,3 +464,32 @@ button:not(:disabled):active {
   border-top: 1px solid var(--border-strong);
   padding-top: 1rem;
 }
+
+/* ------------------------------------------------------------------
+   Dark mode readability. Many forms use light-theme text classes
+   (slate-400..900) with no dark: variant. On the dark surfaces those
+   greys are too dim to read, so they are lifted to readable values.
+   Elements that set their own dark: text colour keep it.
+   ------------------------------------------------------------------ */
+.dark {
+  --text-readable: #c4c7cf;
+  --placeholder-readable: #9da1ab;
+}
+.dark :is(.text-slate-900, .text-slate-800, .text-slate-700, .text-gray-900, .text-gray-800, .text-gray-700):not([class*="dark:text-"]) {
+  color: var(--text);
+}
+.dark :is(.text-slate-600, .text-slate-500, .text-slate-400, .text-gray-600, .text-gray-500, .text-gray-400):not([class*="dark:text-"]) {
+  color: var(--text-readable);
+}
+.dark :is(input, select, textarea):not([class*="dark:text-"]) {
+  color: var(--text);
+}
+.dark ::placeholder {
+  color: var(--placeholder-readable);
+  opacity: 1;
+}
+/* A disabled field is dimmed, not dissolved. */
+.dark :is(input, select, textarea, button):disabled {
+  opacity: 0.8;
+  color: var(--text-readable);
+}
