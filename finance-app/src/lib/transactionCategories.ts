@@ -53,7 +53,8 @@ export function isRetiredAssetPickerType(description: string): boolean {
 // Paying a previous-period Merchandise payable happens in the Payables category, where the carried-forward
 // balance is tracked. The rule stays so older entries and drafts still resolve.
 export function isRetiredMerchandisePickerType(description: string): boolean {
-  return description === 'Payment for Unpaid Merchandise Purchased and Received in Previous Period/Semester';
+  return description === 'Payment for Unpaid Merchandise Purchased and Received in Previous Period/Semester'
+    || description === 'Downpayment for Pre-ordered Merchandise';
 }
 
 export function isDepreciationPickerTypeVisible(description: string): boolean {

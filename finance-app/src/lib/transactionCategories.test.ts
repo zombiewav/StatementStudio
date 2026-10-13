@@ -85,5 +85,7 @@ describe('merchandise payables', () => {
   it('are paid in Payables, so that Merchandise type is no longer offered', () => {
     expect(isRetiredMerchandisePickerType('Payment for Unpaid Merchandise Purchased and Received in Previous Period/Semester')).toBe(true);
     expect(isRetiredMerchandisePickerType('Sale of Merchandise')).toBe(false);
+    expect(isRetiredMerchandisePickerType('Downpayment for Pre-ordered Merchandise')).toBe(true);
+    expect(isRetiredMerchandisePickerType('Downpayment to Suppliers for Pre-Ordered Merchandise')).toBe(false);
   });
 });

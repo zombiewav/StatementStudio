@@ -621,6 +621,8 @@ export const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
 
   // --- Inventory (goods for resale) ---------------------------------------------
   { keyword: 'acquisition of merchandise', debitAccountCode: '1700', creditAccountCode: '1010', description: 'Acquisition of Merchandise for Sale - Goods Received and On Hand' },
+  { keyword: 'downpayment to suppliers for pre-ordered merchandise', debitAccountCode: '1270', creditAccountCode: '1010', description: 'Downpayment to Suppliers for Pre-Ordered Merchandise' },
+  // Former title, kept (hidden from the picker) so saved entries and drafts still resolve.
   { keyword: 'downpayment for pre-ordered merchandise', debitAccountCode: '1270', creditAccountCode: '1010', description: 'Downpayment for Pre-ordered Merchandise' },
   { keyword: 'payment for unpaid merchandise', debitAccountCode: '2020', creditAccountCode: '1010', description: 'Payment for Unpaid Merchandise Purchased and Received in Previous Period/Semester' },
   { keyword: 'collection of receivables from suppliers', debitAccountCode: '1010', creditAccountCode: '1360', description: 'Collection of Receivables from Suppliers' },
