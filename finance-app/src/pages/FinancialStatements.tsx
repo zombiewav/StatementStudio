@@ -9,6 +9,7 @@ import {
   ClipboardCheck
 } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
+import type { Account } from '../types';
 import { computeActivitiesExpenseBreakdown } from '../lib/activitiesBreakdown';
 import { computeAccountBalances, computeTypeTotals, isContraAccount } from '../lib/accountTotals';
 import { computeTransactionReviewStates } from '../lib/reviewEngine';
@@ -19,6 +20,9 @@ import { accumulatedNetPosition } from '../lib/fundBalancePresentation';
 import { excludeClosingEntries } from '../lib/closingEntries';
 import { periodEndedLabel, periodForSemester, reportingPeriodBounds } from '../lib/reportingPeriod';
 import { combineOpeningAndPeriodBalances } from '../lib/reportingPeriodBalances';
+
+/** A balance counts as shown only when it is not zero (cents rounding ignored). */
+const hasBalance = (amount: number | undefined): boolean => Math.abs(amount || 0) >= 0.005;
 
 type ActiveStatementTab = 'position' | 'activities' | 'functional' | 'cashflow';
 
@@ -183,17 +187,33 @@ export function FinancialStatements(): React.ReactElement {
       ['Cash and Cash Equivalents', ['1010', '1015']], ['Receivables', ['1200', '1210', '1300', '1310', '1330', '1360', '1370']], ['Advances and Dues', ['1220', '1230', '1250', '1270', '1320']], ['Inventories', ['1700']], ['Prepaid Expenses and Other Assets', ['1260', '1280', '1285', '1295', '1298']], ['Property and Equipment', ['1500', '1550', '1600', '1650', '1660']],
     ];
     const assigned = new Set(groups.flatMap(([, codes]) => codes));
-    return [...groups.map(([label, codes]) => [label, accounts.filter(account => codes.includes(account.code))] as const), ['Other Assets', accounts.filter(account => account.type === 'Assets' && !assigned.has(account.code))] as const];
-  }, [accounts]);
+    // Accounts with a zero balance are left off the statement, and a heading with no accounts left goes with them.
+    const visible = (list: Account[]) => list.filter(account => hasBalance(cumulativeToEndBalances[account.code]));
+    const grouped = [...groups.map(([label, codes]) => [label, visible(accounts.filter(account => codes.includes(account.code)))] as const), ['Other Assets', visible(accounts.filter(account => account.type === 'Assets' && !assigned.has(account.code)))] as const];
+    return grouped.filter(([, list]) => list.length > 0);
+  }, [accounts, cumulativeToEndBalances]);
   const positionLiabilityGroups = useMemo(() => {
     const groups: Array<[string, string[]]> = [
       ['Dues and Payables', ['2010', '2020', '2030', '2040', '2050', '2061', '2062', '2063', '2064', '2070', '2080']], ['Unearned Revenues', ['2110', '2140']], ['Refund Liabilities', ['2120', '2130', '2150']], ['Loans and Accrued Liabilities', ['2200', '2300']],
     ];
     const assigned = new Set(groups.flatMap(([, codes]) => codes));
-    const grouped = groups.map(([label, codes]) => [label, accounts.filter(account => codes.includes(account.code))] as const);
-    const other = accounts.filter(account => account.type === 'Liabilities' && !assigned.has(account.code));
-    return other.length ? [...grouped, ['Other Liabilities', other] as const] : grouped;
-  }, [accounts]);
+    const visible = (list: Account[]) => list.filter(account => hasBalance(cumulativeToEndBalances[account.code]));
+    const grouped = groups.map(([label, codes]) => [label, visible(accounts.filter(account => codes.includes(account.code)))] as const);
+    const other = visible(accounts.filter(account => account.type === 'Liabilities' && !assigned.has(account.code)));
+    return (other.length ? [...grouped, ['Other Liabilities', other] as const] : grouped).filter(([, list]) => list.length > 0);
+  }, [accounts, cumulativeToEndBalances]);
+  const positionFundBalanceAccounts = useMemo(
+    () => accounts.filter(account => account.type === 'Fund Balance' && hasBalance(cumulativeToEndBalances[account.code])),
+    [accounts, cumulativeToEndBalances]
+  );
+  const activitiesRevenueAccounts = useMemo(
+    () => accounts.filter(account => account.type === 'Revenue' && hasBalance(filteredBalances[account.code])),
+    [accounts, filteredBalances]
+  );
+  const activitiesGeneralAdminAccounts = useMemo(
+    () => accounts.filter(account => account.type === 'Expenses' && hasBalance(activitiesExpenseBreakdown.generalAdminByAccount[account.code])),
+    [accounts, activitiesExpenseBreakdown]
+  );
 
 
   const saveFinalSnapshot = (action: 'Print' | 'Export PDF' | 'Export Excel') => {
@@ -257,7 +277,7 @@ export function FinancialStatements(): React.ReactElement {
 
       if (activeTab === 'position') {
         csvContent += "ASSETS\n";
-        accounts.filter(a => a.type === 'Assets').forEach(acc => {
+        positionAssetGroups.flatMap(([, list]) => list).forEach(acc => {
           const bal = cumulativeToEndBalances[acc.code] || 0;
           const isContra = isContraAccount(acc);
           csvContent += `"${isContra ? `Less: ${acc.name}` : acc.name}",${isContra ? -bal : bal}\n`;
@@ -265,13 +285,13 @@ export function FinancialStatements(): React.ReactElement {
         csvContent += `"Total Assets",${cumulativeToEndTotals.Assets}\n\n`;
 
         csvContent += "LIABILITIES\n";
-        accounts.filter(a => a.type === 'Liabilities').forEach(acc => {
+        positionLiabilityGroups.flatMap(([, list]) => list).forEach(acc => {
           csvContent += `"${acc.name}",${cumulativeToEndBalances[acc.code] || 0}\n`;
         });
         csvContent += `"Total Liabilities",${cumulativeToEndTotals.Liabilities}\n\n`;
 
         csvContent += "FUND BALANCE\n";
-        accounts.filter(a => a.type === 'Fund Balance').forEach(acc => {
+        positionFundBalanceAccounts.forEach(acc => {
           csvContent += `"${acc.name}",${cumulativeToEndBalances[acc.code] || 0}\n`;
         });
         csvContent += `"${accumulatedNet.label}",${accumulatedNet.amount}\n`;
@@ -279,12 +299,12 @@ export function FinancialStatements(): React.ReactElement {
         csvContent += `"Total Liabilities & Fund Balance",${fTotalLiabilitiesAndFund}\n`;
       } else if (activeTab === 'activities') {
         csvContent += "REVENUES\n";
-        accounts.filter(a => a.type === 'Revenue').forEach(acc => {
+        activitiesRevenueAccounts.forEach(acc => {
           csvContent += `"${acc.name}",${filteredBalances[acc.code] || 0}\n`;
         });
         csvContent += `"Total Revenue",${filteredTotals.Revenue}\n\n`;
         csvContent += "GENERAL & ADMINISTRATIVE EXPENSES\n";
-        accounts.filter(a => a.type === 'Expenses').forEach(acc => {
+        activitiesGeneralAdminAccounts.forEach(acc => {
           csvContent += `"${acc.name}",${activitiesExpenseBreakdown.generalAdminByAccount[acc.code] || 0}\n`;
         });
         csvContent += `"Total General & Administrative",${activitiesExpenseBreakdown.generalAdminTotal}\n\n`;
@@ -294,7 +314,7 @@ export function FinancialStatements(): React.ReactElement {
           activitiesExpenseBreakdown.eventNames.forEach(eventName => {
             const byAccount = activitiesExpenseBreakdown.eventGroups[eventName];
             csvContent += `"${eventName}"\n`;
-            Object.entries(byAccount).forEach(([code, amount]) => {
+            Object.entries(byAccount).filter(([, amount]) => hasBalance(amount)).forEach(([code, amount]) => {
               const acc = accounts.find(a => a.code === code);
               csvContent += `"  ${acc?.name || code}",${amount}\n`;
             });
@@ -632,7 +652,7 @@ export function FinancialStatements(): React.ReactElement {
                 <div>
                   <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wider text-[10px]">Net Assets</h3>
                   <div className="space-y-1">
-                    {accounts.filter(a => a.type === 'Fund Balance').map(acc => {
+                    {positionFundBalanceAccounts.map(acc => {
                       const bal = cumulativeToEndBalances[acc.code] || 0;
                       return (
                         <div key={acc.code} className="flex justify-between py-1 px-4 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
@@ -669,7 +689,7 @@ export function FinancialStatements(): React.ReactElement {
                 <div>
                   <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wider text-[10px]">Revenues & Contributions</h3>
                   <div className="space-y-1">
-                    {accounts.filter(a => a.type === 'Revenue').map(acc => {
+                    {activitiesRevenueAccounts.map(acc => {
                       const bal = filteredBalances[acc.code] || 0;
                       return (
                         <div key={acc.code} className="flex justify-between py-1 px-4 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
@@ -702,7 +722,7 @@ export function FinancialStatements(): React.ReactElement {
                 <div>
                   <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wider text-[10px]">General & Administrative Expenses</h3>
                   <div className="space-y-1">
-                    {accounts.filter(a => a.type === 'Expenses').map(acc => {
+                    {activitiesGeneralAdminAccounts.map(acc => {
                       const bal = activitiesExpenseBreakdown.generalAdminByAccount[acc.code] || 0;
                       return (
                         <div key={acc.code} className="flex justify-between py-1 px-4 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">

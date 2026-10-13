@@ -124,3 +124,39 @@ describe('Financial Statements with an unused prepaid balance', () => {
     expect(page).toContain('As of');
   });
 });
+
+describe('Zero-balance accounts on the statements', () => {
+  const open = (label: string) => {
+    const tab = renderer.root.findAllByType('button').find(button => text(button).trim() === label);
+    act(() => { tab!.props.onClick(); });
+    return text(renderer.root).replace(/\s+/g, ' ');
+  };
+  const seed = () => {
+    act(() => { renderer = create(createElement(FinanceProvider, null, createElement(Probe))); });
+    act(() => {
+      finance.updateSettings({ semester: '1st Semester', reportingYear: 2026 } as never);
+      finance.addJournalEntry('2026-10-01', 'Capital', 'General Fund Operations', [{ accountCode: '1010', debit: 5000, credit: 0 }, { accountCode: '4030', debit: 0, credit: 5000 }]);
+      finance.addJournalEntry('2026-10-03', 'Office supplies', 'General Fund Operations', [{ accountCode: '5040', debit: 200, credit: 0 }, { accountCode: '1010', debit: 0, credit: 200 }]);
+    });
+  };
+
+  it('lists only accounts with a balance on the Statement of Financial Position and keeps the totals', () => {
+    seed();
+    const page = open('Statement of Financial Position');
+    expect(page).toContain('Cash and Cash Equivalents');
+    expect(page).not.toContain('Receivables');
+    expect(page).not.toContain('Inventories');
+    expect(page).not.toContain('Property and Equipment');
+    expect(page).not.toContain('Dues and Payables');
+    ['Total Assets', 'Total Liabilities', 'Total Fund Balance'].forEach(label => expect(page).toContain(label));
+  });
+
+  it('lists only revenue and expense accounts with a balance on the Statement of Activities and keeps the totals', () => {
+    seed();
+    const page = open('Statement of Activities');
+    expect(page).toContain('Office Supplies');
+    expect(page).not.toContain('Bank Charges');
+    expect(page).not.toContain('Rent Expense');
+    ['Total Revenue & Inflows', 'Total General & Administrative', 'Total Expenses & Outflows'].forEach(label => expect(page).toContain(label));
+  });
+});
