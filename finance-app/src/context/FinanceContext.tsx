@@ -24,7 +24,7 @@ import { deleteSemesterRecords, precedingSemester } from '../lib/semesterDeletio
 import { validateBackupPayload } from '../lib/backupValidation';
 import { computeAccountBalances, computeTypeTotals } from '../lib/accountTotals';
 import { combineOpeningAndPeriodBalances, carryForwardOpeningBalances, OpeningBalances } from '../lib/reportingPeriodBalances';
-import { computeClosingStageLines, findFiscalCloseBlockers } from '../lib/closingEntries';
+import { computeClosingStageLines, computeDirectClosingLines, findFiscalCloseBlockers } from '../lib/closingEntries';
 import { linkReceiptIdsToEntry } from '../lib/receiptAttachments';
 import { getEffectiveClassificationRules, validateCustomTransactionRule } from '../lib/customTransactionRules';
 import { ActivityFeeFollowUp, ActivityFeeSchedule, buildActivityFeeFollowUp, buildActivityFeeReceivableCollections, buildInitialActivityFeeSchedule, buildScheduledActivityFeeRecognition } from '../lib/activityFees';
@@ -61,7 +61,7 @@ const BACKFILLED_DEFAULT_ACCOUNT_CODES = new Set([
   '1210', '1220', '1230', '1270', '1280', '1285', '1295', '1298', '1330', '1360', '1370',
   '5020', '5120', '5180', '5290', '5330', '5340', '5350', '5360',
   '1501', '1502', '1503', '1504', '1505', '1506', '1507', '1508', '1509', '1510', '1511', '1512', '1513', '1514', '1515', '1516',
-  '1651', '1652', '1653', '2020', '2030', '2040', '2061', '2062', '2063', '2064', '2070', '2080', '2140', '2150', '4100', '4110', '5300',
+  '3040', '3050', '1651', '1652', '1653', '2020', '2030', '2040', '2061', '2062', '2063', '2064', '2070', '2080', '2140', '2150', '4100', '4110', '5300',
 ]);
 
 // Retired accounts are removed from the COA, while historical journals and
@@ -275,6 +275,8 @@ export const INITIAL_ACCOUNTS: Account[] = [
   { code: '3010', name: 'General Fund Balance', type: 'Fund Balance', normalBalance: 'Credit', description: 'Unrestricted accumulated fund balances', isActive: true },
   { code: '3020', name: 'Restricted Fund Balance', type: 'Fund Balance', normalBalance: 'Credit', description: 'Donor-restricted capital or specific reserves', isActive: true },
   { code: '3030', name: 'Permanently Restricted Fund Balance', type: 'Fund Balance', normalBalance: 'Credit', description: 'Donor-restricted funds that must be maintained permanently', isActive: true },
+  { code: '3040', name: 'Accumulated Net Surplus', type: 'Fund Balance', normalBalance: 'Credit', description: 'Surplus carried forward by year-end Closing Entries', isActive: true },
+  { code: '3050', name: 'Accumulated Net Deficit', type: 'Fund Balance', normalBalance: 'Debit', description: 'Deficit carried forward by year-end Closing Entries; deducted from Fund Balance', isActive: true },
   
   // Revenue (Normal: Credit)
   { code: '4010', name: 'Organization Income', type: 'Revenue', normalBalance: 'Credit', description: 'Income earned through the organization’s programs and services', isActive: true },
@@ -873,6 +875,7 @@ interface FinanceContextType {
   reverseJournalEntry: (id: string) => void;
   deleteJournalEntry: (id: string) => boolean;
   postClosingStage: (fiscalYear: string, closingDate: string, stage: 'revenue' | 'expense' | 'income-summary') => void;
+  postDirectClosing: (fiscalYear: string, closingDate: string) => void;
   attachReceiptsToEntry: (entryId: string, receipts: ReceiptAttachmentDraft[]) => void;
   addCustomClassificationRule: (description: string, debitAccountCode: string, creditAccountCode: string) => void;
   updateCustomClassificationRule: (id: string, updated: Partial<Pick<CustomClassificationRule, 'description' | 'debitAccountCode' | 'creditAccountCode' | 'isActive'>>) => void;
@@ -1512,6 +1515,21 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     logAudit('Closing Entries', `${label} posted for ${fiscalYear} via ${entry.reference}.`);
   };
 
+  // Client's direct-closing design: a single entry closes Revenues and
+  // Expenses into Accumulated Net Surplus (Deficit); no Income Summary step.
+  const postDirectClosing = (fiscalYear: string, closingDate: string) => {
+    const current = closedFiscalYears.find(record => record.fiscalYear === fiscalYear);
+    if (current?.completed) throw new Error(`${fiscalYear} has already been closed.`);
+    if (findFiscalCloseBlockers(journalEntries, accounts).length > 0) throw new Error('Complete all Review items before posting closing entries.');
+    const balances = computeAccountBalances(journalEntries.filter(entry => !entry.isDraft && entry.date <= closingDate), accounts);
+    const { lines, netIncome } = computeDirectClosingLines(balances, accounts);
+    if (!lines.length) throw new Error('No Revenue or Expense balances remain to close.');
+    const entry = addJournalEntry(closingDate, `Closing Entries — ${fiscalYear}`, GENERAL_FUND_PROJECT, lines);
+    const record: ClosingRecord = { id: current?.id || `closing-${Date.now()}`, fiscalYear, closingDate, netIncome, journalEntryId: entry.id, closedAt: new Date().toISOString(), completed: true };
+    setClosedFiscalYears(previous => current ? previous.map(item => item.fiscalYear === fiscalYear ? record : item) : [...previous, record]);
+    logAudit('Closing Entries', `Closed Revenues and Expenses to Accumulated Net ${netIncome < 0 ? 'Deficit' : 'Surplus'} for ${fiscalYear} via ${entry.reference}.`);
+  };
+
   const addAccount = (account: Account) => {
     if (accounts.some(a => a.code === account.code)) {
       throw new Error(`Account code ${account.code} already exists.`);
@@ -1856,6 +1874,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       reverseJournalEntry,
       deleteJournalEntry,
       postClosingStage,
+      postDirectClosing,
       attachReceiptsToEntry,
       addCustomClassificationRule,
       updateCustomClassificationRule,

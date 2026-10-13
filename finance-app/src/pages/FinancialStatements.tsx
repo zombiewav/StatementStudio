@@ -15,6 +15,7 @@ import { computeTransactionReviewStates } from '../lib/reviewEngine';
 import { isActivityFeeIncomplete } from '../lib/activityFees';
 import { CASH_FLOW_EXPENSE_ROWS, CASH_FLOW_OPERATING_ROWS, computeCashFlowDetails } from '../lib/cashFlow';
 import { excludeClosingEntries } from '../lib/closingEntries';
+import { CLOSING_PAGES_ENABLED } from '../lib/featureFlags';
 import { periodForSemester } from '../lib/reportingPeriod';
 import { combineOpeningAndPeriodBalances } from '../lib/reportingPeriodBalances';
 
@@ -91,7 +92,7 @@ export function FinancialStatements(): React.ReactElement {
   );
   const incompleteActivityFeeRecords = activityFeeRecords.filter(isActivityFeeIncomplete);
   const activeClose = closedFiscalYears.find(record => record.fiscalYear === settings.fiscalYear);
-  const closingIncomplete = !activeClose?.completed;
+  const closingIncomplete = CLOSING_PAGES_ENABLED && !activeClose?.completed;
 
   // Compute Account Balances specifically for the filtered date range —
   // right for Revenue/Expenses (a period's activity), but NOT for Assets,

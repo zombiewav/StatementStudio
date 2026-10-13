@@ -17,6 +17,8 @@ import { ProjectsPage } from './pages/ProjectsPage';
 import { Settings } from './pages/Settings';
 import { ClosingEntries } from './pages/ClosingEntries';
 import { PostClosingTrialBalance } from './pages/PostClosingTrialBalance';
+import { ClosingEntriesDirect } from './pages/ClosingEntriesDirect';
+import { CLOSING_FLOW, CLOSING_PAGES_ENABLED } from './lib/featureFlags';
 import { LandingPage } from './pages/LandingPage';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
@@ -77,9 +79,9 @@ function DashboardLayout() {
       case 'settings':
         return <Settings />;
       case 'closing-entries':
-        return <ClosingEntries />;
+        return !CLOSING_PAGES_ENABLED ? <Dashboard /> : CLOSING_FLOW === 'direct' ? <ClosingEntriesDirect /> : <ClosingEntries />;
       case 'post-closing-trial-balance':
-        return <PostClosingTrialBalance />;
+        return CLOSING_PAGES_ENABLED ? <PostClosingTrialBalance /> : <Dashboard />;
       default:
         return <Dashboard />;
     }

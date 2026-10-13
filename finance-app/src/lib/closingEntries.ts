@@ -48,6 +48,47 @@ export function computeClosingStageLines(accountBalances: Record<string, number>
   return lines;
 }
 
+// Client's direct-closing design: no Income Summary. A deficit goes to its own
+// debit-normal account (a contra within Fund Balance), so closing never
+// pushes a Fund Balance account below zero.
+export const ACCUMULATED_NET_SURPLUS_CODE = '3040';
+export const ACCUMULATED_NET_DEFICIT_CODE = '3050';
+
+/**
+ * One entry that closes every Revenue and Expense account directly:
+ * Dr Revenues, Cr Expenses, and the difference to Accumulated Net Surplus
+ * (credit) or Accumulated Net Deficit (debit, listed first).
+ */
+export function computeDirectClosingLines(accountBalances: Record<string, number>, accounts: Account[]): ClosingEntryResult {
+  const revenueLines: JournalLine[] = [];
+  const expenseLines: JournalLine[] = [];
+  let totalRevenue = 0;
+  let totalExpenses = 0;
+  accounts.filter(account => account.type === 'Revenue').forEach(account => {
+    const balance = accountBalances[account.code] || 0;
+    if (balance <= 0) return;
+    revenueLines.push({ accountCode: account.code, debit: balance, credit: 0 });
+    if (account.code === PERMANENTLY_RESTRICTED_REVENUE_CODE) {
+      // Permanently restricted revenue never counts toward the surplus.
+      revenueLines.push({ accountCode: PERMANENTLY_RESTRICTED_FUND_BALANCE_CODE, debit: 0, credit: balance });
+    } else {
+      totalRevenue += balance;
+    }
+  });
+  accounts.filter(account => account.type === 'Expenses').forEach(account => {
+    const balance = accountBalances[account.code] || 0;
+    if (balance <= 0) return;
+    expenseLines.push({ accountCode: account.code, debit: 0, credit: balance });
+    totalExpenses += balance;
+  });
+  const netIncome = totalRevenue - totalExpenses;
+  const lines: JournalLine[] = [];
+  if (netIncome < 0) lines.push({ accountCode: ACCUMULATED_NET_DEFICIT_CODE, debit: -netIncome, credit: 0 });
+  lines.push(...revenueLines, ...expenseLines);
+  if (netIncome > 0) lines.push({ accountCode: ACCUMULATED_NET_SURPLUS_CODE, debit: 0, credit: netIncome });
+  return { lines: revenueLines.length || expenseLines.length ? lines : [], netIncome, totalRevenue, totalExpenses };
+}
+
 /**
  * Closing entries belong in the ledger and point-in-time balances, but they
  * are not operating activity. Excluding their recorded journal IDs preserves

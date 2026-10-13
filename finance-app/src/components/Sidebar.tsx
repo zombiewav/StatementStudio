@@ -17,6 +17,7 @@ import {
 import { useFinance } from '../context/FinanceContext';
 import { computePendingObligations } from '../lib/reviewEngine';
 import { LogoMark } from './LogoMark';
+import { CLOSING_PAGES_ENABLED } from '../lib/featureFlags';
 
 interface SidebarProps {
   activePage: string;
@@ -52,8 +53,10 @@ export function Sidebar({
     { id: 'journals', icon: BookOpen, label: "Journal Entries" },
     { id: 'ledger', icon: Layers, label: "General Ledger" },
     { id: 'trial-balance', icon: Scale, label: "Trial Balance" },
-    { id: 'closing-entries', icon: ClipboardCheck, label: "Closing Entries" },
-    { id: 'post-closing-trial-balance', icon: Scale, label: "Post-Closing Trial Balance" },
+    ...(CLOSING_PAGES_ENABLED ? [
+      { id: 'closing-entries', icon: ClipboardCheck, label: "Closing Entries" },
+      { id: 'post-closing-trial-balance', icon: Scale, label: "Post-Closing Trial Balance" },
+    ] : []),
     { id: 'statements', icon: FileSpreadsheet, label: "Financial Statements" },
     { id: 'analytics', icon: LineChart, label: "Analytics" },
     { id: 'projects', icon: FolderKanban, label: "Activities & Programs" },

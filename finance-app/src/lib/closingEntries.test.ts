@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { computeClosingEntryLines, computeClosingStageLines, excludeClosingEntries, findFiscalCloseBlockers } from './closingEntries';
+import { computeClosingEntryLines, computeClosingStageLines, computeDirectClosingLines, excludeClosingEntries, findFiscalCloseBlockers } from './closingEntries';
 import { Account, ClosingRecord, JournalEntry } from '../types';
+import { computeAccountBalances } from './accountTotals';
 
 const accounts: Account[] = [
   { code: '1010', name: 'Cash on Hand', type: 'Assets', normalBalance: 'Debit', description: '', isActive: true },
@@ -168,3 +169,53 @@ function entryForCloseTest(id: string, description: string): JournalEntry {
     lines: [],
   };
 }
+
+describe('computeDirectClosingLines (client worked examples)', () => {
+  const coa: Account[] = [
+    { code: '4040', name: 'Membership Fees', type: 'Revenue', normalBalance: 'Credit', description: '', isActive: true },
+    { code: '4050', name: 'Other Income', type: 'Revenue', normalBalance: 'Credit', description: '', isActive: true },
+    { code: '5010', name: 'Communication Expense', type: 'Expenses', normalBalance: 'Debit', description: '', isActive: true },
+    { code: '5020', name: 'Freight Expense', type: 'Expenses', normalBalance: 'Debit', description: '', isActive: true },
+    { code: '5030', name: 'Delivery Fees Expense', type: 'Expenses', normalBalance: 'Debit', description: '', isActive: true },
+    { code: '5040', name: 'Cleaning Supplies Expense', type: 'Expenses', normalBalance: 'Debit', description: '', isActive: true },
+  ];
+  const sum = (lines: { debit: number; credit: number }[], key: 'debit' | 'credit') => lines.reduce((total, line) => total + line[key], 0);
+
+  it('credits Accumulated Net Surplus when revenue exceeds expenses', () => {
+    const result = computeDirectClosingLines({ '4040': 18000, '4050': 2000, '5010': 1000, '5020': 2000, '5030': 3000, '5040': 4000 }, coa);
+    expect(result.netIncome).toBe(10000);
+    expect(result.lines).toEqual([
+      { accountCode: '4040', debit: 18000, credit: 0 }, { accountCode: '4050', debit: 2000, credit: 0 },
+      { accountCode: '5010', debit: 0, credit: 1000 }, { accountCode: '5020', debit: 0, credit: 2000 },
+      { accountCode: '5030', debit: 0, credit: 3000 }, { accountCode: '5040', debit: 0, credit: 4000 },
+      { accountCode: '3040', debit: 0, credit: 10000 },
+    ]);
+    expect(sum(result.lines, 'debit')).toBe(sum(result.lines, 'credit'));
+  });
+
+  it('debits Accumulated Net Deficit first when expenses exceed revenue', () => {
+    const result = computeDirectClosingLines({ '4040': 7000, '4050': 2000, '5010': 1000, '5020': 2000, '5030': 3000, '5040': 4000 }, coa);
+    expect(result.netIncome).toBe(-1000);
+    expect(result.lines[0]).toEqual({ accountCode: '3050', debit: 1000, credit: 0 });
+    expect(result.lines).toHaveLength(7);
+    expect(sum(result.lines, 'debit')).toBe(sum(result.lines, 'credit'));
+  });
+
+  it('returns no lines when nothing is left to close', () => {
+    expect(computeDirectClosingLines({}, coa).lines).toEqual([]);
+  });
+
+  it.each([
+    ['surplus', { '4040': 18000, '4050': 2000, '5010': 1000, '5020': 2000, '5030': 3000, '5040': 4000 }],
+    ['deficit', { '4040': 7000, '4050': 2000, '5010': 1000, '5020': 2000, '5030': 3000, '5040': 4000 }],
+  ])('leaves every revenue and expense account at zero once the %s entry is posted', (_label, balances) => {
+    const debitLine = (code: string, amount: number) => ({ accountCode: code, debit: amount, credit: 0 });
+    const creditLine = (code: string, amount: number) => ({ accountCode: code, debit: 0, credit: amount });
+    const opening = Object.entries(balances).map(([code, amount]) => (code.startsWith('4') ? creditLine(code, amount) : debitLine(code, amount)));
+    const closing = computeDirectClosingLines(balances, coa).lines;
+    const all = [...coa, { code: '3040', name: 'Accumulated Net Surplus', type: 'Fund Balance', normalBalance: 'Credit', description: '', isActive: true } as Account, { code: '3050', name: 'Accumulated Net Deficit', type: 'Fund Balance', normalBalance: 'Debit', description: '', isActive: true } as Account];
+    const entry = (id: string, lines: typeof closing) => ({ id, reference: id, date: '2026-05-31', description: id, project: 'p', lines } as JournalEntry);
+    const after = computeAccountBalances([entry('open', opening), entry('close', closing)], all);
+    coa.forEach(account => expect(after[account.code]).toBe(0));
+  });
+});
