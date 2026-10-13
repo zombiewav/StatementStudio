@@ -389,3 +389,25 @@ describe('transaction review status', () => {
     expect(state.restrictedRemaining).toBe(500);
   });
 });
+
+describe('what still blocks Financial Statements and closing', () => {
+  const acct = (code: string, name: string, type: 'Assets' | 'Revenue', normalBalance: 'Debit' | 'Credit') => ({ code, name, type, normalBalance, description: '', isActive: true });
+  const accts = [acct('1010', 'Cash on Hand', 'Assets', 'Debit'), acct('1285', 'Supplies and Materials', 'Assets', 'Debit'), acct('4030', 'Contributions', 'Revenue', 'Credit'), acct('4035', 'Temporarily Restricted Revenue', 'Revenue', 'Credit')];
+  const entry = (id: string, lines: { accountCode: string; debit: number; credit: number }[]) => ({ id, reference: id, date: '2026-10-14', description: id, project: 'p', lines });
+
+  it('keeps an unused prepaid balance Incomplete in Review but does not block statements', () => {
+    const states = computeTransactionReviewStates([entry('staples', [{ accountCode: '1285', debit: 100, credit: 0 }, { accountCode: '1010', debit: 0, credit: 100 }])], accts);
+    expect(states[0]).toMatchObject({ status: 'incomplete', blocksStatements: false });
+    expect(states[0].missing[0]).toContain('still unused');
+  });
+
+  it('still blocks statements for other open items, such as a donor restriction', () => {
+    const states = computeTransactionReviewStates([entry('grant', [{ accountCode: '1010', debit: 500, credit: 0 }, { accountCode: '4035', debit: 0, credit: 500 }])], accts);
+    expect(states[0]).toMatchObject({ status: 'incomplete', blocksStatements: true });
+  });
+
+  it('a complete transaction does not block', () => {
+    const states = computeTransactionReviewStates([entry('gift', [{ accountCode: '1010', debit: 500, credit: 0 }, { accountCode: '4030', debit: 0, credit: 500 }])], accts);
+    expect(states[0]).toMatchObject({ status: 'complete', blocksStatements: false });
+  });
+});

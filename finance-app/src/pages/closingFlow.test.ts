@@ -77,6 +77,20 @@ describe('pre-closing and post-closing reports', () => {
     expect(tableRows().length).toBeGreaterThan(0);
   });
 
+  it('the post-closing reports wait for the closing entry and then show no revenue or expense rows', () => {
+    Page = () => createElement('div', null, createElement(PostClosingTrialBalance), createElement(GeneralLedger as never, { mode: 'post' } as never));
+    seed(1000);
+    const before = flat(text(renderer.root));
+    expect(before).toContain('The closing entry has not been posted yet');
+    expect(before).not.toContain('Membership Dues');
+    close();
+    const after = flat(text(renderer.root));
+    expect(after).not.toContain('The closing entry has not been posted yet');
+    const rows = renderer.root.findAllByType(PostClosingTrialBalance)[0].findAllByType('tr').map(row => flat(text(row)));
+    expect(rows.some(row => row.includes('Membership Dues') || row.includes('Communication'))).toBe(false);
+    expect(rows.some(row => row.includes('Fund Balance') && row.includes('1,000'))).toBe(true);
+  });
+
   it('a deficit Fund Balance does not stop the financial statements', () => {
     Page = () => createElement(FinancialStatements);
     seed(3000);

@@ -37,6 +37,12 @@ export interface TransactionReviewState {
   missing: string[];
   restrictedRemaining: number;
   completedOn?: string;
+  /**
+   * False when the only thing still open is an unused Prepaid Expenses / Other Assets balance.
+   * That stays visible (and Incomplete) in Review, but Financial Statements and Closing
+   * Entries do not wait for it.
+   */
+  blocksStatements?: boolean;
 }
 
 export interface PendingObligation {
@@ -172,7 +178,10 @@ export function computeTransactionReviewStates(entries: JournalEntry[], accounts
         return { entry, status: 'reversed' as const, missing: [], restrictedRemaining: 0 };
       }
 
-      const missing = (pendingByEntry.get(entry.id) || []).map(item => {
+      const entryPending = pendingByEntry.get(entry.id) || [];
+      const isPrepaidItem = (item: PendingObligation) => item.accountCode === PREPAID_EXPENSE_CODE || PREPAID_ASSET_ACCOUNT_CODES.includes(item.accountCode);
+      const prepaidOnlyCount = entryPending.filter(isPrepaidItem).length;
+      const missing = entryPending.map(item => {
         if (item.accountCode === PREPAID_EXPENSE_CODE || PREPAID_ASSET_ACCOUNT_CODES.includes(item.accountCode)) return `${obligationAccountLabel(item.accountCode, accounts)} still unused: ${item.remainingAmount}`;
         return `${obligationAccountLabel(item.accountCode, accounts)} still open: ${item.remainingAmount}`;
       });
@@ -207,6 +216,7 @@ export function computeTransactionReviewStates(entries: JournalEntry[], accounts
         status,
         missing,
         restrictedRemaining,
+        blocksStatements: missing.length > prepaidOnlyCount,
         ...(status === 'complete' ? { completedOn: completionDates[completionDates.length - 1] || entry.date } : {}),
       };
     })

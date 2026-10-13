@@ -98,7 +98,7 @@ describe('staged closing entries', () => {
 });
 
 describe('findFiscalCloseBlockers', () => {
-  it('blocks closing while a Review obligation is open and clears after settlement', () => {
+  it('does not block closing for an unused prepaid balance, which stays open in Review and carries forward', () => {
     const reviewAccounts: Account[] = [
       ...accounts,
       { code: '1285', name: 'Supplies and Materials', type: 'Assets', normalBalance: 'Debit', description: '', isActive: true },
@@ -112,8 +112,20 @@ describe('findFiscalCloseBlockers', () => {
       id: 'je-2', reference: 'JE-0002', date: '2026-01-02', description: 'Used supplies', project: 'General Fund Operations', settlesEntryId: 'je-1',
       lines: [{ accountCode: '5020', debit: 1000, credit: 0 }, { accountCode: '1285', debit: 0, credit: 1000 }],
     };
-    expect(findFiscalCloseBlockers([original], reviewAccounts)).toHaveLength(1);
+    expect(findFiscalCloseBlockers([original], reviewAccounts)).toHaveLength(0);
     expect(findFiscalCloseBlockers([original, consumption], reviewAccounts)).toHaveLength(0);
+  });
+
+  it('still blocks closing while a donor restriction is open', () => {
+    const restricted: Account[] = [
+      ...accounts,
+      { code: '4035', name: 'Temporarily Restricted Revenue', type: 'Revenue', normalBalance: 'Credit', description: '', isActive: true },
+    ];
+    const grant: JournalEntry = {
+      id: 'je-1', reference: 'JE-0001', date: '2026-01-01', description: 'Restricted grant', project: 'General Fund Operations',
+      lines: [{ accountCode: '1010', debit: 500, credit: 0 }, { accountCode: '4035', debit: 0, credit: 500 }],
+    };
+    expect(findFiscalCloseBlockers([grant], restricted)).toHaveLength(1);
   });
 
   it('does not block closing for unpaid payables, which carry to the next period', () => {

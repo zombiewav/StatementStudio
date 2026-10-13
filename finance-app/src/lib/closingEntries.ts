@@ -102,7 +102,7 @@ export function excludeClosingEntries(
 }
 
 export function findFiscalCloseBlockers(entries: JournalEntry[], accounts: Account[]): TransactionReviewState[] {
-  return computeTransactionReviewStates(entries, accounts).filter(state => state.status === 'incomplete');
+  return computeTransactionReviewStates(entries, accounts).filter(state => state.status === 'incomplete' && state.blocksStatements !== false);
 }
 
 export function computeClosingEntryLines(

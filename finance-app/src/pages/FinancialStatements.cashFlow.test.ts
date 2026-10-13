@@ -109,3 +109,18 @@ describe('Statement period header', () => {
     expect(page).toContain('As of December 31, 2026');
   });
 });
+
+describe('Financial Statements with an unused prepaid balance', () => {
+  it('still generates while the prepaid item stays Incomplete in Review', () => {
+    act(() => { renderer = create(createElement(FinanceProvider, null, createElement(Probe))); });
+    act(() => {
+      finance.updateSettings({ semester: '1st Semester', reportingYear: 2026 } as never);
+      finance.addJournalEntry('2026-10-01', 'Capital', 'General Fund Operations', [{ accountCode: '1010', debit: 5000, credit: 0 }, { accountCode: '4030', debit: 0, credit: 5000 }]);
+      finance.addJournalEntry('2026-10-14', 'Purchase of Staples', 'General Fund Operations', [{ accountCode: '1285', debit: 100, credit: 0 }, { accountCode: '1010', debit: 0, credit: 100 }]);
+    });
+    const page = text(renderer.root).replace(/\s+/g, ' ');
+    expect(page).not.toContain('ready yet');
+    expect(page).toContain('Statement of Financial Position');
+    expect(page).toContain('As of');
+  });
+});

@@ -104,6 +104,8 @@ login flag. This is still local-browser authentication, not secure multi-device 
   Dr-Expense/Cr-Prepaid-Expenses split, settled later in Review against a real expense account.
   Financial Statements is hard-blocked (statements hidden, export/print disabled) while any
   REVIEW item is open — computed over **all** journal entries, not the selected date range.
+  Exception (client, Oct 2026): an unused Prepaid Expenses / Other Assets balance stays Incomplete in
+  Review but does not block the statements or Closing Entries (`blocksStatements` on the review state).
 - **Contra-accounts**: `accountTotals.ts` nets a contra-account (normalBalance opposing its
   type's natural polarity, e.g. Accumulated Depreciation) by subtracting instead of adding.
   Rendered as `(₱X)` in the Balance Sheet via `isContraAccount()`.

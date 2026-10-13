@@ -73,6 +73,21 @@ export function TrialBalance({ mode = 'pre' }: { mode?: 'pre' | 'post' } = {}): 
   const difference = Math.abs(totalDebits - totalCredits);
   const isBalanced = difference < 0.01;
 
+  // The post-closing reports only exist once the closing entry is posted.
+  const closingPosted = journalEntries.some(entry => closedFiscalYears.some(record => record.journalEntryId === entry.id));
+  if (mode === 'post' && !closingPosted) {
+    return (
+      <div className="space-y-6 bg-slate-50 dark:bg-slate-950">
+        <div>
+          <h2 className="font-display text-3xl text-slate-900 dark:text-slate-100">Post-Closing Trial <em className="text-blue-700 dark:text-blue-400">Balance</em></h2>
+        </div>
+        <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs font-semibold text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
+          The closing entry has not been posted yet. Post it under Closing Entries to see this report: Revenues and Expenses are closed to zero, and Fund Balance carries the surplus or deficit from the closing entry.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 bg-slate-50 dark:bg-slate-950">
       <div className="w-full">

@@ -94,7 +94,7 @@ export function FinancialStatements(): React.ReactElement {
   // final yet either.
   const semesterKey = `${settings.reportingYear}::${settings.semester}`;
   const incompleteReviewItems = useMemo(
-    () => computeTransactionReviewStates(journalEntries.filter(entry => !entry.isDraft), accounts, semesterKey).filter(item => item.status === 'incomplete'),
+    () => computeTransactionReviewStates(journalEntries.filter(entry => !entry.isDraft), accounts, semesterKey).filter(item => item.status === 'incomplete' && item.blocksStatements !== false),
     [journalEntries, accounts, semesterKey]
   );
   const incompleteActivityFeeRecords = activityFeeRecords.filter(isActivityFeeIncomplete);
