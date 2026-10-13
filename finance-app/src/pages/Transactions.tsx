@@ -719,9 +719,9 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
         : [...merchandiseOrganizationPayments, ...merchandiseOfficerPayments, ...merchandiseAdvancePayments];
   const merchandisePrepaymentDate = merchandisePrepaymentPaymentRows.find(row => Number(row.amount) > 0 && row.date)?.date || localDateInputValue();
   const transactionAmount = isMerchandisePrepayment ? merchandisePrepaymentAmount : amount;
-  const draftSupplierReceivable = ledgerEntries.filter(entry => entry.isDraft)
-    .reduce((sum, entry) => sum + entry.lines.filter(line => line.accountCode === '1360').reduce((lineSum, line) => lineSum + line.debit - line.credit, 0), 0);
-  const supplierReceivableOutstanding = Math.max(0, Math.round(((ledgerBalances['1360'] || 0) - draftSupplierReceivable) * 100) / 100);
+  // Linked to the Accounts Receivable - Suppliers (1360) balance shown in the
+  // General Ledger and Trial Balance: a collection can never exceed it.
+  const supplierReceivableOutstanding = Math.max(0, Math.round((ledgerBalances['1360'] || 0) * 100) / 100);
 
   useEffect(() => {
     if (isPriorMembershipCollection) setAmount(membershipCollectionTotal);
@@ -1861,8 +1861,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                 <h4 className="text-xs font-black text-emerald-900 dark:text-emerald-200">Collection of Receivables from Suppliers</h4>
                 <p className="mt-1 text-[10px] font-medium text-emerald-800 dark:text-emerald-300">Record cash returned or collected from suppliers against prior excess payments.</p>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  <div className="rounded-lg bg-white/80 p-3 dark:bg-slate-900/50"><span className="text-[9px] font-bold uppercase text-slate-500">Outstanding receivable</span><p className="mt-1 text-sm font-black text-emerald-800 dark:text-emerald-200">{formatCurrency(supplierReceivableOutstanding)}</p></div>
-                  <div className="rounded-lg bg-white/80 p-3 text-[10px] font-semibold text-slate-600 dark:bg-slate-900/50 dark:text-slate-300">Journal entry: Debit Cash on Hand, Credit Accounts Receivable - Suppliers. The collection cannot exceed the outstanding balance.</div>
+                  <div className="rounded-lg bg-white/80 p-3 dark:bg-slate-900/50"><span className="text-[9px] font-bold uppercase text-slate-500">Outstanding receivable (ledger balance)</span><p className="mt-1 text-sm font-black text-emerald-800 dark:text-emerald-200">{formatCurrency(supplierReceivableOutstanding)}</p></div>
+                  <div className="rounded-lg bg-white/80 p-3 text-[10px] font-semibold text-slate-600 dark:bg-slate-900/50 dark:text-slate-300">Journal entry: Debit Cash on Hand, Credit Accounts Receivable - Suppliers. This balance is linked to the Accounts Receivable - Suppliers account in the General Ledger; the collection cannot exceed it.</div>
                 </div>
                 {supplierReceivableOutstanding <= 0 && <p className="mt-3 text-[10px] font-bold text-amber-700 dark:text-amber-300">No Accounts Receivable - Suppliers balance is available to collect.</p>}
               </div>
