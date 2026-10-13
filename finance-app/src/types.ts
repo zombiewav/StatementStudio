@@ -83,6 +83,9 @@ export interface TransactionDetails {
   merchandiseItem?: string;
   /** Set on a Downpayment by Buyer for Pre-Ordered Merchandise entry (credited to Unearned Merchandise Revenue). */
   merchandiseBuyerDownpayment?: boolean;
+  /** On a sale: the buyer downpayment entries it applied, and their total. */
+  merchandiseBuyerDownpaymentEntryIds?: string[];
+  merchandiseBuyerDownpaymentAmount?: number;
   merchandiseBatch?: string;
   merchandisePurchaseDate?: string;
   merchandisePrepaymentEntryId?: string;

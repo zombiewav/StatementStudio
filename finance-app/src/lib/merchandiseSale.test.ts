@@ -83,8 +83,69 @@ describe('merchandise sale posting', () => {
   });
 
   it('rejects collections above sales and remittances above officer collections', () => {
-    expect(() => buildMerchandiseSalePosting({ totalSales: 100, inventoryCost: 50, collectionMethod: 'organization-direct', totalCollected: 101 })).toThrow(/cannot exceed total sales/i);
     expect(() => buildMerchandiseSalePosting({ totalSales: 100, inventoryCost: 50, collectionMethod: 'officer-to-remit', totalCollected: 80, totalRemitted: 81 })).toThrow(/cannot exceed what the officer collected/i);
+  });
+});
+
+describe('merchandise sale with buyer downpayments', () => {
+  const sale = (extra: Record<string, unknown>) => buildMerchandiseSalePosting({ totalSales: 1000, inventoryCost: 600, collectionMethod: 'not-yet-collected', ...extra } as never);
+  const cost = [{ accountCode: '5240', debit: 600, credit: 0 }, { accountCode: '1700', debit: 0, credit: 600 }];
+
+  it('receivable is the sales less the downpayment, and the downpayment leaves Unearned Merchandise Revenue', () => {
+    expect(sale({ buyerDownpayment: 300 }).lines).toEqual([
+      { accountCode: '1200', debit: 700, credit: 0 },
+      { accountCode: '2140', debit: 300, credit: 0 },
+      { accountCode: '4070', debit: 0, credit: 1000 },
+      ...cost,
+    ]);
+  });
+
+  it('collections cover the rest, leaving no receivable and no refund', () => {
+    const posting = sale({ buyerDownpayment: 300, collectionMethod: 'organization-direct', totalCollected: 700 });
+    expect(posting.lines).toEqual([
+      { accountCode: '1010', debit: 700, credit: 0 },
+      { accountCode: '2140', debit: 300, credit: 0 },
+      { accountCode: '4070', debit: 0, credit: 1000 },
+      ...cost,
+    ]);
+    expect(posting).toMatchObject({ accountsReceivable: 0, refundLiability: 0 });
+  });
+
+  it('records collections beyond the total sales as Refund Liability - Merchandise', () => {
+    const posting = sale({ buyerDownpayment: 300, collectionMethod: 'organization-direct', totalCollected: 900 });
+    expect(posting.lines).toEqual([
+      { accountCode: '1010', debit: 900, credit: 0 },
+      { accountCode: '2140', debit: 300, credit: 0 },
+      { accountCode: '4070', debit: 0, credit: 1000 },
+      { accountCode: '2150', debit: 0, credit: 200 },
+      ...cost,
+    ]);
+    expect(posting.refundLiability).toBe(200);
+  });
+
+  it('sends downpayments larger than the sale to the refund liability even when nothing else was collected', () => {
+    const posting = sale({ buyerDownpayment: 1200 });
+    expect(posting.lines).toEqual([
+      { accountCode: '2140', debit: 1200, credit: 0 },
+      { accountCode: '4070', debit: 0, credit: 1000 },
+      { accountCode: '2150', debit: 0, credit: 200 },
+      ...cost,
+    ]);
+    expect(posting.accountsReceivable).toBe(0);
+  });
+
+  it('keeps the officer-collection split with downpayments applied', () => {
+    const posting = sale({ buyerDownpayment: 300, collectionMethod: 'officer-to-remit', totalCollected: 500, totalRemitted: 200 });
+    expect(posting.lines).toEqual([
+      { accountCode: '1320', debit: 500, credit: 0 },
+      { accountCode: '1010', debit: 200, credit: 0 },
+      { accountCode: '1320', debit: 0, credit: 200 },
+      { accountCode: '1200', debit: 200, credit: 0 },
+      { accountCode: '2140', debit: 300, credit: 0 },
+      { accountCode: '4070', debit: 0, credit: 1000 },
+      ...cost,
+    ]);
+    expect(posting).toMatchObject({ accountsReceivable: 200, dueFromOfficer: 300, cashCollected: 200 });
   });
 });
 

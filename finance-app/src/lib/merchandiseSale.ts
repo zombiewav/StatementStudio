@@ -5,12 +5,16 @@ export const DUE_FROM_OFFICERS_ACCOUNT_CODE = '1320';
 export const MERCHANDISE_SALES_ACCOUNT_CODE = '4070';
 export const COST_OF_SALES_ACCOUNT_CODE = '5240';
 export const MERCHANDISE_INVENTORY_ACCOUNT_CODE = '1700';
+export const UNEARNED_MERCHANDISE_REVENUE_ACCOUNT_CODE = '2140';
+export const MERCHANDISE_REFUND_LIABILITY_ACCOUNT_CODE = '2150';
 
 export type MerchandiseCollectionMethod = 'not-yet-collected' | 'organization-direct' | 'officer-to-remit';
 
 export interface MerchandiseSaleInput {
   totalSales: number;
   inventoryCost: number;
+  /** Buyer downpayments received earlier (Unearned Merchandise Revenue) that this sale applies. */
+  buyerDownpayment?: number;
   collectionMethod: MerchandiseCollectionMethod;
   transactionDate?: string;
   totalCollected?: number;
@@ -25,6 +29,8 @@ export interface MerchandiseSalePosting {
   accountsReceivable: number;
   dueFromOfficer: number;
   cashCollected: number;
+  /** Collections plus downpayments beyond the total sales: owed back to the buyer. */
+  refundLiability: number;
 }
 
 export interface MerchandiseBatchBalance {
@@ -70,6 +76,7 @@ function addLine(lines: JournalLine[], accountCode: string, debit: number, credi
 export function buildMerchandiseSalePosting(input: MerchandiseSaleInput): MerchandiseSalePosting {
   const totalSales = validateAmount('Total sales', input.totalSales, false);
   const inventoryCost = validateAmount('Cost of sales', input.inventoryCost, false);
+  const buyerDownpayment = validateAmount('Buyer downpayment', input.buyerDownpayment || 0);
   const collections = datedAmounts('Collection', input.collections, input.totalCollected || 0, input.transactionDate);
   const remittances = datedAmounts('Remittance', input.remittances, input.totalRemitted || 0, input.transactionDate);
   const totalCollected = total(collections);
@@ -77,14 +84,16 @@ export function buildMerchandiseSalePosting(input: MerchandiseSaleInput): Mercha
   const cashAccountCode = input.cashAccountCode || '1010';
 
   if (input.collectionMethod === 'not-yet-collected' && (totalCollected > 0 || totalRemitted > 0)) throw new Error('A not-yet-collected sale cannot include collections or remittances.');
-  if (totalCollected > totalSales) throw new Error('Total collection cannot exceed total sales.');
   if (input.collectionMethod === 'organization-direct' && totalRemitted > 0) throw new Error('Direct organization collections do not use a separate remittance.');
   if (input.collectionMethod === 'officer-to-remit' && totalRemitted > totalCollected) throw new Error('Total remittance cannot exceed what the officer collected.');
 
   const recognizedCollection = input.collectionMethod === 'not-yet-collected' ? 0 : totalCollected;
   const cashCollected = input.collectionMethod === 'officer-to-remit' ? totalRemitted : recognizedCollection;
   const dueFromOfficer = input.collectionMethod === 'officer-to-remit' ? cents(recognizedCollection - totalRemitted) : 0;
-  const accountsReceivable = cents(totalSales - recognizedCollection);
+  // Downpayments already cover part of the sale, so only the rest is receivable; anything
+  // collected or paid in advance beyond the total sales becomes Refund Liability - Merchandise.
+  const accountsReceivable = cents(Math.max(0, totalSales - buyerDownpayment - recognizedCollection));
+  const refundLiability = cents(Math.max(0, recognizedCollection + buyerDownpayment - totalSales));
 
   const lines: JournalLine[] = [];
   if (input.collectionMethod === 'organization-direct') {
@@ -97,14 +106,16 @@ export function buildMerchandiseSalePosting(input: MerchandiseSaleInput): Mercha
     });
   }
   addLine(lines, MERCHANDISE_RECEIVABLE_ACCOUNT_CODE, accountsReceivable, 0, input.transactionDate);
+  addLine(lines, UNEARNED_MERCHANDISE_REVENUE_ACCOUNT_CODE, buyerDownpayment, 0, input.transactionDate);
   addLine(lines, MERCHANDISE_SALES_ACCOUNT_CODE, 0, totalSales, input.transactionDate);
+  addLine(lines, MERCHANDISE_REFUND_LIABILITY_ACCOUNT_CODE, 0, refundLiability, input.transactionDate);
   addLine(lines, COST_OF_SALES_ACCOUNT_CODE, inventoryCost, 0, input.transactionDate);
   addLine(lines, MERCHANDISE_INVENTORY_ACCOUNT_CODE, 0, inventoryCost, input.transactionDate);
 
   const debits = cents(lines.reduce((sum, line) => sum + line.debit, 0));
   const credits = cents(lines.reduce((sum, line) => sum + line.credit, 0));
   if (debits !== credits) throw new Error('The merchandise sale entry is not balanced.');
-  return { lines, accountsReceivable, dueFromOfficer, cashCollected };
+  return { lines, accountsReceivable, dueFromOfficer, cashCollected, refundLiability };
 }
 
 export function buildMerchandiseBatchBalances(entries: JournalEntry[], includeDepleted = false): MerchandiseBatchBalance[] {

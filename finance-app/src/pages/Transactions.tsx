@@ -62,7 +62,7 @@ import { buildOutrightExpensePosting, selectExpensePaymentRows, splitBalancedJou
 import { counterpartyBalance, counterpartyBalances, counterpartySummary } from '../lib/counterpartyBalances';
 import { ledgerWithoutDraftEntry } from '../lib/draftLedger';
 import { creditCodesForPaymentMethod } from '../lib/paymentCreditAccounts';
-import { BUYER_DOWNPAYMENT_TITLE, buildBuyerDownpaymentPosting } from '../lib/buyerDownpayments';
+import { aggregateAvailableBuyerDownpayments, BUYER_DOWNPAYMENT_TITLE, buildBuyerDownpaymentPosting } from '../lib/buyerDownpayments';
 import { automaticPostingDate, isDateWithinReportingPeriod, periodForSemester, reportingPeriodBounds } from '../lib/reportingPeriod';
 
 const GENERAL_FUND_PROJECT = 'General Fund Operations';
@@ -713,6 +713,11 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     ? matchingMerchandisePrepayment
     : undefined;
   const selectedMerchandiseBatch = merchandiseBatches.find(batch => batch.entryId === merchandiseSaleBatchId);
+  // Buyer downpayments recorded earlier for this item and batch are applied by the sale.
+  const matchingBuyerDownpayments = useMemo(
+    () => aggregateAvailableBuyerDownpayments(ledgerEntries, selectedMerchandiseBatch?.item || '', selectedMerchandiseBatch?.batch || ''),
+    [ledgerEntries, selectedMerchandiseBatch]
+  );
   const merchandiseSaleItems = useMemo(() => [...new Set(merchandiseBatches.map(batch => batch.item))].sort((a, b) => a.localeCompare(b)), [merchandiseBatches]);
   const effectiveMerchandiseSaleItem = merchandiseSaleItem || selectedMerchandiseBatch?.item || '';
   const merchandiseBatchesForSelectedItem = useMemo(() => merchandiseBatches.filter(batch => batch.item === effectiveMerchandiseSaleItem), [merchandiseBatches, effectiveMerchandiseSaleItem]);
@@ -888,6 +893,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
         posting: buildMerchandiseSalePosting({
           totalSales: merchandiseSaleTotal,
           inventoryCost: Number(merchandiseCost),
+          buyerDownpayment: matchingBuyerDownpayments.amount,
           collectionMethod: merchandiseCollectionMethod,
           transactionDate: date,
           totalCollected: merchandiseCollectionMethod === 'not-yet-collected' ? 0 : merchandiseCollectionTotal,
@@ -900,7 +906,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     } catch (error) {
       return { posting: null, error: error instanceof Error ? error.message : 'The merchandise sale amounts are invalid.' };
     }
-  }, [isMerchandiseSale, merchandiseSaleTotal, merchandiseCost, merchandiseCollectionMethod, date, merchandiseCollectionTotal, merchandiseCollections, merchandiseRemittanceTotal, merchandiseRemittances]);
+  }, [isMerchandiseSale, merchandiseSaleTotal, merchandiseCost, matchingBuyerDownpayments.amount, merchandiseCollectionMethod, date, merchandiseCollectionTotal, merchandiseCollections, merchandiseRemittanceTotal, merchandiseRemittances]);
 
   // Derived Account lookups
   const debitAccount = activeAccounts.find(a => a.code === debitCode);
@@ -1362,6 +1368,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
             merchandiseCollections: isMerchandiseSale ? merchandiseCollections.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })) : undefined,
             merchandiseRemittances: isMerchandiseSale ? merchandiseRemittances.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })) : undefined,
             merchandiseAccountsReceivable: isMerchandiseSale ? merchandiseSaleResult.posting?.accountsReceivable : undefined,
+            merchandiseBuyerDownpaymentEntryIds: isMerchandiseSale && matchingBuyerDownpayments.entryIds.length > 0 ? matchingBuyerDownpayments.entryIds : undefined,
+            merchandiseBuyerDownpaymentAmount: isMerchandiseSale && matchingBuyerDownpayments.amount > 0 ? matchingBuyerDownpayments.amount : undefined,
             merchandiseDueFromOfficer: isMerchandiseSale ? merchandiseSaleResult.posting?.dueFromOfficer : undefined,
             supplierReceivableCollectionAmount: isSupplierReceivableCollection ? amount : undefined,
             receiptAttachmentIds: [],
@@ -2191,7 +2199,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                 <div className="rounded-lg bg-white/80 p-3 dark:bg-slate-900/60">
                   <span className="text-[9px] font-bold uppercase text-slate-500">Total sales — automatically computed</span>
                   <p className="mt-1 text-lg font-black text-indigo-800 dark:text-indigo-200">{formatCurrency(merchandiseSaleTotal)}</p>
-                  <p className="text-[9px] text-slate-500">Quantity sold × selling price</p>
+                  <p className="text-[9px] text-slate-500">You can compute this by: Quantity Sold x Selling Price</p>
                 </div>
 
                 <div>
@@ -2199,6 +2207,20 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                   <div className="relative mt-1.5"><span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-indigo-500">{settings.currencySymbol}</span><input type="number" step="0.01" min="0.01" max={selectedMerchandiseBatch?.netInventoryBalance || undefined} value={merchandiseCost} onChange={event => setMerchandiseCost(event.target.value)} placeholder="Enter the total cost of the items sold" className="w-full rounded-lg border border-indigo-200 bg-white p-2.5 pl-8 text-xs font-bold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required /></div>
                   <p className="mt-1.5 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Include all costs attributable to the merchandise being sold, including purchase, materials, design, printing, and labor costs. The amount cannot exceed the {formatCurrency(selectedMerchandiseBatch?.netInventoryBalance || 0)} remaining for the selected batch. This automatically debits Cost of Sales and credits Merchandise Inventory.</p>
                 </div>
+
+                {selectedMerchandiseBatch && (
+                  <div className="rounded-lg border border-indigo-200 bg-white/80 p-3 dark:border-indigo-500/30 dark:bg-slate-900/60">
+                    <span className="text-[9px] font-bold uppercase text-slate-500">Previously recorded downpayment (if applicable)</span>
+                    {matchingBuyerDownpayments.amount > 0 ? (
+                      <>
+                        <p className="mt-1 text-lg font-black text-indigo-800 dark:text-indigo-200">{formatCurrency(matchingBuyerDownpayments.amount)}</p>
+                        <p className="text-[9px] text-slate-500">Total buyer downpayments for {selectedMerchandiseBatch.item} — {selectedMerchandiseBatch.batch}{matchingBuyerDownpayments.draftCount > 0 ? ` (${matchingBuyerDownpayments.draftCount} still ${matchingBuyerDownpayments.draftCount === 1 ? 'a draft' : 'drafts'})` : ''}. They are applied to this sale and taken out of Unearned Merchandise Revenue.</p>
+                      </>
+                    ) : (
+                      <p className="mt-1 text-[10px] font-medium text-slate-500 dark:text-slate-400">No buyer downpayment was found for this item and batch. If buyers paid in advance, check that the pre-order reference matches this batch.</p>
+                    )}
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">How was payment collected during this reporting period?</label>
@@ -2210,7 +2232,13 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                 </div>
 
                 {merchandiseCollectionMethod !== 'not-yet-collected' && (
-                  <DatedAmountRows label={merchandiseCollectionMethod === 'officer-to-remit' ? 'How much was collected by the officer?' : 'How much was collected by the organization?'} rows={merchandiseCollections} onChange={setMerchandiseCollections} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={merchandiseSaleTotal} addLabel="Add collection" />
+                  <DatedAmountRows label={merchandiseCollectionMethod === 'officer-to-remit' ? 'How much was collected by the officer?' : 'How much was collected by the organization?'} rows={merchandiseCollections} onChange={setMerchandiseCollections} currencySymbol={settings.currencySymbol} defaultDate={date} addLabel="Add collection" />
+                )}
+
+                {(merchandiseSaleResult.posting?.refundLiability || 0) > 0 && (
+                  <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[10px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+                    {formatCurrency(merchandiseSaleResult.posting?.refundLiability || 0)} more was collected (including downpayments) than the Total Sales. The excess is recorded as Refund Liability - Merchandise; resolve it later with Excess Merchandise Collection - Status.
+                  </p>
                 )}
 
                 {merchandiseCollectionMethod === 'officer-to-remit' && (

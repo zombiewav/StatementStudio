@@ -30,6 +30,7 @@ import { getEffectiveClassificationRules, validateCustomTransactionRule } from '
 import { ActivityFeeFollowUp, ActivityFeeSchedule, buildActivityFeeFollowUp, buildActivityFeeReceivableCollections, buildInitialActivityFeeSchedule, buildScheduledActivityFeeRecognition } from '../lib/activityFees';
 import { useWorkspaceSync } from '../hooks/useWorkspaceSync';
 import { downpaymentAmountChangeBlock, downpaymentLinkBlock } from '../lib/merchandiseAcquisition';
+import { buyerDownpaymentAmountChangeBlock, buyerDownpaymentLinkBlock } from '../lib/buyerDownpayments';
 import { carryForwardCustomerOrders, customerOrderFinalizationIssues, customerOrderReversalBlock } from '../lib/customerOrders';
 import { isDateWithinReportingPeriod, reportingPeriodBounds } from '../lib/reportingPeriod';
 
@@ -1140,7 +1141,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     const postingEntries = postingEntriesRef.current;
     const replaced = replaceDraftEntryId ? postingEntries.find(entry => entry.id === replaceDraftEntryId && entry.isDraft) : undefined;
     if (replaceDraftEntryId && !replaced) throw new Error('Draft journal entry not found.');
-    const linkBlock = replaced ? downpaymentAmountChangeBlock(replaced, postingEntries, lines) : undefined;
+    const linkBlock = replaced ? downpaymentAmountChangeBlock(replaced, postingEntries, lines) || buyerDownpaymentAmountChangeBlock(replaced, postingEntries, lines) : undefined;
     if (linkBlock) throw new Error(linkBlock);
     // Draft entries already sit in the ledger and in the cash shown on the
     // form, so they count toward the balance a new posting is validated against.
@@ -1194,7 +1195,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     if (!current || isJournalEntryEditLocked(current, closedFiscalYears) || isJournalEntryEditLocked(entry, closedFiscalYears)) {
       throw new Error('This posted transaction can no longer be edited.');
     }
-    const linkBlock = downpaymentAmountChangeBlock(current, journalEntries, entry.lines);
+    const linkBlock = downpaymentAmountChangeBlock(current, journalEntries, entry.lines) || buyerDownpaymentAmountChangeBlock(current, journalEntries, entry.lines);
     if (linkBlock) throw new Error(linkBlock);
     setJournalEntries(previous => previous.map(candidate => candidate.id === entry.id ? entry : candidate));
     logAudit('Edit Journal Entry', `Updated posted journal entry ${entry.reference}: ${entry.description}.`);
@@ -1238,7 +1239,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     if (!entry || entry.reversedByEntryId || entry.description.startsWith('Closing Entries')) return;
     const orderBlock = customerOrderReversalBlock(entry, journalEntries);
     if (orderBlock) { window.alert(orderBlock); return; }
-    const linkBlock = downpaymentLinkBlock(entry, journalEntries);
+    const linkBlock = downpaymentLinkBlock(entry, journalEntries) || buyerDownpaymentLinkBlock(entry, journalEntries);
     if (linkBlock) { window.alert(linkBlock); return; }
 
     const reference = generateNextReference(journalEntries);
@@ -1273,7 +1274,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       const orderBlock = customerOrderReversalBlock(entry, journalEntries);
       if (orderBlock) { window.alert(orderBlock); return false; }
     }
-    const linkBlock = downpaymentLinkBlock(entry, journalEntries);
+    const linkBlock = downpaymentLinkBlock(entry, journalEntries) || buyerDownpaymentLinkBlock(entry, journalEntries);
     if (linkBlock) { window.alert(linkBlock); return false; }
 
     // Deleting an original also removes its linked reversal; deleting only a
@@ -1586,7 +1587,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     const draftEntry = draftToDelete?.journalEntryId && !preserved.has(draftToDelete.journalEntryId)
       ? journalEntries.find(entry => entry.id === draftToDelete.journalEntryId)
       : undefined;
-    const linkBlock = draftEntry ? downpaymentLinkBlock(draftEntry, journalEntries) : undefined;
+    const linkBlock = draftEntry ? downpaymentLinkBlock(draftEntry, journalEntries) || buyerDownpaymentLinkBlock(draftEntry, journalEntries) : undefined;
     if (linkBlock) { window.alert(linkBlock); return false; }
     setDraftTransactions(prev => {
       const existing = prev.find(d => d.id === id);

@@ -146,6 +146,46 @@ describe('resuming a saved draft', () => {
     expect(finance.draftTransactions).toHaveLength(1);
   });
 
+  describe('sale of merchandise applying buyer downpayments', () => {
+    let batchId = '';
+    const seedBatchAndDownpayment = () => {
+      batchId = finance.addJournalEntry('2026-10-05', 'Acquisition of Merchandise - Pins - Batch 1', PROJECT,
+        [{ accountCode: '1700', debit: 1000, credit: 0 }, { accountCode: '1010', debit: 0, credit: 1000 }], undefined, undefined,
+        meta('Acquisition of Merchandise for Sale - Goods Received and On Hand', { merchandiseItem: 'Pins', merchandiseBatch: 'Batch 1', merchandiseQuantity: 10 })).id;
+      finance.addJournalEntry('2026-10-06', 'Downpayment by Buyer for Pre-Ordered Merchandise - Pins - Batch 1', PROJECT,
+        [{ accountCode: '1010', debit: 300, credit: 0 }, { accountCode: '2140', debit: 0, credit: 300 }], undefined, undefined,
+        meta('Downpayment by Buyer for Pre-Ordered Merchandise', { merchandiseItem: 'Pins', merchandiseBatch: 'Batch 1', merchandiseBuyerDownpayment: true }));
+    };
+    const saleDraft = (collected: string) => saveDraft('Sale of Merchandise', 'merchandise',
+      [{ accountCode: '1200', debit: 1000, credit: 0 }, { accountCode: '4070', debit: 0, credit: 1000 }, { accountCode: '5240', debit: 600, credit: 0 }, { accountCode: '1700', debit: 0, credit: 600 }], {},
+      { amount: 1000, date: '2026-10-12', merchandiseSaleItem: 'Pins', merchandiseSaleBatchId: batchId, merchandiseQuantitySold: '5', merchandiseSellingPrice: '200', merchandiseCost: '600',
+        merchandiseCollectionMethod: 'organization-direct', merchandiseCollections: [{ id: 'c1', date: '2026-10-12', amount: collected }] });
+
+    it('applies the recorded downpayment: Unearned Merchandise Revenue is cleared and only the rest is collected', () => {
+      start(seedBatchAndDownpayment, true);
+      saleDraft('700');
+      expect(alerts()).toEqual([]);
+      expect(posted).toHaveLength(1);
+      expect(finance.accountBalances['2140']).toBe(0);
+      expect(finance.accountBalances['2150'] || 0).toBe(0);
+      expect(finance.accountBalances['1200'] || 0).toBe(0);
+      expect(finance.accountBalances['4070']).toBe(1000);
+      expect(finance.accountBalances['1010']).toBe(50000 - 1000 + 300 + 700);
+      const sale = finance.journalEntries.find(entry => entry.transactionDetails?.merchandiseBuyerDownpaymentEntryIds?.length);
+      expect(sale?.transactionDetails?.merchandiseBuyerDownpaymentAmount).toBe(300);
+    });
+
+    it('records collections plus downpayments beyond the total sales as Refund Liability - Merchandise', () => {
+      start(seedBatchAndDownpayment, true);
+      saleDraft('900');
+      expect(alerts()).toEqual([]);
+      expect(posted).toHaveLength(1);
+      expect(finance.accountBalances['2140']).toBe(0);
+      expect(finance.accountBalances['2150']).toBe(200);
+      expect(finance.accountBalances['1010']).toBe(50000 - 1000 + 300 + 900);
+    });
+  });
+
   it('shows the total-cost reminder, as a noticeable callout, under Total cost of this batch', () => {
     start(() => undefined, false);
     saveDraft('Acquisition of Merchandise for Sale - Goods Received and On Hand', 'merchandise',
