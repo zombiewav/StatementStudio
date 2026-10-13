@@ -27,10 +27,11 @@ describe('Statement of Cash Flows tab', () => {
     expect(tab).toBeTruthy();
     act(() => { tab!.props.onClick(); });
     const page = text(renderer.root);
-    ['Receipts from:', 'Less: Payments for:', 'Unearned Merchandise Revenue', 'Advances to Suppliers', 'Purchase of equipment', 'Purchase of furniture and fixture',
+    ['Receipts from:', 'Payments for:', 'Unearned Merchandise Revenue', 'Advances to Suppliers', 'Purchase of equipment', 'Purchase of furniture and fixture',
       'Net cash provided by operating activities', 'Net cash provided by investing activities', 'Net increase (decrease) in cash and cash equivalents',
       'Cash and cash equivalents at beginning of year', 'Cash and cash equivalents at end of year', 'Ending cash agrees with the General Ledger'].forEach(label => expect(page).toContain(label));
     expect(page).not.toContain('Financing Activities');
+    expect(page).not.toContain('Less:');
   });
 });
 

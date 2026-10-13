@@ -310,7 +310,7 @@ export function FinancialStatements(): React.ReactElement {
         csvContent += "Cash Flows from Operating Activities:\n";
         csvContent += "Receipts from:\n";
         cashFlowDetails.receipts.forEach(line => { csvContent += `"${line.label}",${line.amount}\n`; });
-        csvContent += "Less: Payments for:\n";
+        csvContent += "Payments for:\n";
         cashFlowDetails.payments.forEach(line => { csvContent += `"${line.label}",${-line.amount}\n`; });
         csvContent += `"Net cash provided by operating activities",${cashFlowDetails.netOperating}\n\n`;
         csvContent += "Cash Flows from Investing Activities:\n";
@@ -792,7 +792,7 @@ export function FinancialStatements(): React.ReactElement {
                         <span>{formatCurrency(line.amount)}</span>
                       </div>
                     ))}
-                    <p className="pt-2 font-semibold">Less: Payments for:</p>
+                    <p className="pt-2 font-semibold">Payments for:</p>
                     {cashFlowDetails.payments.length === 0 && <p className="pl-4 text-slate-400">No cash payments in this period.</p>}
                     {cashFlowDetails.payments.map(line => (
                       <div key={line.key} className="flex justify-between rounded-md pl-4 hover:bg-slate-50 dark:hover:bg-slate-800/50">
