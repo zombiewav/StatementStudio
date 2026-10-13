@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advanceCaution, ADVANCE_NO_RECORD_CAUTION, MERCHANDISE_EXCESS_CAUTION, MERCHANDISE_PAYMENT_WINDOW_CAUTION, MERCHANDISE_SHORTFALL_CAUTION, guidedPaymentCautions, OFFICER_REIMBURSEMENT_NOTE, paymentExceedsCaution, paymentShortfallCaution } from './paymentCautions';
+import { advanceCaution, ADVANCE_NO_RECORD_CAUTION, MERCHANDISE_EXCESS_CAUTION, MERCHANDISE_PAYMENT_WINDOW_CAUTION, MERCHANDISE_SHORTFALL_CAUTION, MERCHANDISE_TOTAL_COST_REMINDER, guidedPaymentCautions, OFFICER_REIMBURSEMENT_NOTE, paymentExceedsCaution, paymentShortfallCaution } from './paymentCautions';
 
 const base = { method: 'organization-funds' as const, amount: 1000, organizationTotal: 0, officerTotal: 0, advanceTotal: 0, advanceBalance: 0 };
 
@@ -82,6 +82,7 @@ describe('advance payment cautions', () => {
 describe('merchandise acquisition cautions', () => {
   it('uses the wording from the acquisition document', () => {
     expect(MERCHANDISE_PAYMENT_WINDOW_CAUTION).toBe('Caution: Record only payments made on or after the date the merchandise was received and is already on hand. Exclude downpayments made before receipt.');
+    expect(MERCHANDISE_TOTAL_COST_REMINDER).toBe('Enter the total amount spent to purchase and prepare the merchandise for sale. Include not only the purchase price but also other direct costs, such as design fees and labor costs for making the merchandise.');
     expect(MERCHANDISE_SHORTFALL_CAUTION).toContain('less than the Total Cost of the Batch.');
     expect(MERCHANDISE_EXCESS_CAUTION).toBe('⚠️ Caution: Total Payment exceeded Total Cost of this Batch, excess payments will go to Receivable from Supplier');
   });
