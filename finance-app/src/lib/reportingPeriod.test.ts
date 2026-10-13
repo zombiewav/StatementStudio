@@ -49,3 +49,12 @@ describe('automatic posting date', () => {
     expect(automaticPostingDate('', undefined, '2026-10-11')).toBe('2026-10-11');
   });
 });
+
+describe('periodEndedLabel', () => {
+  it('formats the end of the 1st and 2nd semester', async () => {
+    const { periodEndedLabel } = await import('./reportingPeriod');
+    expect(periodEndedLabel('2026-12-31')).toBe('For the period ended December 31, 2026');
+    expect(periodEndedLabel('2027-05-31')).toBe('For the period ended May 31, 2027');
+    expect(periodEndedLabel('')).toBe('For the period ended');
+  });
+});

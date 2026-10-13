@@ -77,3 +77,35 @@ describe('Statement of Functional Expenses', () => {
     expect(text(renderer.root)).toContain('October Fest');
   });
 });
+
+describe('Statement period header', () => {
+  const headerFor = (semester: string, label: string) => {
+    act(() => { renderer = create(createElement(FinanceProvider, null, createElement(Probe))); });
+    act(() => { finance.updateSettings({ semester, reportingYear: 2026 } as never); });
+    const tab = renderer.root.findAllByType('button').find(button => text(button).trim() === label);
+    act(() => { tab!.props.onClick(); });
+    return text(renderer.root).replace(/\s+/g, ' ');
+  };
+
+  it('says "For the period ended December 31, Year" for the 1st semester', () => {
+    ['Statement of Activities', 'Statement of Functional Expenses', 'Statement of Cash Flows'].forEach(label => {
+      const page = headerFor('1st Semester', label);
+      expect(page).toContain('For the period ended December 31, 2026');
+      expect(page).not.toContain('For the Period');
+      act(() => renderer.unmount());
+    });
+  });
+
+  it('says "For the period ended May 31, Year" for the 2nd semester', () => {
+    ['Statement of Activities', 'Statement of Functional Expenses', 'Statement of Cash Flows'].forEach(label => {
+      const page = headerFor('2nd Semester', label);
+      expect(page).toContain('For the period ended May 31, 2027');
+      act(() => renderer.unmount());
+    });
+  });
+
+  it('leaves the Statement of Financial Position as an "As of" date', () => {
+    const page = headerFor('1st Semester', 'Statement of Financial Position');
+    expect(page).toContain('As of December 31, 2026');
+  });
+});

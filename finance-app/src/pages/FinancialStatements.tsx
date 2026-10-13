@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   FileSpreadsheet,
   Printer,
@@ -17,7 +17,7 @@ import { buildCashFlowStatement, EQUIPMENT_PURCHASE_LABEL, FURNITURE_PURCHASE_LA
 import { CASH_ACCOUNT_CODES } from '../lib/cashAccounts';
 import { accumulatedNetPosition } from '../lib/fundBalancePresentation';
 import { excludeClosingEntries } from '../lib/closingEntries';
-import { periodForSemester } from '../lib/reportingPeriod';
+import { periodEndedLabel, periodForSemester, reportingPeriodBounds } from '../lib/reportingPeriod';
 import { combineOpeningAndPeriodBalances } from '../lib/reportingPeriodBalances';
 
 type ActiveStatementTab = 'position' | 'activities' | 'functional' | 'cashflow';
@@ -48,8 +48,16 @@ export function FinancialStatements(): React.ReactElement {
     functional: true,
     cashflow: true,
   });
-  const [startDate, setStartDate] = useState('2026-01-01');
-  const [endDate, setEndDate] = useState('2026-12-31');
+  // The statements cover the active semester (1st: ends December 31; 2nd: ends May 31) until the dates are changed.
+  const semesterBounds = settings.semester && settings.reportingYear ? reportingPeriodBounds(settings.semester, settings.reportingYear) : null;
+  const [startDate, setStartDate] = useState(semesterBounds?.startDate ?? '2026-01-01');
+  const [endDate, setEndDate] = useState(semesterBounds?.endDate ?? '2026-12-31');
+  useEffect(() => {
+    if (!settings.semester || !settings.reportingYear) return;
+    const bounds = reportingPeriodBounds(settings.semester, settings.reportingYear);
+    setStartDate(bounds.startDate);
+    setEndDate(bounds.endDate);
+  }, [settings.semester, settings.reportingYear]);
   const [isExporting, setIsExporting] = useState(false);
   const [exportSuccess, setExportSuccess] = useState('');
   const selectedStatementCount = Object.values(selectedStatements).filter(Boolean).length;
@@ -562,7 +570,7 @@ export function FinancialStatements(): React.ReactElement {
             <p className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold mt-1">
               {activeTab === 'position' 
                 ? `As of ${new Date(endDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`
-                : `For the Period ${new Date(startDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} to ${new Date(endDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`
+                : periodEndedLabel(endDate)
               }
             </p>
             <p className="text-[9px] text-slate-500 dark:text-slate-400 font-bold uppercase mt-1">Figures in {settings.currencyCode} ({settings.currencySymbol})</p>

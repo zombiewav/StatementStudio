@@ -34,6 +34,14 @@ export function reportingPeriodBounds(semester: Semester, reportingYear: number)
     : { startDate: `${reportingYear + 1}-01-01`, endDate: `${reportingYear + 1}-05-31` };
 }
 
+/** Header line for the Statement of Activities, Functional Expenses and Cash Flows,
+ * e.g. "For the period ended December 31, 2026" (1st semester) or "...May 31, 2027" (2nd). */
+export function periodEndedLabel(endDate: string): string {
+  const date = new Date(`${endDate}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return 'For the period ended';
+  return `For the period ended ${date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' })}`;
+}
+
 /** Local calendar date as YYYY-MM-DD. toISOString() is UTC, a day behind in the Philippines before 8am. */
 export function localDateString(now: Date = new Date()): string {
   return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
