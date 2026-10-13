@@ -146,6 +146,53 @@ describe('resuming a saved draft', () => {
     expect(finance.draftTransactions).toHaveLength(1);
   });
 
+  describe('Sale of Merchandise as the client specified it (typed Total Sales, batch reference)', () => {
+    let batchId = '';
+    const seedBatchWithoutQuantity = () => {
+      batchId = finance.addJournalEntry('2026-10-05', 'Acquisition of Merchandise - Pins - Batch 1', PROJECT,
+        [{ accountCode: '1700', debit: 1000, credit: 0 }, { accountCode: '1010', debit: 0, credit: 1000 }], undefined, undefined,
+        meta('Acquisition of Merchandise for Sale - Goods Received and On Hand', { merchandiseItem: 'Pins', merchandiseBatch: 'Batch 1' })).id;
+    };
+    const saleDraft = (cost: string, total: string) => saveDraft('Sale of Merchandise', 'merchandise',
+      [{ accountCode: '1200', debit: 1000, credit: 0 }, { accountCode: '4070', debit: 0, credit: 1000 }, { accountCode: '5240', debit: 600, credit: 0 }, { accountCode: '1700', debit: 0, credit: 600 }], {},
+      { amount: 1000, date: '2026-10-12', merchandiseSaleItem: 'Pins', merchandiseSaleBatchId: batchId, merchandiseCost: cost, merchandiseTotalSales: total, merchandiseCollectionMethod: 'not-yet-collected' });
+
+    it('posts a sale from the typed Total Sales and cost, for a batch that has no quantity', () => {
+      start(seedBatchWithoutQuantity, true);
+      saleDraft('600', '1000');
+      expect(alerts()).toEqual([]);
+      expect(posted).toHaveLength(1);
+      expect(finance.accountBalances['4070']).toBe(1000);
+      expect(finance.accountBalances['5240']).toBe(600);
+      expect(finance.accountBalances['1700']).toBe(400);
+      expect(finance.accountBalances['1200']).toBe(1000);
+    });
+
+    it('does not let the cost of all items sold exceed what is left of the batch', () => {
+      start(seedBatchWithoutQuantity, true);
+      saleDraft('1200', '1500');
+      expect(alerts()[0]).toMatch(/cannot exceed the remaining inventory cost/);
+      expect(posted).toEqual([]);
+    });
+
+    it('asks for the Total Sales', () => {
+      start(seedBatchWithoutQuantity, true);
+      saleDraft('600', '');
+      expect(alerts()).toEqual(['Please enter the Total Sales greater than zero.']);
+      expect(posted).toEqual([]);
+    });
+
+    it('no longer asks for Quantity sold or Selling price, and labels the batch a reference', () => {
+      start(seedBatchWithoutQuantity, false);
+      saleDraft('600', '1000');
+      const labels = renderer.root.findAllByType('label').map(label => text(label).replace(/\s+/g, ' ').trim());
+      expect(labels).toContain('Batch reference');
+      expect(labels).toContain('Total sales');
+      expect(labels.some(label => label.startsWith('Quantity sold') || label.startsWith('Selling price'))).toBe(false);
+      expect(text(renderer.root)).toContain('Select the item and its batch reference');
+    });
+  });
+
   describe('sale of merchandise applying buyer downpayments', () => {
     let batchId = '';
     const seedBatchAndDownpayment = () => {

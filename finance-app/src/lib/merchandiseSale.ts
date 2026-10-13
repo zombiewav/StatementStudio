@@ -118,9 +118,39 @@ export function buildMerchandiseSalePosting(input: MerchandiseSaleInput): Mercha
   return { lines, accountsReceivable, dueFromOfficer, cashCollected, refundLiability };
 }
 
+/** Whether this entry is the acquisition (or carried-forward balance) that put a batch into inventory. */
+function isInventoryBatchEntry(entry: JournalEntry): boolean {
+  const details = entry.transactionDetails;
+  if (entry.reversalOfEntryId || entry.reversedByEntryId || !details || details.merchandiseBatchEntryId) return false;
+  if (details.merchandiseQuantity) return true;
+  return Boolean(details.merchandiseBatch)
+    && !details.customerOrder && !details.customerOrderId
+    && entry.lines.some(line => line.accountCode === MERCHANDISE_INVENTORY_ACCOUNT_CODE && line.debit > 0);
+}
+
+/**
+ * Inventory batches for the sale form and Inventory Summary. A sale is recorded by its cost
+ * (the cost of all items sold), so a batch stays available while it still has inventory cost,
+ * whether or not a quantity was entered when it was acquired.
+ */
+export function buildInventoryBatchBalances(entries: JournalEntry[], includeDepleted = false): MerchandiseBatchBalance[] {
+  return buildBatchBalances(entries, includeDepleted, isInventoryBatchEntry, batch => batch.netInventoryBalance > 0.005);
+}
+
 export function buildMerchandiseBatchBalances(entries: JournalEntry[], includeDepleted = false): MerchandiseBatchBalance[] {
+  return buildBatchBalances(entries, includeDepleted,
+    entry => Boolean(!entry.reversalOfEntryId && !entry.reversedByEntryId && entry.transactionDetails?.merchandiseQuantity && !entry.transactionDetails?.merchandiseBatchEntryId),
+    batch => batch.remainingQuantity > 0);
+}
+
+function buildBatchBalances(
+  entries: JournalEntry[],
+  includeDepleted: boolean,
+  isBatchEntry: (entry: JournalEntry) => boolean,
+  isAvailable: (batch: MerchandiseBatchBalance) => boolean,
+): MerchandiseBatchBalance[] {
   const batches = entries
-    .filter(entry => !entry.reversalOfEntryId && !entry.reversedByEntryId && entry.transactionDetails?.merchandiseQuantity && !entry.transactionDetails?.merchandiseBatchEntryId)
+    .filter(isBatchEntry)
     .map(entry => {
       const purchasedQuantity = entry.transactionDetails?.merchandiseQuantity || 0;
       const soldQuantity = entries
@@ -148,6 +178,6 @@ export function buildMerchandiseBatchBalances(entries: JournalEntry[], includeDe
       };
     });
   return batches
-    .filter(batch => includeDepleted || batch.remainingQuantity > 0)
+    .filter(batch => includeDepleted || isAvailable(batch))
     .sort((a, b) => a.date.localeCompare(b.date) || a.reference.localeCompare(b.reference));
 }

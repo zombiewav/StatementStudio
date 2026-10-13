@@ -2,13 +2,13 @@ import React, { useMemo } from 'react';
 import { Boxes, TrendingDown, TrendingUp } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import { buildInventorySummary } from '../lib/transactionHistory';
-import { buildMerchandiseBatchBalances } from '../lib/merchandiseSale';
+import { buildInventoryBatchBalances } from '../lib/merchandiseSale';
 
 export function InventorySummaryCard({ compact = false }: { compact?: boolean }): React.ReactElement {
   const { journalEntries, formatCurrency } = useFinance();
   const summary = useMemo(() => buildInventorySummary(journalEntries), [journalEntries]);
   const recentMovements = [...summary.movements].reverse().slice(0, compact ? 3 : 8);
-  const acquisitionBatches = useMemo(() => buildMerchandiseBatchBalances(journalEntries, true).reverse().slice(0, compact ? 3 : 8), [journalEntries, compact]);
+  const acquisitionBatches = useMemo(() => buildInventoryBatchBalances(journalEntries, true).reverse().slice(0, compact ? 3 : 8), [journalEntries, compact]);
 
   return (
     <section className="rounded-2xl border border-indigo-200 bg-indigo-50/60 p-4 dark:border-indigo-500/20 dark:bg-indigo-500/10 sm:p-5">
@@ -50,12 +50,12 @@ export function InventorySummaryCard({ compact = false }: { compact?: boolean })
           <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Recorded purchase batches</p>
           <div className="mt-2 overflow-x-auto rounded-lg border border-indigo-100 dark:border-indigo-500/20">
             <div className="grid min-w-[620px] grid-cols-[1.4fr_.8fr_.9fr_.9fr_.9fr] gap-2 bg-indigo-100/70 px-3 py-2 text-[9px] font-black uppercase tracking-wide text-indigo-900 dark:bg-indigo-500/15 dark:text-indigo-200">
-              <span>Merchandise / Batch</span><span>Units remaining</span><span className="text-right">Total cost</span><span className="text-right">Cost of sales</span><span className="text-right">Net inventory</span>
+              <span>Merchandise / Batch</span><span>Units purchased</span><span className="text-right">Total cost</span><span className="text-right">Cost of sales</span><span className="text-right">Net inventory</span>
             </div>
             {acquisitionBatches.map(batch => (
               <div key={batch.entryId} className="grid min-w-[620px] grid-cols-[1.4fr_.8fr_.9fr_.9fr_.9fr] gap-2 border-t border-indigo-100 bg-white/70 px-3 py-2 text-[10px] dark:border-indigo-500/20 dark:bg-slate-900/60">
                 <span className="min-w-0"><span className="font-bold text-slate-800 dark:text-slate-200">{batch.item} — {batch.batch}</span><span className="block text-slate-500">{batch.reference} · {batch.date}</span></span>
-                <span className="font-bold text-slate-700 dark:text-slate-300">{batch.remainingQuantity} / {batch.purchasedQuantity}</span>
+                <span className="font-bold text-slate-700 dark:text-slate-300">{batch.purchasedQuantity > 0 ? batch.purchasedQuantity : '—'}</span>
                 <span className="text-right font-bold text-slate-700 dark:text-slate-300">{formatCurrency(batch.acquisitionCost)}</span>
                 <span className="text-right font-bold text-rose-700 dark:text-rose-300">{formatCurrency(batch.costOfSales)}</span>
                 <span className="text-right font-black text-indigo-800 dark:text-indigo-200">{formatCurrency(batch.netInventoryBalance)}</span>

@@ -47,7 +47,7 @@ import {
   MerchandisePaymentMethod,
 } from '../lib/merchandiseAcquisition';
 import {
-  buildMerchandiseBatchBalances,
+  buildInventoryBatchBalances,
   buildMerchandiseSalePosting,
   MerchandiseCollectionMethod,
 } from '../lib/merchandiseSale';
@@ -126,6 +126,7 @@ interface TransactionFormSnapshot {
   merchandiseSaleBatchId: string;
   merchandiseQuantitySold: string;
   merchandiseSellingPrice: string;
+  merchandiseTotalSales: string;
   merchandiseCollectionMethod: MerchandiseCollectionMethod;
   merchandiseCollections: DatedAmountInputRow[];
   merchandiseRemittances: DatedAmountInputRow[];
@@ -220,6 +221,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   const [merchandiseSaleBatchId, setMerchandiseSaleBatchId] = useState('');
   const [merchandiseQuantitySold, setMerchandiseQuantitySold] = useState('');
   const [merchandiseSellingPrice, setMerchandiseSellingPrice] = useState('');
+  const [merchandiseTotalSales, setMerchandiseTotalSales] = useState('');
   const [merchandiseCollectionMethod, setMerchandiseCollectionMethod] = useState<MerchandiseCollectionMethod>('not-yet-collected');
   const [merchandiseCollections, setMerchandiseCollections] = useState<DatedAmountInputRow[]>([{ id: 'collection-1', date, amount: '' }]);
   const [merchandiseRemittances, setMerchandiseRemittances] = useState<DatedAmountInputRow[]>([{ id: 'remittance-1', date, amount: '' }]);
@@ -609,6 +611,11 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     setMerchandiseSaleBatchId(snapshot.merchandiseSaleBatchId || '');
     setMerchandiseQuantitySold(snapshot.merchandiseQuantitySold || '');
     setMerchandiseSellingPrice(snapshot.merchandiseSellingPrice || '');
+    // Drafts saved when the form computed Quantity sold x Selling price keep that total.
+    setMerchandiseTotalSales(snapshot.merchandiseTotalSales
+      || (Number(snapshot.merchandiseQuantitySold) > 0 && Number(snapshot.merchandiseSellingPrice) > 0
+        ? String(Math.round(Number(snapshot.merchandiseQuantitySold) * Number(snapshot.merchandiseSellingPrice) * 100) / 100)
+        : ''));
     setMerchandiseCollectionMethod(snapshot.merchandiseCollectionMethod || 'not-yet-collected');
     setMerchandiseCollections(snapshot.merchandiseCollections?.length ? snapshot.merchandiseCollections : [{ id: `collection-${Date.now()}`, date: fallbackDate, amount: '' }]);
     setMerchandiseRemittances(snapshot.merchandiseRemittances?.length ? snapshot.merchandiseRemittances : [{ id: `remittance-${Date.now()}`, date: fallbackDate, amount: '' }]);
@@ -719,7 +726,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   const membershipCollectionTotal = sumDatedAmounts(membershipCollections);
   const showMembershipReceivableWarning = isPriorMembershipCollection && membershipCollectionTotal > membershipReceivableOutstanding;
   const isMerchandiseSale = effectiveCreditCode === '4070';
-  const merchandiseBatches = useMemo(() => buildMerchandiseBatchBalances(ledgerEntries), [ledgerEntries]);
+  const merchandiseBatches = useMemo(() => buildInventoryBatchBalances(ledgerEntries), [ledgerEntries]);
   const merchandiseItemLabel = merchandiseItem === 'Others' ? merchandiseOtherTitle.trim() : merchandiseItem;
   const matchingMerchandisePrepayment = useMemo(
     () => aggregateAvailableMerchandisePrepayments(ledgerEntries, merchandiseItemLabel, merchandiseBatch.trim()),
@@ -737,7 +744,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   const merchandiseSaleItems = useMemo(() => [...new Set(merchandiseBatches.map(batch => batch.item))].sort((a, b) => a.localeCompare(b)), [merchandiseBatches]);
   const effectiveMerchandiseSaleItem = merchandiseSaleItem || selectedMerchandiseBatch?.item || '';
   const merchandiseBatchesForSelectedItem = useMemo(() => merchandiseBatches.filter(batch => batch.item === effectiveMerchandiseSaleItem), [merchandiseBatches, effectiveMerchandiseSaleItem]);
-  const merchandiseSaleTotal = Math.round((Number(merchandiseQuantitySold) || 0) * (Number(merchandiseSellingPrice) || 0) * 100) / 100;
+  const merchandiseSaleTotal = Math.round((Number(merchandiseTotalSales) || 0) * 100) / 100;
   const merchandiseCollectionTotal = sumDatedAmounts(merchandiseCollections);
   const merchandiseRemittanceTotal = sumDatedAmounts(merchandiseRemittances);
   const merchandiseOrganizationPaymentTotal = sumDatedAmounts(merchandiseOrganizationPayments);
@@ -1065,6 +1072,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     merchandiseSaleBatchId,
     merchandiseQuantitySold,
     merchandiseSellingPrice,
+    merchandiseTotalSales,
     merchandiseCollectionMethod,
     merchandiseCollections,
     merchandiseRemittances,
@@ -1119,16 +1127,12 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     }
     if (isMerchandiseSale) {
       if (!selectedMerchandiseBatch) {
-        setErrorMessage('Please select a merchandise purchase batch with units still available.');
-        return;
-      }
-      if (!Number.isInteger(Number(merchandiseQuantitySold)) || Number(merchandiseQuantitySold) <= 0 || Number(merchandiseQuantitySold) > selectedMerchandiseBatch.remainingQuantity) {
-        setErrorMessage(`Quantity sold must be a whole number from 1 to ${selectedMerchandiseBatch.remainingQuantity}.`);
+        setErrorMessage('Please select the item and the batch reference of the merchandise sold.');
         return;
       }
     }
-    if (isMerchandiseSale && Number(merchandiseSellingPrice) <= 0) {
-      setErrorMessage('Please enter a selling price greater than zero.');
+    if (isMerchandiseSale && merchandiseSaleTotal <= 0) {
+      setErrorMessage('Please enter the Total Sales greater than zero.');
       return;
     }
     if (isMerchandiseSale && merchandiseCollectionMethod !== 'not-yet-collected' && merchandiseCollectionTotal <= 0) {
@@ -1407,8 +1411,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
             merchandisePayableAmount: isMerchandiseAcquisition ? merchandiseAcquisitionResult.posting?.merchandisePayable : undefined,
             merchandiseItem: isMerchandiseSale ? selectedMerchandiseBatch?.item : (isMerchandiseAcquisition || isMerchandisePrepayment || isBuyerDownpayment) ? merchandiseItemLabel : undefined,
             merchandiseBatchEntryId: isMerchandiseSale ? merchandiseSaleBatchId : undefined,
-            merchandiseQuantitySold: isMerchandiseSale ? Number(merchandiseQuantitySold) : undefined,
-            merchandiseSellingPrice: isMerchandiseSale ? Number(merchandiseSellingPrice) : undefined,
+            merchandiseQuantitySold: isMerchandiseSale && Number(merchandiseQuantitySold) > 0 ? Number(merchandiseQuantitySold) : undefined,
+            merchandiseSellingPrice: isMerchandiseSale && Number(merchandiseSellingPrice) > 0 ? Number(merchandiseSellingPrice) : undefined,
             merchandiseTotalSales: isMerchandiseSale ? merchandiseSaleTotal : undefined,
             merchandiseCollectionMethod: isMerchandiseSale ? merchandiseCollectionMethod : undefined,
             merchandiseCollections: isMerchandiseSale ? merchandiseCollections.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })) : undefined,
@@ -2229,11 +2233,11 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               <div className="sm:col-span-2 space-y-4 rounded-xl border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-500/20 dark:bg-indigo-500/10">
                 <div>
                   <h4 className="flex items-center gap-2 text-xs font-black text-violet-700 dark:text-violet-300">Sale of merchandise</h4>
-                  <p className="mt-1 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Select the exact purchase batch so quantity sold and remaining units stay connected to Inventory Summary.</p>
+                  <p className="mt-1 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Select the item and its batch reference (the same batch reference used in Acquisition of Merchandise for Sale), then enter the cost of all items sold and the total sales.</p>
                 </div>
 
                 {merchandiseBatches.length === 0 ? (
-                  <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[10px] font-bold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">No purchase batch with available units was found. Record an Acquisition of Merchandise first.</p>
+                  <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[10px] font-bold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">No batch with inventory cost remaining was found. Record an Acquisition of Merchandise first.</p>
                 ) : (
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
@@ -2244,37 +2248,26 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                       </select>
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Batch no.</label>
+                      <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Batch reference</label>
                       <select value={merchandiseSaleBatchId} onChange={event => { setMerchandiseSaleBatchId(event.target.value); setMerchandiseQuantitySold(''); setMerchandiseCost(''); }} disabled={!effectiveMerchandiseSaleItem} className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none disabled:cursor-not-allowed disabled:bg-slate-100 dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100 dark:disabled:bg-slate-800/60" required>
-                        <option value="" disabled>{effectiveMerchandiseSaleItem ? 'Select an available batch…' : 'Choose an item first'}</option>
-                        {merchandiseBatchesForSelectedItem.map(batch => <option key={batch.entryId} value={batch.entryId}>{batch.batch} — {batch.remainingQuantity} units available</option>)}
+                        <option value="" disabled>{effectiveMerchandiseSaleItem ? 'Select a batch reference…' : 'Choose an item first'}</option>
+                        {merchandiseBatchesForSelectedItem.map(batch => <option key={batch.entryId} value={batch.entryId}>{batch.batch} — {formatCurrency(batch.netInventoryBalance)} of cost remaining</option>)}
                       </select>
                     </div>
-                    {selectedMerchandiseBatch && <p className="sm:col-span-2 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Purchased {selectedMerchandiseBatch.purchasedQuantity} units for {formatCurrency(selectedMerchandiseBatch.acquisitionCost)}. {selectedMerchandiseBatch.remainingQuantity} units and {formatCurrency(selectedMerchandiseBatch.netInventoryBalance)} in cost remain in this batch.</p>}
+                    {selectedMerchandiseBatch && <p className="sm:col-span-2 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Total Cost of This Batch: {formatCurrency(selectedMerchandiseBatch.acquisitionCost)}. {formatCurrency(selectedMerchandiseBatch.netInventoryBalance)} of it has not been released to Cost of Sales yet.</p>}
                   </div>
                 )}
-
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div>
-                    <label className="block text-[10px] font-bold text-indigo-900 dark:text-indigo-200">Quantity sold</label>
-                    <input type="number" min="1" step="1" max={selectedMerchandiseBatch?.remainingQuantity} value={merchandiseQuantitySold} onChange={event => setMerchandiseQuantitySold(event.target.value)} placeholder="Number of units" className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-bold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-indigo-900 dark:text-indigo-200">Selling price per unit</label>
-                    <div className="relative mt-1.5"><span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-indigo-500">{settings.currencySymbol}</span><input type="number" min="0.01" step="0.01" value={merchandiseSellingPrice} onChange={event => setMerchandiseSellingPrice(event.target.value)} placeholder="0.00" className="w-full rounded-lg border border-indigo-200 bg-white p-2.5 pl-8 text-xs font-bold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required /></div>
-                  </div>
-                </div>
-
-                <div className="rounded-lg bg-white/80 p-3 dark:bg-slate-900/60">
-                  <span className="text-[9px] font-bold uppercase text-slate-500">Total sales — automatically computed</span>
-                  <p className="mt-1 text-lg font-black text-indigo-800 dark:text-indigo-200">{formatCurrency(merchandiseSaleTotal)}</p>
-                  <p className="text-[9px] text-slate-500">You can compute this by: Quantity Sold x Selling Price</p>
-                </div>
 
                 <div>
                   <label className="flex items-center gap-1.5 text-[10px] font-bold text-indigo-900 dark:text-indigo-200">Cost of all items sold <span title="Cost of sales is the total cost of the items sold. It includes the purchase price and any costs directly attributable to preparing or producing the merchandise, such as materials, design fees, printing, or labor." className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-indigo-300 text-[9px] font-black">?</span></label>
                   <div className="relative mt-1.5"><span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-indigo-500">{settings.currencySymbol}</span><input type="number" step="0.01" min="0.01" max={selectedMerchandiseBatch?.netInventoryBalance || undefined} value={merchandiseCost} onChange={event => setMerchandiseCost(event.target.value)} placeholder="Enter the total cost of the items sold" className="w-full rounded-lg border border-indigo-200 bg-white p-2.5 pl-8 text-xs font-bold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required /></div>
                   <p className="mt-1.5 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Include all costs attributable to the merchandise being sold, including purchase, materials, design, printing, and labor costs. The amount cannot exceed the {formatCurrency(selectedMerchandiseBatch?.netInventoryBalance || 0)} remaining for the selected batch. This automatically debits Cost of Sales and credits Merchandise Inventory.</p>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-indigo-900 dark:text-indigo-200">Total sales</label>
+                  <div className="relative mt-1.5"><span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-indigo-500">{settings.currencySymbol}</span><input type="number" min="0.01" step="0.01" value={merchandiseTotalSales} onChange={event => setMerchandiseTotalSales(event.target.value)} placeholder="0.00" className="w-full rounded-lg border border-indigo-200 bg-white p-2.5 pl-8 text-xs font-bold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required /></div>
+                  <p className="mt-1.5 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">You can compute this by: Quantity Sold x Selling Price</p>
                 </div>
 
                 {selectedMerchandiseBatch && (

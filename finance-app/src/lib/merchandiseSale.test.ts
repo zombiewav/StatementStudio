@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildMerchandiseBatchBalances, buildMerchandiseSalePosting } from './merchandiseSale';
+import { buildInventoryBatchBalances, buildMerchandiseBatchBalances, buildMerchandiseSalePosting } from './merchandiseSale';
 import { JournalEntry } from '../types';
 
 describe('merchandise sale posting', () => {
@@ -163,5 +163,42 @@ describe('merchandise batch balances', () => {
 
   it('keeps purchase batches available until all units are sold', () => {
     expect(buildMerchandiseBatchBalances([purchase, sale])).toEqual([expect.objectContaining({ item: 'Lanyard', purchasedQuantity: 100, soldQuantity: 20, remainingQuantity: 80, referenceUnitCost: 10, costOfSales: 200, netInventoryBalance: 800 })]);
+  });
+});
+
+describe('inventory batches for the sale form', () => {
+  const acquisition = (id: string, extra: Record<string, unknown>): JournalEntry => ({
+    id, reference: id.toUpperCase(), date: '2026-10-01', description: 'Acquisition', project: 'General',
+    lines: [{ accountCode: '1700', debit: 1000, credit: 0 }, { accountCode: '1010', debit: 0, credit: 1000 }],
+    transactionDetails: { eventRelated: false, receiptAttachmentIds: [], merchandiseItem: 'Pins', merchandiseBatch: 'Batch 1', ...extra } as never,
+  });
+  const sale = (batchId: string, cost: number): JournalEntry => ({
+    id: `sale-${batchId}-${cost}`, reference: 'SALE', date: '2026-10-10', description: 'Sale', project: 'General',
+    lines: [{ accountCode: '5240', debit: cost, credit: 0 }, { accountCode: '1700', debit: 0, credit: cost }],
+    transactionDetails: { eventRelated: false, receiptAttachmentIds: [], merchandiseBatchEntryId: batchId, inventoryCost: cost } as never,
+  });
+
+  it('offers a batch even when no quantity was entered, which the unit-based list cannot', () => {
+    const entries = [acquisition('acq', {})];
+    expect(buildMerchandiseBatchBalances(entries)).toEqual([]);
+    expect(buildInventoryBatchBalances(entries)).toMatchObject([{ entryId: 'acq', item: 'Pins', batch: 'Batch 1', acquisitionCost: 1000, netInventoryBalance: 1000 }]);
+  });
+
+  it('keeps a batch available while inventory cost remains and drops it once fully released', () => {
+    const entries = [acquisition('acq', { merchandiseQuantity: 10 }), sale('acq', 400)];
+    expect(buildInventoryBatchBalances(entries)[0]).toMatchObject({ costOfSales: 400, netInventoryBalance: 600 });
+    expect(buildInventoryBatchBalances([...entries, sale('acq', 600)])).toEqual([]);
+    expect(buildInventoryBatchBalances([...entries, sale('acq', 600)], true)[0].netInventoryBalance).toBe(0);
+  });
+
+  it('ignores downpayments, payment batches and customer orders that carry the same item and batch', () => {
+    const downpayment: JournalEntry = { ...acquisition('dp', { merchandiseBuyerDownpayment: true }), lines: [{ accountCode: '1010', debit: 300, credit: 0 }, { accountCode: '2140', debit: 0, credit: 300 }] };
+    const supplierDownpayment: JournalEntry = { ...acquisition('sdp', {}), lines: [{ accountCode: '1270', debit: 300, credit: 0 }, { accountCode: '1010', debit: 0, credit: 300 }] };
+    const order = acquisition('order', { customerOrder: true });
+    expect(buildInventoryBatchBalances([downpayment, supplierDownpayment, order])).toEqual([]);
+  });
+
+  it('ignores reversed acquisitions', () => {
+    expect(buildInventoryBatchBalances([{ ...acquisition('acq', {}), reversedByEntryId: 'rev' }])).toEqual([]);
   });
 });

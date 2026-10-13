@@ -183,15 +183,19 @@ login flag. This is still local-browser authentication, not secure multi-device 
   it omits zero-value lines and leaves unsettled supplier amounts in Merchandise Payable (2020),
   which the normal Review settlement flow clears later. The client's second-year unit movement
   and batch-depletion rules are intentionally not guessed and remain pending their follow-up.
-- **Merchandise sales and dated collections**: Sale of Merchandise selects an available acquisition
-  batch, validates units sold against that batch, computes total sales from quantity times unit
-  price, and records Cost of Sales against Merchandise Inventory. Payment may be not yet collected,
-  collected directly by the organization, or collected by an accountable officer for later
-  remittance. Collection and remittance questions use repeatable date-plus-amount rows with an
-  automatic total. Uncollected buyer balances post to Accounts Receivable (1200); collections still
-  held by an officer post to Due from Officers (1320). Both stay incomplete in Review and settle as
-  Dr Cash / Cr receivable. Purchase batches and remaining unit counts stay visible in Inventory
-  Summary, including depleted historical batches.
+- **Merchandise sales and dated collections** (client's Oct 13 design): Sale of Merchandise takes the
+  Name of Item, the Batch Reference (any acquisition batch that still has inventory cost; a
+  quantity is not required), the Cost of All Items Sold (cannot exceed the batch's remaining cost;
+  Dr Cost of Sales / Cr Inventory) and a typed Total Sales. Buyer downpayments recorded for the same
+  item and batch (`Downpayment by Buyer for Pre-Ordered Merchandise`, Cr Unearned Merchandise
+  Revenue 2140) are applied automatically: Dr Accounts Receivable (Total Sales - Downpayments),
+  Dr Unearned Merchandise Revenue, Cr Sales. Collections (directly by the organization, or by an
+  officer who remits) use repeatable date-plus-amount rows; collections plus downpayments beyond the
+  total sales are credited to Refund Liability - Merchandise (2150), resolved later with
+  `Excess Merchandise Collection - Status`. Uncollected buyer balances post to Accounts Receivable
+  (1200); collections still held by an officer post to Due from Officers (1320). Inventory Summary
+  shows each batch's cost, cost of sales and net inventory (units purchased only, since sales are
+  recorded by cost). Drafts saved with the older Quantity sold x Selling price still resume.
 - **Line-level posting dates**: Repeatable merchandise payments, collections, reimbursements, and
   remittances create separate journal lines carrying the date entered for that specific amount.
   Journal Entries shows each line's Posting Date, while General Ledger and Transaction History sort
