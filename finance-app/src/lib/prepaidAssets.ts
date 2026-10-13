@@ -25,7 +25,6 @@ export const PREPAID_ASSET_ITEMS: Record<string, PrepaidAssetCategory[]> = {
   ...Object.fromEntries(sharedItems.map(item => [item, ['awards', 'supplies'] as PrepaidAssetCategory[]])),
   'Decoration Materials': ['supplies'],
   'Booth Materials': ['supplies'],
-  'First Aid Kit': ['supplies'],
   'Projector Rental': ['rent'],
   'Chairs and Tables Rental': ['rent'],
   'Booth Rental': ['rent'],

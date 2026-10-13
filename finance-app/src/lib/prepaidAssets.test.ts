@@ -80,3 +80,11 @@ describe('prepaid assets', () => {
     expect(PREPAID_ASSET_CATEGORIES.uniform.depositCode).toBe('1270');
   });
 });
+
+describe('Prepaid Expenses and Other Assets item list', () => {
+  it('no longer offers First Aid Kit', async () => {
+    const { PREPAID_ASSET_ITEMS } = await import('./prepaidAssets');
+    expect(Object.keys(PREPAID_ASSET_ITEMS)).not.toContain('First Aid Kit');
+    expect(Object.keys(PREPAID_ASSET_ITEMS)).toContain('Booth Materials');
+  });
+});
