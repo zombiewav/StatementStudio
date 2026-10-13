@@ -8,7 +8,6 @@ import { reportingPeriodBounds } from '../lib/reportingPeriod';
 import { buildAccountPeriodHistory } from '../lib/transactionHistory';
 import { JournalLine, TransactionDraft } from '../types';
 import { DatedAmountInputRow, DatedAmountRows } from './DatedAmountRows';
-import { NewFeatureBadge } from './NewFeatureBadge';
 import { ReviewLaterNote } from './ReviewLaterNote';
 import { FinancialPreviewPanels } from './FinancialPreviewPanels';
 
@@ -278,7 +277,7 @@ export function ActivityFeeEntry({ defaultOpen = false, draftToResume = null, on
   return (
     <section className="rounded-2xl border border-blue-200 bg-blue-50/60 dark:border-blue-500/20 dark:bg-blue-500/10">
       <button type="button" onClick={() => setOpen(value => !value)} className="flex w-full items-center justify-between gap-3 p-4 text-left">
-        <span><span className="flex items-center gap-2 text-sm font-bold text-violet-700 dark:text-violet-300"><CalendarDays className="h-4 w-4" /> Activity / Event Fees <NewFeatureBadge /></span><span className="mt-1 block text-[10px] font-medium text-slate-600 dark:text-slate-400">Record each dated collection and let the event date determine Unearned Fees, Revenue, and Receivables.</span></span>
+        <span><span className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-slate-100"><CalendarDays className="h-4 w-4" /> Activity / Event Fees</span><span className="mt-1 block text-[10px] font-medium text-slate-600 dark:text-slate-400">Record each dated collection and let the event date determine Unearned Fees, Revenue, and Receivables.</span></span>
         {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
       </button>
       {open && (

@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { ActivityFeeRecord } from '../types';
 import { useFinance } from '../context/FinanceContext';
 import { DatedAmountInputRow, DatedAmountRows } from './DatedAmountRows';
-import { NewFeatureBadge } from './NewFeatureBadge';
 import { isActivityFeeIncomplete } from '../lib/activityFees';
 
 const today = (): string => new Date().toISOString().slice(0, 10);
@@ -69,5 +68,5 @@ function RecordCard({ record }: { record: ActivityFeeRecord }): React.ReactEleme
 export function ActivityFeeReview(): React.ReactElement | null {
   const { activityFeeRecords } = useFinance();
   if (activityFeeRecords.length === 0) return null;
-  return <section className="space-y-3"><div><h3 className="flex items-center gap-2 text-sm font-bold text-violet-700 dark:text-violet-300">Activity Fee History <NewFeatureBadge /></h3><p className="mt-1 text-[10px] text-slate-500">Track each event's unearned balance, event-date recognition, and dated receivable collections.</p></div>{[...activityFeeRecords].reverse().map(record => <RecordCard key={record.id} record={record} />)}</section>;
+  return <section className="space-y-3"><div><h3 className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-slate-100">Activity Fee History</h3><p className="mt-1 text-[10px] text-slate-500">Track each event's unearned balance, event-date recognition, and dated receivable collections.</p></div>{[...activityFeeRecords].reverse().map(record => <RecordCard key={record.id} record={record} />)}</section>;
 }

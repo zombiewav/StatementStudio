@@ -489,7 +489,7 @@ export function FinancialStatements(): React.ReactElement {
       </div>
 
       {/* Layout Grid: Left Sidebar Report Tabs, Right Report Display */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
         {/* Navigation Tabs - Left */}
         <div className="lg:col-span-3 bg-white dark:bg-slate-900 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-1.5 print:hidden">
           <span className="text-[10px] font-bold text-gray-400 dark:text-slate-400 uppercase tracking-wider px-3 pb-1.5 border-b border-gray-50 dark:border-slate-800 mb-1.5">Statement Reports</span>
@@ -585,7 +585,7 @@ export function FinancialStatements(): React.ReactElement {
         {/* Report Canvas - Right */}
         <div className="lg:col-span-9 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-8 sm:p-12 rounded-3xl shadow-sm print:shadow-none print:border-none max-w-4xl mx-auto w-full select-none">
           {isGated ? (
-            <div className="text-center py-10">
+            <div className="text-center py-10 h-full flex flex-col justify-center">
               <ClipboardCheck className="w-10 h-10 text-amber-500 mx-auto mb-3" />
               <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Statements aren't ready yet</h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 max-w-md mx-auto">

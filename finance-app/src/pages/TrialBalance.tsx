@@ -62,7 +62,7 @@ export function TrialBalance(): React.ReactElement {
 
   return (
     <div className="space-y-6 bg-slate-50 dark:bg-slate-950">
-      <div className="max-w-5xl mx-auto w-full">
+      <div className="w-full">
         <div>
           <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">Trial Balance</h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">Verify that the sum of all debits equals the sum of all credits in the ledger.</p>

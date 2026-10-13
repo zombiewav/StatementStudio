@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   TrendingUp,
   TrendingDown,
@@ -24,6 +24,8 @@ import { useFinance } from '../context/FinanceContext';
 import { useTheme } from '../context/ThemeContext';
 import { CASH_ACCOUNT_CODES } from '../lib/cashAccounts';
 
+const DISMISSED_ACTIVITY_KEY = 'ss_dismissed_activity_ids';
+
 export function Dashboard(): React.ReactElement {
   const { theme } = useTheme();
   const {
@@ -36,6 +38,19 @@ export function Dashboard(): React.ReactElement {
     formatCurrency,
     settings,
   } = useFinance();
+
+  const [dismissedActivityIds, setDismissedActivityIds] = useState<string[]>(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(DISMISSED_ACTIVITY_KEY) || '[]');
+      return Array.isArray(stored) ? stored : [];
+    } catch { return []; }
+  });
+  const dismissActivity = (id: string) => {
+    if (dismissedActivityIds.includes(id)) return;
+    const next = [...dismissedActivityIds, id].slice(-100);
+    setDismissedActivityIds(next);
+    try { localStorage.setItem(DISMISSED_ACTIVITY_KEY, JSON.stringify(next)); } catch { /* dismissal just won't persist */ }
+  };
 
   const endingFundBalance = totals['Fund Balance'] + netIncome;
   const totalLiabilitiesAndFund = totals.Liabilities + endingFundBalance;
@@ -94,7 +109,7 @@ export function Dashboard(): React.ReactElement {
     return (assets / liabilities).toFixed(2);
   }, [totals]);
 
-  const latestLogs = useMemo(() => auditLogs.slice(0, 4), [auditLogs]);
+  const latestLogs = useMemo(() => auditLogs.filter(log => !dismissedActivityIds.includes(log.id)).slice(0, 4), [auditLogs, dismissedActivityIds]);
 
   const chartFormatter = (value: number) => (value >= 1000 ? `${value / 1000}k` : `${value}`);
 
@@ -114,7 +129,7 @@ export function Dashboard(): React.ReactElement {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">Student Organization Dashboard</h2>
+          <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">{settings.organizationName} Dashboard</h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">
             Real-time overview of your student organization's financial position and fund activity.
           </p>
@@ -383,8 +398,14 @@ export function Dashboard(): React.ReactElement {
             <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 mb-4">Recent Activity</h3>
             <div className="space-y-3.5 flex-1">
               {latestLogs.map((log) => (
-                <div key={log.id} className="flex gap-3 text-xs leading-snug">
-                  <div className="w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0 mt-1.5" />
+                <button
+                  type="button"
+                  key={log.id}
+                  onClick={() => dismissActivity(log.id)}
+                  title="Click to dismiss"
+                  className="flex w-full gap-3 text-left text-xs leading-snug"
+                >
+                  <div className={`w-1.5 h-1.5 rounded-full shrink-0 mt-1.5 bg-blue-600`} />
                   <div>
                     <span className="font-bold text-slate-800 dark:text-slate-100">{log.action}</span>
                     <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">{log.details}</p>
@@ -392,7 +413,7 @@ export function Dashboard(): React.ReactElement {
                       By {log.user} - {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
-                </div>
+                </button>
               ))}
               {latestLogs.length === 0 && <p className="text-center text-xs text-slate-400 dark:text-slate-500 py-4">No recent activity.</p>}
             </div>

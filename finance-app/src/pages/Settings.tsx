@@ -331,7 +331,7 @@ export function Settings(): React.ReactElement {
 
       <CustomTransactionTypesManager />
 
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-stretch">
         {/* Left Side: General settings forms */}
         <div className="xl:col-span-4 space-y-6">
           {/* General Preferences */}
@@ -384,184 +384,6 @@ export function Settings(): React.ReactElement {
               Update Preferences
             </button>
           </form>
-
-          {/* Beginning Balances */}
-          <form onSubmit={handlePostBeginningBalances} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 pb-2.5 flex items-center gap-2">
-              <Wallet className="w-4.5 h-4.5 text-blue-900" /> Beginning Balances
-            </h3>
-            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
-              First-time setup: enter each asset account's opening balance before recording regular transactions. Posts as one balanced entry against General Fund Balance.
-            </p>
-
-            {beginningBalanceError && (
-              <p className="text-[10px] text-rose-600 font-bold bg-rose-50 dark:bg-rose-500/10 dark:text-rose-300 p-2 rounded-lg">{beginningBalanceError}</p>
-            )}
-            {beginningBalanceSuccess && (
-              <div className="flex items-center justify-between gap-2 rounded-lg bg-emerald-50 p-2 text-[10px] font-bold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
-                <span>{beginningBalanceSuccess}</span>
-                {lastBeginningBalanceEntry && (
-                  <button
-                    type="button"
-                    onClick={handleUndoBeginningBalances}
-                    className="inline-flex shrink-0 items-center gap-1 rounded-md border border-emerald-200 bg-white/70 px-2 py-1 text-[10px] font-bold transition-colors hover:bg-white dark:border-emerald-500/30 dark:bg-slate-900/40 dark:hover:bg-slate-900"
-                    title="Post a reversing entry for these beginning balances"
-                  >
-                    <Undo2 className="h-3 w-3" /> Undo
-                  </button>
-                )}
-              </div>
-            )}
-
-            <div className="space-y-3 text-xs">
-              {assetAccounts.map(acc => (
-                <div key={acc.code}>
-                  <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">{acc.name}</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 dark:text-slate-400">{settings.currencySymbol}</span>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={beginningBalances[acc.code] || ''}
-                      onChange={(e) => setBeginningBalances(prev => ({ ...prev, [acc.code]: e.target.value }))}
-                      placeholder="0.00"
-                      className="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl font-semibold text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 p-2.5 pl-7 outline-none focus:border-blue-900 dark:focus:border-blue-500 transition-colors"
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <button
-              type="submit"
-              className="w-full bg-blue-900 hover:bg-blue-950 text-white font-bold text-xs p-2.5 rounded-xl transition-all shadow-md shadow-blue-900/10 cursor-pointer"
-            >
-              Post Beginning Balances
-            </button>
-          </form>
-
-          {/* Data Backup */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 pb-2.5 flex items-center gap-2">
-              <Database className="w-4.5 h-4.5 text-blue-900 dark:text-blue-400" /> Data Backup
-            </h3>
-            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
-              Your workspace is saved to your signed-in account, with a recovery copy in this browser. Check the save status before leaving, and export a backup regularly. Unsaved browser changes may be lost if browser data is cleared.
-            </p>
-
-            {restoreError && (
-              <p className="text-[10px] text-rose-600 dark:text-rose-300 font-bold bg-rose-50 dark:bg-rose-500/10 p-2 rounded-lg">{restoreError}</p>
-            )}
-            {restoreSuccess && (
-              <p className="text-[10px] text-emerald-700 dark:text-emerald-300 font-bold bg-emerald-50 dark:bg-emerald-500/10 p-2 rounded-lg">{restoreSuccess}</p>
-            )}
-            {exportSuccess && (
-              <p className="text-[10px] text-emerald-700 dark:text-emerald-300 font-bold bg-emerald-50 dark:bg-emerald-500/10 p-2 rounded-lg">{exportSuccess}</p>
-            )}
-
-            <button
-              type="button"
-              onClick={handleExportBackup}
-              className="w-full flex items-center justify-center gap-2 bg-blue-900 hover:bg-blue-950 dark:bg-blue-600 dark:hover:bg-blue-500 text-white font-bold text-xs p-2.5 rounded-xl transition-all shadow-md shadow-blue-900/10 cursor-pointer"
-            >
-              <Download className="w-4 h-4" /> Export Full Backup
-            </button>
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="application/json"
-              onChange={handleFileSelected}
-              className="hidden"
-              id="restore-file-input"
-            />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="w-full flex items-center justify-center gap-2 bg-white dark:bg-slate-950 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-xs p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 transition-colors cursor-pointer"
-            >
-              <Upload className="w-4 h-4" /> Restore From Backup
-            </button>
-
-            {pendingRestore && (
-              <div className="p-3.5 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-xl space-y-2.5">
-                <div className="flex items-start gap-2">
-                  <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                  <p className="text-[11px] font-bold text-amber-800 dark:text-amber-300">
-                    This will replace ALL current data. This cannot be undone.
-                  </p>
-                </div>
-                <div className="text-[10px] text-amber-700 dark:text-amber-300/80 font-medium space-y-0.5 pl-6">
-                  <p>Organization: <span className="font-bold">{pendingRestore.organizationName}</span></p>
-                  <p>Exported: <span className="font-bold">{new Date(pendingRestore.exportedAt).toLocaleString()}</span></p>
-                  <p>{pendingRestore.accounts.length} accounts, {pendingRestore.journalEntries.length} journal entries, {pendingRestore.projects?.length || 0} projects</p>
-                </div>
-                <div className="flex gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={handleCancelRestore}
-                    className="flex-1 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleConfirmRestore}
-                    className="flex-1 px-3 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-sm cursor-pointer"
-                  >
-                    Confirm Restore
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Reset financial workspace */}
-          <div className="bg-white dark:bg-slate-900 border border-rose-200 dark:border-rose-900/60 p-5 rounded-2xl shadow-sm space-y-4">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 pb-2.5 flex items-center gap-2">
-              <AlertTriangle className="w-4.5 h-4.5 text-rose-600 dark:text-rose-400" /> Reset Financial Workspace
-            </h3>
-            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
-              Remove all transactions, receipts, activities/programs, fiscal-year closings, custom transaction types, and audit history. Your organization login, settings, currency, and Chart of Accounts will stay unchanged.
-            </p>
-
-            {resetSuccess && (
-              <p className="text-[10px] text-emerald-700 dark:text-emerald-300 font-bold bg-emerald-50 dark:bg-emerald-500/10 p-2 rounded-lg">{resetSuccess}</p>
-            )}
-
-            {!showResetWorkspaceConfirm ? (
-              <button
-                type="button"
-                onClick={() => setShowResetWorkspaceConfirm(true)}
-                className="w-full flex items-center justify-center gap-2 bg-white dark:bg-slate-950 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-rose-700 dark:text-rose-300 font-bold text-xs p-2.5 rounded-xl border border-rose-300 dark:border-rose-800 transition-colors cursor-pointer"
-              >
-                <AlertTriangle className="w-4 h-4" /> Reset Financial Workspace
-              </button>
-            ) : (
-              <div className="p-3.5 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-xl space-y-2.5">
-                <p className="text-[11px] font-bold text-rose-800 dark:text-rose-300">
-                  This permanently removes the financial records listed above. Export a backup first if you may need them later.
-                </p>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowResetWorkspaceConfirm(false)}
-                    className="flex-1 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleResetFinancialWorkspace}
-                    className="flex-1 px-3 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-sm cursor-pointer"
-                  >
-                    Confirm Reset
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
 
           {/* Organization password */}
           <form onSubmit={handleChangePassword} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
@@ -865,6 +687,186 @@ export function Settings(): React.ReactElement {
           </div>
         </div>
       </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-stretch">
+        {/* Data Backup */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
+          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 pb-2.5 flex items-center gap-2">
+            <Database className="w-4.5 h-4.5 text-blue-900 dark:text-blue-400" /> Data Backup
+          </h3>
+          <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+            Your workspace is saved to your signed-in account, with a recovery copy in this browser. Check the save status before leaving, and export a backup regularly. Unsaved browser changes may be lost if browser data is cleared.
+          </p>
+
+          {restoreError && (
+            <p className="text-[10px] text-rose-600 dark:text-rose-300 font-bold bg-rose-50 dark:bg-rose-500/10 p-2 rounded-lg">{restoreError}</p>
+          )}
+          {restoreSuccess && (
+            <p className="text-[10px] text-emerald-700 dark:text-emerald-300 font-bold bg-emerald-50 dark:bg-emerald-500/10 p-2 rounded-lg">{restoreSuccess}</p>
+          )}
+          {exportSuccess && (
+            <p className="text-[10px] text-emerald-700 dark:text-emerald-300 font-bold bg-emerald-50 dark:bg-emerald-500/10 p-2 rounded-lg">{exportSuccess}</p>
+          )}
+
+          <button
+            type="button"
+            onClick={handleExportBackup}
+            className="w-full flex items-center justify-center gap-2 bg-blue-900 hover:bg-blue-950 dark:bg-blue-600 dark:hover:bg-blue-500 text-white font-bold text-xs p-2.5 rounded-xl transition-all shadow-md shadow-blue-900/10 cursor-pointer"
+          >
+            <Download className="w-4 h-4" /> Export Full Backup
+          </button>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/json"
+            onChange={handleFileSelected}
+            className="hidden"
+            id="restore-file-input"
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="w-full flex items-center justify-center gap-2 bg-white dark:bg-slate-950 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-xs p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 transition-colors cursor-pointer"
+          >
+            <Upload className="w-4 h-4" /> Restore From Backup
+          </button>
+
+          {pendingRestore && (
+            <div className="p-3.5 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-xl space-y-2.5">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <p className="text-[11px] font-bold text-amber-800 dark:text-amber-300">
+                  This will replace ALL current data. This cannot be undone.
+                </p>
+              </div>
+              <div className="text-[10px] text-amber-700 dark:text-amber-300/80 font-medium space-y-0.5 pl-6">
+                <p>Organization: <span className="font-bold">{pendingRestore.organizationName}</span></p>
+                <p>Exported: <span className="font-bold">{new Date(pendingRestore.exportedAt).toLocaleString()}</span></p>
+                <p>{pendingRestore.accounts.length} accounts, {pendingRestore.journalEntries.length} journal entries, {pendingRestore.projects?.length || 0} projects</p>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={handleCancelRestore}
+                  className="flex-1 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmRestore}
+                  className="flex-1 px-3 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-sm cursor-pointer"
+                >
+                  Confirm Restore
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Reset financial workspace */}
+        <div className="bg-white dark:bg-slate-900 border border-rose-200 dark:border-rose-900/60 p-5 rounded-2xl shadow-sm space-y-4">
+          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 pb-2.5 flex items-center gap-2">
+            <AlertTriangle className="w-4.5 h-4.5 text-rose-600 dark:text-rose-400" /> Reset Financial Workspace
+          </h3>
+          <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+            Remove all transactions, receipts, activities/programs, fiscal-year closings, custom transaction types, and audit history. Your organization login, settings, currency, and Chart of Accounts will stay unchanged.
+          </p>
+
+          {resetSuccess && (
+            <p className="text-[10px] text-emerald-700 dark:text-emerald-300 font-bold bg-emerald-50 dark:bg-emerald-500/10 p-2 rounded-lg">{resetSuccess}</p>
+          )}
+
+          {!showResetWorkspaceConfirm ? (
+            <button
+              type="button"
+              onClick={() => setShowResetWorkspaceConfirm(true)}
+              className="w-full flex items-center justify-center gap-2 bg-white dark:bg-slate-950 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-rose-700 dark:text-rose-300 font-bold text-xs p-2.5 rounded-xl border border-rose-300 dark:border-rose-800 transition-colors cursor-pointer"
+            >
+              <AlertTriangle className="w-4 h-4" /> Reset Financial Workspace
+            </button>
+          ) : (
+            <div className="p-3.5 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-xl space-y-2.5">
+              <p className="text-[11px] font-bold text-rose-800 dark:text-rose-300">
+                This permanently removes the financial records listed above. Export a backup first if you may need them later.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowResetWorkspaceConfirm(false)}
+                  className="flex-1 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResetFinancialWorkspace}
+                  className="flex-1 px-3 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-sm cursor-pointer"
+                >
+                  Confirm Reset
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Beginning Balances */}
+      <form onSubmit={handlePostBeginningBalances} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
+        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 pb-2.5 flex items-center gap-2">
+          <Wallet className="w-4.5 h-4.5 text-blue-900" /> Beginning Balances
+        </h3>
+        <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+          First-time setup: enter each asset account's opening balance before recording regular transactions. Posts as one balanced entry against General Fund Balance.
+        </p>
+
+        {beginningBalanceError && (
+          <p className="text-[10px] text-rose-600 font-bold bg-rose-50 dark:bg-rose-500/10 dark:text-rose-300 p-2 rounded-lg">{beginningBalanceError}</p>
+        )}
+        {beginningBalanceSuccess && (
+          <div className="flex items-center justify-between gap-2 rounded-lg bg-emerald-50 p-2 text-[10px] font-bold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
+            <span>{beginningBalanceSuccess}</span>
+            {lastBeginningBalanceEntry && (
+              <button
+                type="button"
+                onClick={handleUndoBeginningBalances}
+                className="inline-flex shrink-0 items-center gap-1 rounded-md border border-emerald-200 bg-white/70 px-2 py-1 text-[10px] font-bold transition-colors hover:bg-white dark:border-emerald-500/30 dark:bg-slate-900/40 dark:hover:bg-slate-900"
+                title="Post a reversing entry for these beginning balances"
+              >
+                <Undo2 className="h-3 w-3" /> Undo
+              </button>
+            )}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-x-4 gap-y-3 text-xs">
+          {assetAccounts.map(acc => (
+            <div key={acc.code}>
+              <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">{acc.name}</label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 dark:text-slate-400">{settings.currencySymbol}</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={beginningBalances[acc.code] || ''}
+                  onChange={(e) => setBeginningBalances(prev => ({ ...prev, [acc.code]: e.target.value }))}
+                  placeholder="0.00"
+                  className="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl font-semibold text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 p-2.5 pl-7 outline-none focus:border-blue-900 dark:focus:border-blue-500 transition-colors"
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <button
+          type="submit"
+          className="w-full bg-blue-900 hover:bg-blue-950 text-white font-bold text-xs p-2.5 rounded-xl transition-all shadow-md shadow-blue-900/10 cursor-pointer"
+        >
+          Post Beginning Balances
+        </button>
+      </form>
     </div>
   );
 }

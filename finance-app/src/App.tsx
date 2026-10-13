@@ -109,6 +109,7 @@ function DashboardLayout() {
           searchTerm={searchTerm}
           setSearchTerm={setSearchTerm}
           onSearchSubmit={() => setActivePage('journals')}
+          onOpenSettings={() => setActivePage('settings')}
         />
 
         {/* Scrollable Content Container */}

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, ListFilter, ArrowLeftRight } from 'lucide-react';
+import { Search, ListFilter, ArrowLeftRight, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import { reportingPeriodBounds } from '../lib/reportingPeriod';
 import { AccountHistoryLine, buildAccountPeriodHistory, buildAccountTransactionHistory } from '../lib/transactionHistory';
@@ -9,6 +9,12 @@ export function GeneralLedger(): React.ReactElement {
   const { accounts, journalEntries, accountBalances, openingBalances, formatCurrency, settings } = useFinance();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedType, setSelectedType] = useState<'All' | 'Assets' | 'Liabilities' | 'Fund Balance' | 'Revenue' | 'Expenses'>('All');
+  // Accounts with no activity start collapsed so the page isn't a wall of empty tables;
+  // an explicit toggle (or Expand/Collapse all) always wins over that default.
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [hideEmpty, setHideEmpty] = useState(false);
+  const [page, setPage] = useState(1);
+  const accountsPerPage = 10;
 
   // Compute the transaction history with running balances for each account
   const reportingBounds = settings.semester && settings.reportingYear
@@ -43,6 +49,16 @@ export function GeneralLedger(): React.ReactElement {
       return matchesSearch && matchesType;
     });
   }, [accounts, searchTerm, selectedType]);
+  const visibleAccounts = useMemo(() => {
+    if (!hideEmpty) return filteredAccounts;
+    return filteredAccounts.filter(acc => {
+      const history = ledgerData[acc.code];
+      return !!history && (history.lines.length > 0 || history.beginningBalance !== 0);
+    });
+  }, [filteredAccounts, hideEmpty, ledgerData]);
+  const totalPages = Math.max(1, Math.ceil(visibleAccounts.length / accountsPerPage));
+  const currentPage = Math.min(page, totalPages);
+  const pageAccounts = visibleAccounts.slice((currentPage - 1) * accountsPerPage, currentPage * accountsPerPage);
   const expensePayableLedgers = useMemo(() => {
     const account = accounts.find(candidate => candidate.code === '2010');
     if (!account) return [];
@@ -69,17 +85,24 @@ export function GeneralLedger(): React.ReactElement {
           <input
             type="text"
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
             placeholder="Search account code or name..."
             className="w-full pl-9 pr-4 py-2 bg-white dark:bg-slate-800 rounded-xl text-xs font-semibold text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 border-slate-300 dark:border-slate-700 border-none outline-none focus:ring-2 focus:ring-blue-900/10 focus:bg-white dark:focus:bg-slate-900 transition-colors"
           />
         </div>
 
+        <div className="flex flex-wrap items-center gap-2">
+        <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-bold text-slate-700 dark:border-slate-700 dark:text-slate-200">
+          <input type="checkbox" checked={hideEmpty} onChange={(e) => { setHideEmpty(e.target.checked); setPage(1); }} className="h-3.5 w-3.5 cursor-pointer accent-blue-900" />
+          Hide empty accounts
+        </label>
+        <button type="button" onClick={() => setExpanded(Object.fromEntries(pageAccounts.map(acc => [acc.code, true])))} className="rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">Expand all</button>
+        <button type="button" onClick={() => setExpanded(Object.fromEntries(pageAccounts.map(acc => [acc.code, false])))} className="rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">Collapse all</button>
         <div className="flex items-center gap-2 bg-white dark:bg-slate-800 px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200">
           <ListFilter className="w-3.5 h-3.5 text-blue-900 dark:text-blue-200" />
           <select
             value={selectedType}
-            onChange={(e) => setSelectedType(e.target.value as any)}
+            onChange={(e) => { setSelectedType(e.target.value as any); setPage(1); }}
             className="bg-transparent border-none outline-none text-xs font-bold text-slate-750 dark:text-slate-200 cursor-pointer pr-1 py-0"
           >
             <option value="All">All Categories</option>
@@ -89,6 +112,7 @@ export function GeneralLedger(): React.ReactElement {
             <option value="Revenue">Revenue</option>
             <option value="Expenses">Expenses</option>
           </select>
+        </div>
         </div>
       </div>
 
@@ -100,12 +124,15 @@ export function GeneralLedger(): React.ReactElement {
       </div>
 
       <div className="space-y-6">
-        {filteredAccounts.map(acc => {
+        {pageAccounts.map(acc => {
           const accountHistory = ledgerData[acc.code] || { beginningBalance: 0, lines: [] };
           const lines = accountHistory.lines;
           const currentBal = reportingBounds
             ? lines[lines.length - 1]?.runningBalance ?? accountHistory.beginningBalance
             : accountBalances[acc.code] || 0;
+
+          const hasActivity = lines.length > 0 || accountHistory.beginningBalance !== 0;
+          const isOpen = expanded[acc.code] ?? hasActivity;
 
           if (acc.code === '2010' && expensePayableLedgers.length > 0) return (
             <section key={acc.code} className="space-y-4">
@@ -120,8 +147,16 @@ export function GeneralLedger(): React.ReactElement {
           return (
             <div key={acc.code} className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
               {/* Card Header */}
-              <div className="px-6 py-4.5 bg-slate-50/50 dark:bg-slate-800/30 border-b border-gray-55 dark:border-slate-800 flex flex-col sm:flex-row justify-between sm:items-center gap-2">
-                <div className="flex items-baseline gap-2">
+              <div
+                role="button"
+                tabIndex={0}
+                aria-expanded={isOpen}
+                onClick={() => setExpanded(prev => ({ ...prev, [acc.code]: !isOpen }))}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpanded(prev => ({ ...prev, [acc.code]: !isOpen })); } }}
+                className={`px-6 py-3 bg-slate-50/50 dark:bg-slate-800/30 flex flex-col sm:flex-row justify-between sm:items-center gap-2 cursor-pointer ${isOpen ? 'border-b border-gray-55 dark:border-slate-800' : ''}`}
+              >
+                <div className="flex items-center gap-2">
+                  <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${isOpen ? '' : '-rotate-90'}`} />
                   <span className="text-sm font-bold text-blue-900 dark:text-blue-200">{acc.code}</span>
                   <h3 className="text-sm font-black text-slate-900 dark:text-slate-100">{acc.name}</h3>
                   <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-slate-200/60 dark:bg-slate-800/60 text-slate-700 dark:text-slate-200">
@@ -141,7 +176,7 @@ export function GeneralLedger(): React.ReactElement {
               </div>
 
               {/* Transactions Table for Account */}
-              <div className="overflow-x-auto">
+              {isOpen && <div className="overflow-x-auto">
                 <table className="w-full text-left min-w-[700px] text-xs">
                   <thead>
                     <tr className="border-b border-slate-200/40 dark:border-slate-800 text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 bg-transparent">
@@ -199,16 +234,59 @@ export function GeneralLedger(): React.ReactElement {
                     )}
                   </tbody>
                 </table>
-              </div>
+              </div>}
             </div>
           );
         })}
-        {filteredAccounts.length === 0 && (
+        {visibleAccounts.length === 0 && (
           <div className="bg-white dark:bg-slate-900 p-12 rounded-3xl border border-slate-200 dark:border-slate-800 text-center text-slate-500 dark:text-slate-400 font-semibold text-xs shadow-sm">
             No accounts match your criteria.
           </div>
         )}
       </div>
+
+      {visibleAccounts.length > accountsPerPage && (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+            Showing {(currentPage - 1) * accountsPerPage + 1}–{Math.min(currentPage * accountsPerPage, visibleAccounts.length)} of {visibleAccounts.length} accounts
+          </p>
+          <nav className="flex flex-wrap items-center gap-1.5" aria-label="General Ledger pages">
+            <button
+              type="button"
+              onClick={() => setPage(Math.max(1, currentPage - 1))}
+              disabled={currentPage === 1}
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300 dark:hover:bg-slate-800"
+              aria-label="Previous accounts page"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            {Array.from({ length: totalPages }, (_, index) => index + 1).map(n => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setPage(n)}
+                aria-current={currentPage === n ? 'page' : undefined}
+                className={`h-8 min-w-8 rounded-lg px-2 text-xs font-bold transition-colors ${
+                  currentPage === n
+                    ? 'bg-blue-900 text-white dark:bg-blue-600'
+                    : 'border border-slate-300 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300 dark:hover:bg-slate-800'
+                }`}
+              >
+                {n}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setPage(Math.min(totalPages, currentPage + 1))}
+              disabled={currentPage === totalPages}
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300 dark:hover:bg-slate-800"
+              aria-label="Next accounts page"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </nav>
+        </div>
+      )}
 
     </div>
   );

@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Search, Bell, Calendar, Building2, CheckCircle, ChevronDown, LogOut } from "lucide-react";
+import { Search, Bell, Calendar, CheckCircle, ChevronDown, LogOut, Settings as SettingsIcon } from "lucide-react";
 import { useNavigate } from 'react-router';
 import { supabase } from '../lib/supabase';
 import { useFinance } from '../context/FinanceContext';
+import { useAuth } from '../context/AuthContext';
 import { Semester, SEMESTER_OPTIONS, periodForSemester, parseSchoolYear } from '../lib/reportingPeriod';
 import { ThemeToggle } from './ThemeToggle';
 
@@ -11,6 +12,7 @@ interface NavbarProps {
   searchTerm: string;
   setSearchTerm: (val: string) => void;
   onSearchSubmit: () => void;
+  onOpenSettings: () => void;
 }
 
 interface NavActionButtonProps {
@@ -43,13 +45,21 @@ function NavActionButton({
   );
 }
 
-export function Navbar({ onMenuToggle, searchTerm, setSearchTerm, onSearchSubmit }: NavbarProps): React.ReactElement {
+const NOTIFICATIONS_SEEN_KEY = 'ss_notifications_seen_id';
+
+export function Navbar({ onMenuToggle, searchTerm, setSearchTerm, onSearchSubmit, onOpenSettings }: NavbarProps): React.ReactElement {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { settings, auditLogs, reportingPeriodWorkspaces, switchReportingPeriod, flushWorkspace } = useFinance();
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState('');
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false);
+  const [seenNotificationId, setSeenNotificationId] = useState<string | null>(() => {
+    try { return localStorage.getItem(NOTIFICATIONS_SEEN_KEY); } catch { return null; }
+  });
   const [showFiscalYearDropdown, setShowFiscalYearDropdown] = useState(false);
+  const [showProfileDropdown, setShowProfileDropdown] = useState(false);
+  const profileDropdownRef = useRef<HTMLDivElement>(null);
   const fiscalYearDropdownRef = useRef<HTMLDivElement>(null);
   // Same Semester/Period/Year structure already used per-transaction (see
   // reportingPeriod.ts) — Period is always derived from Semester, never
@@ -80,11 +90,31 @@ export function Navbar({ onMenuToggle, searchTerm, setSearchTerm, onSearchSubmit
       }
     };
 
+    const closeProfileDropdown = (event: MouseEvent) => {
+      if (!profileDropdownRef.current?.contains(event.target as Node)) {
+        setShowProfileDropdown(false);
+      }
+    };
+
     document.addEventListener('mousedown', closeFiscalYearDropdown);
-    return () => document.removeEventListener('mousedown', closeFiscalYearDropdown);
+    document.addEventListener('mousedown', closeProfileDropdown);
+    return () => {
+      document.removeEventListener('mousedown', closeFiscalYearDropdown);
+      document.removeEventListener('mousedown', closeProfileDropdown);
+    };
   }, []);
 
   const notifications = auditLogs.slice(0, 5); // Show latest 5 logs as notifications
+  const latestNotificationId = notifications[0]?.id ?? null;
+  const hasUnreadNotifications = latestNotificationId !== null && latestNotificationId !== seenNotificationId;
+
+  const toggleNotificationDropdown = () => {
+    if (!showNotificationDropdown && latestNotificationId !== null) {
+      setSeenNotificationId(latestNotificationId);
+      try { localStorage.setItem(NOTIFICATIONS_SEEN_KEY, latestNotificationId); } catch { /* seen state just won't persist */ }
+    }
+    setShowNotificationDropdown(!showNotificationDropdown);
+  };
 
   return (
     <header className="h-16 border-b border-slate-200 bg-white/80 dark:bg-slate-950/80 dark:border-slate-800 backdrop-blur-md px-6 flex items-center justify-between sticky top-0 z-30 select-none">
@@ -123,14 +153,6 @@ export function Navbar({ onMenuToggle, searchTerm, setSearchTerm, onSearchSubmit
         
           {/* Theme Toggle */}
           <ThemeToggle />
-
-        {/* Organization identity — renamed from Settings, not here */}
-        <div className="app-filter hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl">
-          <Building2 className="w-3.5 h-3.5 text-blue-900" />
-          <span className="font-semibold text-blue-950 dark:text-blue-100 text-xs">
-            {settings.organizationName}
-          </span>
-        </div>
 
         {/* School Year Selector */}
         <div ref={fiscalYearDropdownRef} className="app-filter relative hidden md:flex items-center gap-2 rounded-xl px-3 py-1.5">
@@ -243,7 +265,7 @@ export function Navbar({ onMenuToggle, searchTerm, setSearchTerm, onSearchSubmit
         {/* Notifications Dropdown */}
         <div className="relative">
           <button
-            onClick={() => setShowNotificationDropdown(!showNotificationDropdown)}
+            onClick={toggleNotificationDropdown}
             onBlur={() => setTimeout(() => setShowNotificationDropdown(false), 200)}
             className={`w-9 h-9 rounded-xl flex items-center justify-center border transition-all ${
               showNotificationDropdown 
@@ -254,7 +276,7 @@ export function Navbar({ onMenuToggle, searchTerm, setSearchTerm, onSearchSubmit
           >
             <span className="relative">
               <Bell className="w-4.5 h-4.5" />
-              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-blue-600 rounded-full border border-white dark:border-slate-900" />
+              {hasUnreadNotifications && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-blue-600 rounded-full border border-white dark:border-slate-900" />}
             </span>
           </button>
 
@@ -286,14 +308,62 @@ export function Navbar({ onMenuToggle, searchTerm, setSearchTerm, onSearchSubmit
         </div>
 
         {/* User Profile Dropdown */}
-        <div className="app-surface flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-xl">
-          <div className="w-7 h-7 rounded-lg bg-blue-900 text-white flex items-center justify-center font-bold text-xs uppercase shadow-sm">
-            {settings.organizationName.split(' ').map(n => n[0]).join('').slice(0, 2)}
-          </div>
-          <div className="hidden lg:block">
-            <p className="text-xs font-bold text-blue-950 dark:text-blue-100 leading-tight">{settings.organizationName}</p>
-            <p className="text-[9px] app-soft font-semibold leading-none">Organization Account</p>
-          </div>
+        <div ref={profileDropdownRef} className="relative">
+          <button
+            type="button"
+            onClick={() => setShowProfileDropdown(value => !value)}
+            aria-haspopup="menu"
+            aria-expanded={showProfileDropdown}
+            aria-label="Open organization profile"
+            className="app-surface flex cursor-pointer items-center gap-2 pl-2 pr-3 py-1.5 rounded-xl text-left transition-colors hover:border-slate-300"
+          >
+            <div className="w-7 h-7 rounded-lg bg-blue-900 text-white flex items-center justify-center font-bold text-xs uppercase shadow-sm">
+              {settings.organizationName.split(' ').map(n => n[0]).join('').slice(0, 2)}
+            </div>
+            <div className="hidden lg:block">
+              <p className="text-xs font-bold text-blue-950 dark:text-blue-100 leading-tight">{settings.organizationName}</p>
+              <p className="text-[9px] app-soft font-semibold leading-none">Organization Account</p>
+            </div>
+            <ChevronDown className={`hidden lg:block h-3.5 w-3.5 text-slate-400 transition-transform ${showProfileDropdown ? 'rotate-180' : ''}`} />
+          </button>
+
+          {showProfileDropdown && (
+            <div role="menu" className="absolute right-0 mt-2 w-72 app-surface rounded-2xl shadow-xl z-50 py-2 animate-in fade-in slide-in-from-top-2 duration-150">
+              <div className="px-4 py-3 border-b app-divider flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-900 text-white flex items-center justify-center font-bold text-sm uppercase shadow-sm">
+                  {settings.organizationName.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-bold app-strong">{settings.organizationName}</p>
+                  <p className="text-[10px] app-soft font-semibold">Organization Account</p>
+                </div>
+              </div>
+              <dl className="px-4 py-3 space-y-2.5 text-[11px]">
+                <div>
+                  <dt className="text-[9px] font-bold uppercase tracking-wider app-soft">Signed in as</dt>
+                  <dd className="break-all font-semibold app-strong">{user?.email ?? '-'}</dd>
+                </div>
+                <div>
+                  <dt className="text-[9px] font-bold uppercase tracking-wider app-soft">Reporting period</dt>
+                  <dd className="font-semibold app-strong">{settings.fiscalYear}</dd>
+                </div>
+                <div>
+                  <dt className="text-[9px] font-bold uppercase tracking-wider app-soft">Currency</dt>
+                  <dd className="font-semibold app-strong">{settings.currencyCode} ({settings.currencySymbol})</dd>
+                </div>
+              </dl>
+              <div className="px-2 pt-1 border-t app-divider">
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => { setShowProfileDropdown(false); onOpenSettings(); }}
+                  className="mt-1 flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-semibold app-strong transition-colors hover:bg-slate-50 dark:hover:bg-slate-800"
+                >
+                  <SettingsIcon className="h-3.5 w-3.5 text-slate-500" /> Organization settings
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </header>

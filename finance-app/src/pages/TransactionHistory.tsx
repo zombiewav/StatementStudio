@@ -3,7 +3,6 @@ import * as AlertDialog from '@radix-ui/react-alert-dialog';
 import { BookOpen, ClipboardCheck, FileSpreadsheet, History, ReceiptText, Trash2 } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import { FinancialStatementHistoryRecord, ReportingPeriodWorkspace } from '../types';
-import { NewFeatureBadge } from '../components/NewFeatureBadge';
 
 type SnapshotView = 'statements' | 'ledger';
 
@@ -37,7 +36,7 @@ export function TransactionHistory({ onNavigate }: { onNavigate: (page: string) 
 
   return (
     <div className="space-y-6 bg-slate-50 dark:bg-slate-950">
-      <div><h2 className="flex items-center gap-2 text-xl font-bold text-violet-700 dark:text-violet-300"><History className="h-5 w-5" /> Semester Workspace History <NewFeatureBadge /></h2><p className="mt-1 text-xs font-medium text-slate-500">Every semester keeps its own editable Transactions, Review, journals, Ledger, Trial Balance, and Financial Statements.</p></div>
+      <div><h2 className="flex items-center gap-2 text-xl font-bold text-slate-900 dark:text-slate-100"><History className="h-5 w-5" /> Semester Workspace History</h2><p className="mt-1 text-xs font-medium text-slate-500">Every semester keeps its own editable Transactions, Review, journals, Ledger, Trial Balance, and Financial Statements.</p></div>
       {notice && <p role="status" className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">{notice}</p>}
       {deleting && <AlertDialog.Root open onOpenChange={open => { if (!open) setDeleting(null); }}><AlertDialog.Portal>
         <AlertDialog.Overlay className="fixed inset-0 z-50 bg-black/50" />

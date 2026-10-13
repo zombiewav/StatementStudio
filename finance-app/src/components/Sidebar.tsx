@@ -11,14 +11,11 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  LogOut,
-  Sparkles,
   ClipboardCheck,
   History
 } from "lucide-react";
 import { useFinance } from '../context/FinanceContext';
 import { computePendingObligations } from '../lib/reviewEngine';
-import { NewFeatureBadge } from './NewFeatureBadge';
 
 interface SidebarProps {
   activePage: string;
@@ -33,7 +30,6 @@ interface MenuItem {
   id: string;
   icon: React.ComponentType<{ className?: string }>;
   label: string;
-  isNew?: boolean;
 }
 
 export function Sidebar({
@@ -44,19 +40,19 @@ export function Sidebar({
   isCollapsed,
   setIsCollapsed,
 }: SidebarProps): React.ReactElement {
-  const { loadSampleData, clearAllData, journalEntries, accounts } = useFinance();
+  const { journalEntries, accounts } = useFinance();
   const pendingReviewCount = computePendingObligations(journalEntries, accounts).length;
 
   const menuItems: MenuItem[] = [
     { id: 'dashboard', icon: LayoutDashboard, label: "Dashboard" },
     { id: 'transactions', icon: ArrowRightLeft, label: "Transactions" },
-    { id: 'transaction-history', icon: History, label: "FS History", isNew: true },
+    { id: 'transaction-history', icon: History, label: "FS History" },
     { id: 'review', icon: ClipboardCheck, label: "Review" },
     { id: 'journals', icon: BookOpen, label: "Journal Entries" },
     { id: 'ledger', icon: Layers, label: "General Ledger" },
     { id: 'trial-balance', icon: Scale, label: "Trial Balance" },
-    { id: 'closing-entries', icon: ClipboardCheck, label: "Closing Entries", isNew: true },
-    { id: 'post-closing-trial-balance', icon: Scale, label: "Post-Closing Trial Balance", isNew: true },
+    { id: 'closing-entries', icon: ClipboardCheck, label: "Closing Entries" },
+    { id: 'post-closing-trial-balance', icon: Scale, label: "Post-Closing Trial Balance" },
     { id: 'statements', icon: FileSpreadsheet, label: "Financial Statements" },
     { id: 'analytics', icon: LineChart, label: "Analytics" },
     { id: 'projects', icon: FolderKanban, label: "Activities & Programs" },
@@ -127,8 +123,7 @@ export function Sidebar({
                 type="button"
               >
                 <item.icon className={`w-4.5 h-4.5 shrink-0 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-blue-900 dark:group-hover:text-blue-200 transition-colors'}`} />
-                {!isCollapsed && <span className={`truncate flex-1 text-left ${item.isNew && !isActive ? 'text-violet-700 dark:text-violet-300' : ''}`}>{item.label}</span>}
-                {item.isNew && !isCollapsed && <NewFeatureBadge />}
+                {!isCollapsed && <span className="truncate flex-1 text-left">{item.label}</span>}
                 {item.id === 'review' && pendingReviewCount > 0 && !isCollapsed && (
                   <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${isActive ? 'bg-white text-blue-900' : 'bg-amber-500 text-white'}`}>
                     {pendingReviewCount}
@@ -145,37 +140,6 @@ export function Sidebar({
             );
           })}
         </nav>
-
-        {/* Bottom Actions */}
-        <div className="p-3 border-t border-slate-200 dark:border-slate-800 space-y-1">
-          <button
-            onClick={loadSampleData}
-            className="w-full flex items-center gap-3.5 px-3.5 py-2 hover:bg-emerald-50/50 rounded-xl text-emerald-600 hover:text-emerald-700 font-bold text-xs transition-colors group"
-            type="button"
-          >
-            <Sparkles className="w-4.5 h-4.5 shrink-0 text-emerald-500" />
-            {!isCollapsed && <span className="truncate">Load Sample Data</span>}
-            {isCollapsed && (
-              <div className="absolute left-16 bg-emerald-800 text-white text-[10px] font-bold px-2 py-1 rounded-md opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity ml-4 z-50 shadow-md">
-                Load Sample Data
-              </div>
-            )}
-          </button>
-
-          <button
-            onClick={clearAllData}
-            className="w-full flex items-center gap-3.5 px-3.5 py-2 hover:bg-rose-50/50 rounded-xl text-rose-500 hover:text-rose-600 font-bold text-xs transition-colors group"
-            type="button"
-          >
-            <LogOut className="w-4.5 h-4.5 shrink-0 text-rose-400" />
-            {!isCollapsed && <span className="truncate">Clear Ledger</span>}
-            {isCollapsed && (
-              <div className="absolute left-16 bg-rose-800 text-white text-[10px] font-bold px-2 py-1 rounded-md opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity ml-4 z-50 shadow-md">
-                Clear Ledger
-              </div>
-            )}
-          </button>
-        </div>
       </aside>
     </>
   );
