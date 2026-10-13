@@ -285,6 +285,13 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   // runs in the render after every saved field has been restored.
   const [pendingAutoPost, setPendingAutoPost] = useState(false);
   const errorBannerRef = useRef<HTMLDivElement>(null);
+  const draftBannerRef = useRef<HTMLDivElement>(null);
+  // The banner sits above every entry form, so its Save as Draft button submits
+  // whichever form is on screen — the same path as that form's own button.
+  const submitVisibleForm = () => {
+    const forms = Array.from(draftBannerRef.current?.parentElement?.querySelectorAll('form') ?? []);
+    forms.find(form => form.offsetParent !== null)?.requestSubmit();
+  };
   const [selectedExpenseAccountCode, setSelectedExpenseAccountCode] = useState('5010');
   // Set for exactly one effect pass right after a draft is hydrated, so the
   // classification-match effect below (keyed on txName, which hydration
@@ -1439,15 +1446,25 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       </div>
 
       {editingDraftId && (
-        <div className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-[11px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300 sm:flex-row sm:items-center sm:justify-between">
+        <div ref={draftBannerRef} className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-[11px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300 sm:flex-row sm:items-center sm:justify-between">
           <span>Continuing a saved draft — change anything below and press Save as Draft; it updates the same entry. Post it from Review when it is final.</span>
-          <button
-            type="button"
-            onClick={handleDiscardDraft}
-            className="shrink-0 rounded-lg border border-amber-300 bg-white/70 px-3 py-1.5 text-[10px] font-bold text-amber-800 transition-colors hover:bg-white dark:border-amber-500/40 dark:bg-slate-900/40 dark:text-amber-300 dark:hover:bg-slate-900"
-          >
-            Discard this draft
-          </button>
+          <div className="flex shrink-0 gap-2">
+            <button
+              type="button"
+              onClick={submitVisibleForm}
+              disabled={isProcessingReceipts}
+              className="rounded-lg border border-amber-600 bg-amber-600 px-3 py-1.5 text-[10px] font-bold text-white transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Save as Draft
+            </button>
+            <button
+              type="button"
+              onClick={handleDiscardDraft}
+              className="rounded-lg border border-amber-300 bg-white/70 px-3 py-1.5 text-[10px] font-bold text-amber-800 transition-colors hover:bg-white dark:border-amber-500/40 dark:bg-slate-900/40 dark:text-amber-300 dark:hover:bg-slate-900"
+            >
+              Discard this draft
+            </button>
+          </div>
         </div>
       )}
 
