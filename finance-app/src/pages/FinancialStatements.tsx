@@ -13,7 +13,8 @@ import { computeActivitiesExpenseBreakdown } from '../lib/activitiesBreakdown';
 import { computeAccountBalances, computeTypeTotals, isContraAccount } from '../lib/accountTotals';
 import { computeTransactionReviewStates } from '../lib/reviewEngine';
 import { isActivityFeeIncomplete } from '../lib/activityFees';
-import { CASH_FLOW_EXPENSE_ROWS, CASH_FLOW_OPERATING_ROWS, computeCashFlowDetails } from '../lib/cashFlow';
+import { buildCashFlowStatement, EQUIPMENT_PURCHASE_LABEL, FURNITURE_PURCHASE_LABEL } from '../lib/cashFlowStatement';
+import { CASH_ACCOUNT_CODES } from '../lib/cashAccounts';
 import { accumulatedNetPosition } from '../lib/fundBalancePresentation';
 import { excludeClosingEntries } from '../lib/closingEntries';
 import { CLOSING_PAGES_ENABLED } from '../lib/featureFlags';
@@ -346,33 +347,19 @@ export function FinancialStatements(): React.ReactElement {
         });
         csvContent += `"Total Expenses",${activitiesExpenseBreakdown.eventNames.map(name => Object.values(activitiesExpenseBreakdown.eventGroups[name]).reduce((total, amount) => total + amount, 0)).join(',')},${activitiesExpenseBreakdown.eventRelatedTotal},${activitiesExpenseBreakdown.generalAdminTotal},${filteredTotals.Expenses}\n`;
       } else if (activeTab === 'cashflow') {
-        csvContent += "CASH FLOWS FROM OPERATING ACTIVITIES\n";
-        csvContent += "Cash received from:\n";
-        CASH_FLOW_OPERATING_ROWS.forEach(row => {
-          csvContent += `"${row.label}",${cashFlowDetails.operatingInflows[row.key]}\n`;
-        });
-        csvContent += `"Other Receipts",${cashFlowDetails.otherReceipts}\n`;
-        csvContent += "Cash paid for:\n";
-        CASH_FLOW_EXPENSE_ROWS.forEach(row => {
-          csvContent += `"${row.label}",${cashFlowDetails.operatingOutflows[row.key]}\n`;
-        });
-        csvContent += `"Other Expenses",${cashFlowDetails.otherExpenses}\n`;
-        csvContent += `"Net Cash Provided by Operating Activities",${cashFlowDetails.netOperating}\n\n`;
-
-        csvContent += "CASH FLOWS FROM INVESTING ACTIVITIES\n";
-        csvContent += `"Sale of Equipment",${cashFlowDetails.equipmentSales}\n`;
-        csvContent += `"Purchase of Equipment",${cashFlowDetails.equipmentPurchases}\n`;
-        csvContent += `"Sale of Furniture and Fixtures",${cashFlowDetails.furnitureSales}\n`;
-        csvContent += `"Purchase of Furniture and Fixtures",${cashFlowDetails.furniturePurchases}\n`;
-        csvContent += `"Net Cash Provided by Investing Activities",${cashFlowDetails.netInvesting}\n\n`;
-
-        csvContent += "CASH FLOWS FROM FINANCING ACTIVITIES\n";
-        csvContent += `"Financing Cash Flows",${cashFlowDetails.financingCashFlows}\n`;
-        csvContent += `"Net Cash Provided by Financing Activities",${cashFlowDetails.netFinancing}\n\n`;
-
-        csvContent += `"Net Increase/(Decrease) in Cash",${cashFlowDetails.netChange}\n`;
-        csvContent += `"Cash at Beginning of Period",${cashFlowDetails.beginningCash}\n`;
-        csvContent += `"Cash at End of Period",${cashFlowDetails.endingCash}\n`;
+        csvContent += "Cash Flows from Operating Activities:\n";
+        csvContent += "Receipts from:\n";
+        cashFlowDetails.receipts.forEach(line => { csvContent += `"${line.label}",${line.amount}\n`; });
+        csvContent += "Less: Payments for:\n";
+        cashFlowDetails.payments.forEach(line => { csvContent += `"${line.label}",${-line.amount}\n`; });
+        csvContent += `"Net cash provided by operating activities",${cashFlowDetails.netOperating}\n\n`;
+        csvContent += "Cash Flows from Investing Activities:\n";
+        csvContent += `"${EQUIPMENT_PURCHASE_LABEL}",${-cashFlowDetails.equipmentPurchases}\n`;
+        csvContent += `"${FURNITURE_PURCHASE_LABEL}",${-cashFlowDetails.furniturePurchases}\n`;
+        csvContent += `"Net cash provided by investing activities",${cashFlowDetails.netInvesting}\n\n`;
+        csvContent += `"Net increase (decrease) in cash and cash equivalents",${cashFlowDetails.netChange}\n`;
+        csvContent += `"Cash and cash equivalents at beginning of year",${cashFlowDetails.beginningCash}\n`;
+        csvContent += `"Cash and cash equivalents at end of year",${cashFlowDetails.endingCash}\n`;
       } else if (activeTab === 'changes') {
         csvContent += `"Beginning Fund Balance",${beginningFundBalance}\n`;
         csvContent += `"Net Surplus / (Deficit)",${fNetIncome}\n`;
@@ -398,7 +385,10 @@ export function FinancialStatements(): React.ReactElement {
   };
 
   const cashFlowDetails = useMemo(
-    () => computeCashFlowDetails(journalEntries.filter(entry => !entry.isDraft), accounts, startDate, endDate, openingBalances['1010'] || 0),
+    () => buildCashFlowStatement(
+      journalEntries.filter(entry => !entry.isDraft), accounts, startDate, endDate,
+      CASH_ACCOUNT_CODES.reduce((sum, code) => sum + (openingBalances[code] || 0), 0),
+    ),
     [journalEntries, accounts, startDate, endDate, openingBalances]
   );
   const formatOutflow = (amount: number) => amount === 0
@@ -864,32 +854,26 @@ export function FinancialStatements(): React.ReactElement {
                 <div>
                   <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wider text-[10px]">Cash Flows from Operating Activities</h3>
                   <div className="space-y-1 px-4">
-                    <p className="font-semibold">Cash received from:</p>
-                    {CASH_FLOW_OPERATING_ROWS.map(row => (
-                      <div key={row.key} className="flex justify-between rounded-md pl-4 hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                        <span>{row.label}</span>
-                        <span>{formatCurrency(cashFlowDetails.operatingInflows[row.key])}</span>
+                    <p className="font-semibold">Receipts from:</p>
+                    {cashFlowDetails.receipts.length === 0 && <p className="pl-4 text-slate-400">No cash receipts in this period.</p>}
+                    {cashFlowDetails.receipts.map(line => (
+                      <div key={line.key} className="flex justify-between rounded-md pl-4 hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                        <span>{line.label}</span>
+                        <span>{formatCurrency(line.amount)}</span>
                       </div>
                     ))}
-                    <div className="flex justify-between rounded-md pl-4 hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                      <span>Other Receipts</span>
-                      <span>{formatCurrency(cashFlowDetails.otherReceipts)}</span>
-                    </div>
-                    <p className="pt-2 font-semibold">Less: Cash paid for:</p>
-                    {CASH_FLOW_EXPENSE_ROWS.map(row => (
-                      <div key={row.key} className="flex justify-between rounded-md pl-4 hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                        <span>{row.label}</span>
-                        <span>{formatOutflow(cashFlowDetails.operatingOutflows[row.key])}</span>
+                    <p className="pt-2 font-semibold">Less: Payments for:</p>
+                    {cashFlowDetails.payments.length === 0 && <p className="pl-4 text-slate-400">No cash payments in this period.</p>}
+                    {cashFlowDetails.payments.map(line => (
+                      <div key={line.key} className="flex justify-between rounded-md pl-4 hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                        <span>{line.label}</span>
+                        <span>{formatOutflow(line.amount)}</span>
                       </div>
                     ))}
-                    <div className="flex justify-between rounded-md pl-4 hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                      <span>Other Expenses</span>
-                      <span>{formatOutflow(cashFlowDetails.otherExpenses)}</span>
-                    </div>
                   </div>
                   <div className="flex justify-between py-1.5 border-t border-slate-200 dark:border-slate-700 font-semibold text-slate-900 dark:text-slate-100 mt-2 px-4">
-                    <span>Net Cash Provided by Operating Activities</span>
-                    <span className="font-bold">{formatCurrency(cashFlowDetails.netOperating)}</span>
+                    <span>Net cash provided by operating activities</span>
+                    <span className="font-bold">{cashFlowDetails.netOperating < 0 ? formatOutflow(cashFlowDetails.netOperating) : formatCurrency(cashFlowDetails.netOperating)}</span>
                   </div>
                 </div>
 
@@ -897,58 +881,40 @@ export function FinancialStatements(): React.ReactElement {
                 <div>
                   <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wider text-[10px]">Cash Flows from Investing Activities</h3>
                   <div className="space-y-1 px-4">
-                    <div className="flex justify-between rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                      <span>Sale of Equipment</span>
-                      <span>{formatCurrency(cashFlowDetails.equipmentSales)}</span>
-                    </div>
-                    <div className="flex justify-between rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                      <span>Purchase of Equipment</span>
+                    <div className="flex justify-between rounded-md pl-4 hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                      <span>{EQUIPMENT_PURCHASE_LABEL}</span>
                       <span>{formatOutflow(cashFlowDetails.equipmentPurchases)}</span>
                     </div>
-                    <div className="flex justify-between rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                      <span>Sale of Furniture and Fixtures</span>
-                      <span>{formatCurrency(cashFlowDetails.furnitureSales)}</span>
-                    </div>
-                    <div className="flex justify-between rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                      <span>Purchase of Furniture and Fixtures</span>
+                    <div className="flex justify-between rounded-md pl-4 hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                      <span>{FURNITURE_PURCHASE_LABEL}</span>
                       <span>{formatOutflow(cashFlowDetails.furniturePurchases)}</span>
                     </div>
                   </div>
                   <div className="flex justify-between py-1.5 border-t border-slate-200 dark:border-slate-700 font-semibold text-slate-900 dark:text-slate-100 mt-2 px-4">
-                    <span>Net Cash Provided by Investing Activities</span>
-                    <span className="font-bold">{formatCurrency(cashFlowDetails.netInvesting)}</span>
-                  </div>
-                </div>
-
-                {/* FINANCING ACTIVITIES */}
-                <div>
-                  <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wider text-[10px]">Cash Flows from Financing Activities</h3>
-                  <div className="space-y-1 px-4">
-                    <div className="flex justify-between rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                      <span>Financing Cash Flows</span>
-                      <span>{cashFlowDetails.financingCashFlows < 0 ? formatOutflow(cashFlowDetails.financingCashFlows) : formatCurrency(cashFlowDetails.financingCashFlows)}</span>
-                    </div>
-                  </div>
-                  <div className="flex justify-between py-1.5 border-t border-slate-200 dark:border-slate-700 font-semibold text-slate-900 dark:text-slate-100 mt-2 px-4">
-                    <span>Net Cash Provided by Financing Activities</span>
-                    <span className="font-bold">{formatCurrency(cashFlowDetails.netFinancing)}</span>
+                    <span>Net cash provided by investing activities</span>
+                    <span className="font-bold">{cashFlowDetails.netInvesting < 0 ? formatOutflow(cashFlowDetails.netInvesting) : formatCurrency(cashFlowDetails.netInvesting)}</span>
                   </div>
                 </div>
 
                 {/* SUMMARY */}
                 <div className="pt-4 border-t-2 border-slate-200 dark:border-slate-700 space-y-2">
                   <div className="flex justify-between font-bold px-2 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                    <span>Net Increase (Decrease) in Cash</span>
-                    <span>{formatCurrency(cashFlowDetails.netChange)}</span>
+                    <span>Net increase (decrease) in cash and cash equivalents</span>
+                    <span>{cashFlowDetails.netChange < 0 ? formatOutflow(cashFlowDetails.netChange) : formatCurrency(cashFlowDetails.netChange)}</span>
                   </div>
                   <div className="flex justify-between px-2 font-medium rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                    <span>Cash & Equivalents, Beginning of Period</span>
+                    <span>Cash and cash equivalents at beginning of year</span>
                     <span>{formatCurrency(cashFlowDetails.beginningCash)}</span>
                   </div>
                   <div className="flex justify-between font-black text-sm px-2 text-slate-900 dark:text-slate-100 border-t border-slate-200 dark:border-slate-700 pt-2">
-                    <span className="uppercase tracking-wider text-[10px]">Cash & Equivalents, End of Period</span>
+                    <span>Cash and cash equivalents at end of year</span>
                     <span className="border-b-4 border-double border-slate-200 dark:border-slate-700">{formatCurrency(cashFlowDetails.endingCash)}</span>
                   </div>
+                  {cashFlowDetails.reconcilesToLedger ? (
+                    <p className="px-2 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">Ending cash agrees with the General Ledger cash balance of {formatCurrency(cashFlowDetails.ledgerCash)}.</p>
+                  ) : (
+                    <p role="alert" className="px-2 text-[10px] font-bold text-rose-700 dark:text-rose-300">Ending cash does not agree with the General Ledger cash balance of {formatCurrency(cashFlowDetails.ledgerCash)}. Check the journal entries that touch Cash on Hand.</p>
+                  )}
                 </div>
               </div>
             )}

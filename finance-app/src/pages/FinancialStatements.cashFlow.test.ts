@@ -1,0 +1,35 @@
+import { createElement } from 'react';
+import { act, create, ReactTestRenderer } from 'react-test-renderer';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { FinanceProvider, useFinance } from '../context/FinanceContext';
+import { FinancialStatements } from './FinancialStatements';
+
+vi.mock('../hooks/useWorkspaceSync', () => ({ useWorkspaceSync: () => ({ workspaceStatus: 'ready' }) }));
+vi.mock('canvas-confetti', () => ({ default: () => undefined }));
+
+let renderer: ReactTestRenderer;
+let finance: ReturnType<typeof useFinance>;
+function Probe() { finance = useFinance(); return createElement(FinancialStatements); }
+afterEach(() => { if (renderer) act(() => renderer.unmount()); });
+
+const text = (node: any): string => (node.children || []).map((child: any) => typeof child === 'string' ? child : text(child)).join(' ');
+
+describe('Statement of Cash Flows tab', () => {
+  it('shows the client format with receipts and payments by related account, and no Financing section', () => {
+    act(() => { renderer = create(createElement(FinanceProvider, null, createElement(Probe))); });
+    act(() => {
+      finance.updateSettings({ semester: '1st Semester', reportingYear: 2026 } as never);
+      finance.addJournalEntry('2026-10-01', 'Pre-order downpayment', 'General Fund Operations', [{ accountCode: '1010', debit: 1000, credit: 0 }, { accountCode: '2140', debit: 0, credit: 1000 }]);
+      finance.addJournalEntry('2026-10-02', 'Supplier downpayment', 'General Fund Operations', [{ accountCode: '1270', debit: 600, credit: 0 }, { accountCode: '1010', debit: 0, credit: 400 }, { accountCode: '2050', debit: 0, credit: 200 }]);
+      finance.addJournalEntry('2026-10-03', 'Laptop', 'General Fund Operations', [{ accountCode: '1501', debit: 300, credit: 0 }, { accountCode: '1010', debit: 0, credit: 300 }]);
+    });
+    const tab = renderer.root.findAllByType('button').find(button => text(button).trim() === 'Statement of Cash Flows');
+    expect(tab).toBeTruthy();
+    act(() => { tab!.props.onClick(); });
+    const page = text(renderer.root);
+    ['Receipts from:', 'Less: Payments for:', 'Unearned Merchandise Revenue', 'Advances to Suppliers', 'Purchase of equipment', 'Purchase of furniture and fixture',
+      'Net cash provided by operating activities', 'Net cash provided by investing activities', 'Net increase (decrease) in cash and cash equivalents',
+      'Cash and cash equivalents at beginning of year', 'Cash and cash equivalents at end of year', 'Ending cash agrees with the General Ledger'].forEach(label => expect(page).toContain(label));
+    expect(page).not.toContain('Financing Activities');
+  });
+});

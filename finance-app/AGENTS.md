@@ -218,11 +218,6 @@ login flag. This is still local-browser authentication, not secure multi-device 
 
 ## Known bugs / gaps, not yet fixed (flagged, intentionally left alone)
 
-- **Cash Flow "beginning cash"** (`FinancialStatements.tsx`, `cashFlowDetails`): detected via a
-  heuristic (first entry in the filtered range whose description contains "capital" or
-  "initial"), not a real cumulative balance. Will silently show ₱0 beginning cash for any period
-  that doesn't start with a matching entry. Needs the same cumulative-as-of-just-before-startDate
-  treatment `beginningFundBalance` already got.
 - **Activities & Programs**: budget is now editable inline (click the Budget Cap figure), but
   there's no way to delete a program, only toggle its status (Active/Completed/On Hold).
 - Two items from the client's own working-paper sheet are unresolved **by the client**, not by
@@ -271,8 +266,15 @@ wanted:
 - `src/components/CustomTransactionTypesManager.tsx`, `src/lib/customTransactionRules.ts` + test,
   `src/context/FinanceContext.tsx`, `src/types.ts`, `src/pages/Settings.tsx` — persistent custom
   transaction types with protected built-ins and automatic fixed accounts.
-- `src/lib/cashFlow.ts` + test, `src/pages/FinancialStatements.tsx` — cumulative beginning cash,
-  financing/investing classification, and selectable custom FS set.
+- `src/lib/cashFlowStatement.ts` + test, `src/pages/FinancialStatements.tsx` — Statement of Cash
+  Flows built from the client's "closing to SFP" rules: only entries touching a cash account
+  (`cashAccounts.ts`) count; cash debited = receipt, cash credited = payment, for the actual cash
+  line; the category is the related account, and with several related accounts the cash is split
+  in proportion to their amounts; Operating by default, only cash paid for Equipment (1500-1516)
+  and Furniture & Fixtures (1650-1653) is Investing (no Financing section); cash moves between
+  cash accounts and a reversed entry plus its reversal in the period are skipped; ending cash is
+  checked against the ledger cash balance. Beginning cash uses each cash line's posting date.
+- `src/pages/FinancialStatements.tsx` — selectable custom FS set.
 - `src/lib/closingEntries.ts` + test, `src/pages/FinancialStatements.tsx` — closing entries remain
   in ledger/point-in-time balances but are excluded from period-performance presentation, so a
   post-close Statement of Activities retains the original revenue/expense categories without
