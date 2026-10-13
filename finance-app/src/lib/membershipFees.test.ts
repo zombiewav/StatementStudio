@@ -80,6 +80,11 @@ describe('excess collection resolution for another refund liability', () => {
     expect(() => buildMembershipRefundResolution({ availableLiability: 50, status: 'nonrefundable', amount: 100, liabilityCode: '2150', liabilityName: 'Refund Liability - Merchandise' })).toThrow('Amount cannot exceed Refund Liability - Merchandise.');
   });
 
+  it('only asks for the refund date when the caller requires it', () => {
+    expect(() => buildMembershipRefundResolution({ availableLiability: 300, status: 'current', amount: 100 })).toThrow('Enter the refund date.');
+    expect(buildMembershipRefundResolution({ availableLiability: 300, status: 'current', amount: 100, dateOptional: true })).toHaveLength(2);
+  });
+
   it('keeps the membership defaults', () => {
     expect(buildMembershipRefundResolution({ availableLiability: 300, status: 'nonrefundable', amount: 100 }).map(line => line.accountCode)).toEqual(['2130', '4050']);
     expect(() => buildMembershipRefundResolution({ availableLiability: 50, status: 'nonrefundable', amount: 100 })).toThrow('Amount cannot exceed Refund Liability - Membership Fees.');

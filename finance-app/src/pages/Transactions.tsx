@@ -777,6 +777,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
           availableLiability: excessRefundLiabilityOutstanding,
           liabilityCode: isMerchandiseRefundStatus ? '2150' : undefined,
           liabilityName: `Refund Liability - ${excessCollectionLabel}`,
+          dateOptional: isMerchandiseRefundStatus,
         }),
         error: '',
       };
@@ -2103,8 +2104,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                       <div className="relative mt-1.5"><span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-violet-500">{settings.currencySymbol}</span><input type="number" min="0.01" step="0.01" max={excessRefundLiabilityOutstanding || undefined} value={amount || ''} onChange={event => setAmount(Number(event.target.value))} placeholder="0.00" className="w-full rounded-lg border border-violet-200 bg-white p-2.5 pl-8 text-xs font-bold text-slate-900 outline-none dark:border-violet-500/30 dark:bg-slate-800 dark:text-slate-100" required /></div>
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold text-violet-900 dark:text-violet-200">Date {membershipRefundStatus === 'current' ? <span className="text-rose-600">*required</span> : <span className="font-medium text-slate-400">(optional)</span>}</label>
-                      <input type="date" value={date} onChange={event => setDate(event.target.value)} className="mt-1.5 w-full rounded-lg border border-violet-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-violet-500/30 dark:bg-slate-800 dark:text-slate-100" required={membershipRefundStatus === 'current'} />
+                      <label className="block text-[10px] font-bold text-violet-900 dark:text-violet-200">Date {membershipRefundStatus === 'current' && !isMerchandiseRefundStatus ? <span className="text-rose-600">*required</span> : <span className="font-medium text-slate-400">(optional)</span>}</label>
+                      <input type="date" value={date} onChange={event => setDate(event.target.value)} className="mt-1.5 w-full rounded-lg border border-violet-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-violet-500/30 dark:bg-slate-800 dark:text-slate-100" required={membershipRefundStatus === 'current' && !isMerchandiseRefundStatus} />
                     </div>
                   </div>
                 )}

@@ -202,6 +202,14 @@ describe('resuming a saved draft', () => {
       expect(finance.accountBalances['1010']).toBe(50000 + 500 - 200);
     });
 
+    it('does not require a date for a merchandise refund in the current period', () => {
+      start(seedLiability, true);
+      draft('current', 200, '');
+      expect(alerts()).toEqual([]);
+      expect(posted).toHaveLength(1);
+      expect(finance.accountBalances['2150']).toBe(300);
+    });
+
     it('moves a non-refundable excess to Other Income', () => {
       start(seedLiability, true);
       draft('nonrefundable', 150);
