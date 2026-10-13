@@ -109,14 +109,17 @@ export function buildMembershipRefundResolution(input: {
   status: MembershipRefundStatus;
   amount: number;
   date?: string;
+  /** Defaults to Refund Liability - Membership Fees; Excess Merchandise Collection passes its own. */
+  liabilityCode?: string;
+  liabilityName?: string;
 }): JournalLine[] {
   if (input.status === 'next') return [];
   const amount = money(input.amount);
   if (amount <= 0) throw new Error('Enter an amount greater than zero.');
-  if (amount > money(input.availableLiability)) throw new Error('Amount cannot exceed Refund Liability - Membership Fees.');
+  if (amount > money(input.availableLiability)) throw new Error(`Amount cannot exceed ${input.liabilityName || 'Refund Liability - Membership Fees'}.`);
   if (input.status === 'current' && !input.date) throw new Error('Enter the refund date.');
   return [
-    { accountCode: MEMBERSHIP_REFUND_LIABILITY_CODE, debit: amount, credit: 0, date: input.date },
+    { accountCode: input.liabilityCode || MEMBERSHIP_REFUND_LIABILITY_CODE, debit: amount, credit: 0, date: input.date },
     { accountCode: input.status === 'current' ? MEMBERSHIP_CASH_CODE : OTHER_INCOME_CODE, debit: 0, credit: amount, date: input.date },
   ];
 }

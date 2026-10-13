@@ -31,6 +31,12 @@ describe('merchandise transaction types', () => {
     expect(finance.accounts.find(account => account.code === '2150')?.name).toBe('Refund Liability - Merchandise');
   });
 
+  it('offers Excess Merchandise Collection - Status as Dr Refund Liability - Merchandise / Cr Cash', () => {
+    const finance = loadFinance();
+    expect(pickerTitles(finance)).toContain('Excess Merchandise Collection - Status');
+    expect(finance.suggestTransactionClassification('Excess Merchandise Collection - Status')).toMatchObject({ debitAccountCode: '2150', creditAccountCode: '1010' });
+  });
+
   it('classifies both the new and the former title as Dr Advances to Suppliers / Cr Cash', () => {
     const finance = loadFinance();
     expect(finance.suggestTransactionClassification('Downpayment to Suppliers for Pre-Ordered Merchandise')).toMatchObject({ debitAccountCode: '1270', creditAccountCode: '1010' });

@@ -371,10 +371,14 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
 
   const isCashSponsorshipDonation = classificationPreview?.defaultDesc === 'Sponsorships and Donations';
   const isSponsorshipContribution = !!classificationPreview?.sponsorshipKind && (creditCode === UNRESTRICTED_REVENUE_CODE || isCashSponsorshipDonation);
-  const isMembershipRefundStatus = classificationPreview?.defaultDesc === 'Excess Membership Fee Collection - Status';
+  const isMerchandiseRefundStatus = classificationPreview?.defaultDesc === 'Excess Merchandise Collection - Status';
+  // Excess Membership Fee / Excess Merchandise Collection - Status share one form: handle the excess
+  // (refund now, refund next period, or keep it as non-refundable Other Income).
+  const isExcessRefundStatus = isMerchandiseRefundStatus || classificationPreview?.defaultDesc === 'Excess Membership Fee Collection - Status';
+  const excessCollectionLabel = isMerchandiseRefundStatus ? 'Merchandise' : 'Membership Fees';
   const effectiveCreditCode = isCashSponsorshipDonation
     ? contributionPurpose === 'sponsorships' ? '4110' : '4100'
-    : isMembershipRefundStatus && membershipRefundStatus === 'nonrefundable'
+    : isExcessRefundStatus && membershipRefundStatus === 'nonrefundable'
       ? '4050'
       : creditCode;
   const isSupplierReceivableCollection = selectedCategory === 'merchandise' && debitCode === '1010' && effectiveCreditCode === '1360';
@@ -683,7 +687,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     : '';
   // These types hand cash out of the organization (Dr Due to Officers / Advances to
   // Officers / Loans to Organizations, Cr Cash on Hand), so they can never exceed it.
-  const paysOutCash = isOfficerReimbursement || isOfficerAdvance || isLoanToOrganization;
+  const paysOutCash = isOfficerReimbursement || isOfficerAdvance || isLoanToOrganization || (isMerchandiseRefundStatus && membershipRefundStatus === 'current');
   const cashLimitError = paysOutCash && amount > cashAvailable
     ? `Amount cannot exceed the available cash balance of ${formatCurrency(cashAvailable)}.`
     : '';
@@ -699,7 +703,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   // fee must have been billed (via the current-school-year accrual
   // question) before there's anything to collect.
   const membershipReceivableOutstanding = ledgerBalances[MEMBERSHIP_DUES_RECEIVABLE_CODE] || 0;
-  const membershipRefundLiabilityOutstanding = Math.max(0, ledgerBalances[MEMBERSHIP_REFUND_LIABILITY_CODE] || 0);
+  const excessRefundLiabilityOutstanding = Math.max(0, ledgerBalances[isMerchandiseRefundStatus ? '2150' : MEMBERSHIP_REFUND_LIABILITY_CODE] || 0);
   const membershipCollectionTotal = sumDatedAmounts(membershipCollections);
   const showMembershipReceivableWarning = isPriorMembershipCollection && membershipCollectionTotal > membershipReceivableOutstanding;
   const isMerchandiseSale = effectiveCreditCode === '4070';
@@ -763,21 +767,23 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   }, [requiresAccrualCompletion, isPriorMembershipCollection, amount, date, membershipCollections, membershipCollectionTotal, membershipReceivableOutstanding]);
 
   const membershipRefundResolutionResult = useMemo(() => {
-    if (!isMembershipRefundStatus) return { lines: [] as JournalLine[], error: '' };
+    if (!isExcessRefundStatus) return { lines: [] as JournalLine[], error: '' };
     try {
       return {
         lines: buildMembershipRefundResolution({
           status: membershipRefundStatus,
           amount,
           date,
-          availableLiability: membershipRefundLiabilityOutstanding,
+          availableLiability: excessRefundLiabilityOutstanding,
+          liabilityCode: isMerchandiseRefundStatus ? '2150' : undefined,
+          liabilityName: `Refund Liability - ${excessCollectionLabel}`,
         }),
         error: '',
       };
     } catch (error) {
       return { lines: [] as JournalLine[], error: error instanceof Error ? error.message : 'The refund-liability amount is invalid.' };
     }
-  }, [isMembershipRefundStatus, membershipRefundStatus, amount, date, membershipRefundLiabilityOutstanding]);
+  }, [isExcessRefundStatus, isMerchandiseRefundStatus, excessCollectionLabel, membershipRefundStatus, amount, date, excessRefundLiabilityOutstanding]);
 
   const merchandiseReceiptRows = [merchandiseOrganizationPayments[0], merchandiseOfficerPayments[0], merchandiseAdvancePayments[0]].filter(Boolean);
   const merchandisePurchaseDate = resolveMerchandisePurchaseDate('', merchandiseReceiptRows, '')
@@ -914,7 +920,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
 
   const previewLines = useMemo<JournalLine[]>(() => {
     if (!classificationPreview || !debitCode || !effectiveCreditCode) return [];
-    if (isMembershipRefundStatus) return membershipRefundResolutionResult.lines;
+    if (isExcessRefundStatus) return membershipRefundResolutionResult.lines;
     if (transactionAmount <= 0) return [];
     if (isMerchandiseAcquisition) return merchandiseAcquisitionResult.posting?.lines || [];
     if (isMerchandisePrepayment) return merchandisePrepaymentResult.lines;
@@ -935,7 +941,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       ]);
     }
     return buildJournalLines(debitCode, effectiveCreditCode, amount);
-  }, [classificationPreview, transactionAmount, amount, date, debitCode, effectiveCreditCode, isMembershipRefundStatus, membershipRefundResolutionResult, isMerchandiseAcquisition, merchandiseAcquisitionResult, isMerchandisePrepayment, merchandisePrepaymentResult, isBuyerDownpayment, buyerDownpaymentResult, isSupplierReceivableCollection, supplierReceivableOutstanding, isGuidedPurchase, outrightExpenseResult, requiresAccrualCompletion, isPriorMembershipCollection, membershipPostingResult, isMerchandiseSale, merchandiseSaleResult, showDeferPortionQuestion, notYetUsedAmount]);
+  }, [classificationPreview, transactionAmount, amount, date, debitCode, effectiveCreditCode, isExcessRefundStatus, membershipRefundResolutionResult, isMerchandiseAcquisition, merchandiseAcquisitionResult, isMerchandisePrepayment, merchandisePrepaymentResult, isBuyerDownpayment, buyerDownpaymentResult, isSupplierReceivableCollection, supplierReceivableOutstanding, isGuidedPurchase, outrightExpenseResult, requiresAccrualCompletion, isPriorMembershipCollection, membershipPostingResult, isMerchandiseSale, merchandiseSaleResult, showDeferPortionQuestion, notYetUsedAmount]);
 
   // The rule's own debit/credit pair is only the starting point — payment method,
   // advances, payables and receivables change which accounts really get posted,
@@ -1111,7 +1117,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       setErrorMessage('Please enter the accountable officer who collected the merchandise payments.');
       return;
     }
-    if (transactionAmount <= 0 && !(isMembershipRefundStatus && membershipRefundStatus === 'next')) {
+    if (transactionAmount <= 0 && !(isExcessRefundStatus && membershipRefundStatus === 'next')) {
       setErrorMessage('Please enter a valid amount greater than zero.');
       return;
     }
@@ -1193,7 +1199,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       setErrorMessage(membershipPostingResult.error);
       return;
     }
-    if (isMembershipRefundStatus && membershipRefundResolutionResult.error) {
+    if (isExcessRefundStatus && membershipRefundResolutionResult.error) {
       setErrorMessage(membershipRefundResolutionResult.error);
       return;
     }
@@ -1246,14 +1252,14 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     }
     const wasDraft = !!editingDraftId;
     try {
-      if (isMembershipRefundStatus && membershipRefundStatus === 'next') {
+      if (isExcessRefundStatus && membershipRefundStatus === 'next') {
         if (editingDraftId) {
           deleteDraftTransaction(editingDraftId);
           setEditingDraftId(null);
           appliedDraftIdRef.current = null;
         }
-        setSuccessMessage('No journal entry was posted. The membership-fee refund liability remains payable in the next reporting period.');
-        if (!savingDraft && wasDraft) onDraftPosted?.('The membership-fee refund liability remains payable in the next reporting period. No journal entry was posted.');
+        setSuccessMessage(`No journal entry was posted. The ${isMerchandiseRefundStatus ? 'merchandise' : 'membership-fee'} refund liability remains payable in the next reporting period.`);
+        if (!savingDraft && wasDraft) onDraftPosted?.(`The ${isMerchandiseRefundStatus ? 'merchandise' : 'membership-fee'} refund liability remains payable in the next reporting period. No journal entry was posted.`);
         return;
       }
       // Post Journal Entry
@@ -1279,10 +1285,10 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
           ? 'Collection of Receivables from Suppliers'
         : isMerchandiseSale
           ? `Sale of Merchandise - ${selectedMerchandiseBatch?.item || 'Merchandise'}`
-        : isMembershipRefundStatus
+        : isExcessRefundStatus
           ? membershipRefundStatus === 'current'
-            ? 'Refund of Excess Membership Fee Collection'
-            : 'Non-refundable Excess Membership Fee Collection'
+            ? `Refund of Excess ${isMerchandiseRefundStatus ? 'Merchandise' : 'Membership Fee'} Collection`
+            : `Non-refundable Excess ${isMerchandiseRefundStatus ? 'Merchandise' : 'Membership Fee'} Collection`
         : isCashSponsorshipDonation
           ? `${contributionPurpose === 'sponsorships' ? 'Sponsorship' : 'Donation'} Received`
           : (description || txName) + usePeriodNote;
@@ -2074,11 +2080,11 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               </div>
             )}
 
-            {isMembershipRefundStatus && (
+            {isExcessRefundStatus && (
               <div className="sm:col-span-2 space-y-4 rounded-xl border border-violet-200 bg-violet-50 p-4 dark:border-violet-500/20 dark:bg-violet-500/10">
                 <div>
-                  <h4 className="text-xs font-black text-violet-800 dark:text-violet-200">Excess Membership Fee Collection - Status</h4>
-                  <p className="mt-1 text-[10px] font-medium text-violet-700 dark:text-violet-300">Available Refund Liability - Membership Fees: {formatCurrency(membershipRefundLiabilityOutstanding)}</p>
+                  <h4 className="text-xs font-black text-violet-800 dark:text-violet-200">{isMerchandiseRefundStatus ? 'Excess Merchandise Collection - Status' : 'Excess Membership Fee Collection - Status'}</h4>
+                  <p className="mt-1 text-[10px] font-medium text-violet-700 dark:text-violet-300">Available Refund Liability - {excessCollectionLabel}: {formatCurrency(excessRefundLiabilityOutstanding)}</p>
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">How will the excess collection be handled?</label>
@@ -2094,7 +2100,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
                       <label className="block text-[10px] font-bold text-violet-900 dark:text-violet-200">Amount <span className="text-rose-600">*required</span></label>
-                      <div className="relative mt-1.5"><span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-violet-500">{settings.currencySymbol}</span><input type="number" min="0.01" step="0.01" max={membershipRefundLiabilityOutstanding || undefined} value={amount || ''} onChange={event => setAmount(Number(event.target.value))} placeholder="0.00" className="w-full rounded-lg border border-violet-200 bg-white p-2.5 pl-8 text-xs font-bold text-slate-900 outline-none dark:border-violet-500/30 dark:bg-slate-800 dark:text-slate-100" required /></div>
+                      <div className="relative mt-1.5"><span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-violet-500">{settings.currencySymbol}</span><input type="number" min="0.01" step="0.01" max={excessRefundLiabilityOutstanding || undefined} value={amount || ''} onChange={event => setAmount(Number(event.target.value))} placeholder="0.00" className="w-full rounded-lg border border-violet-200 bg-white p-2.5 pl-8 text-xs font-bold text-slate-900 outline-none dark:border-violet-500/30 dark:bg-slate-800 dark:text-slate-100" required /></div>
                     </div>
                     <div>
                       <label className="block text-[10px] font-bold text-violet-900 dark:text-violet-200">Date {membershipRefundStatus === 'current' ? <span className="text-rose-600">*required</span> : <span className="font-medium text-slate-400">(optional)</span>}</label>
@@ -2309,7 +2315,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               <p className="rounded-lg bg-slate-50 p-3 text-[10px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">Event: General and Administrative (automatic classification)</p>
             </div>}
 
-            {!isGuidedPurchase && !isMerchandiseAcquisition && !isMerchandiseSale && !isMerchandisePrepayment && !isBuyerDownpayment && !requiresAccrualCompletion && !isPriorMembershipCollection && !isMembershipRefundStatus && <div>
+            {!isGuidedPurchase && !isMerchandiseAcquisition && !isMerchandiseSale && !isMerchandisePrepayment && !isBuyerDownpayment && !requiresAccrualCompletion && !isPriorMembershipCollection && !isExcessRefundStatus && <div>
               <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">{isMerchandisePrepayment ? 'Payment' : isSupplierReceivableCollection ? 'Amount collected' : 'Amount'}</label>
               <div className="relative">
                 <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 dark:text-slate-400">{settings.currencySymbol}</span>
@@ -2347,7 +2353,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               />
             </div>}
 
-            {!isMerchandiseAcquisition && !isMerchandisePrepayment && !isBuyerDownpayment && !requiresAccrualCompletion && !isPriorMembershipCollection && !isMembershipRefundStatus && !isOutrightExpense && <div>
+            {!isMerchandiseAcquisition && !isMerchandisePrepayment && !isBuyerDownpayment && !requiresAccrualCompletion && !isPriorMembershipCollection && !isExcessRefundStatus && !isOutrightExpense && <div>
               <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">{isSupplierReceivableCollection ? 'Collection date' : 'Date'} <span className="normal-case font-medium text-slate-400">(optional; leave blank to use {defaultPostingDate})</span></label>
               <input
                 type="date"
@@ -2359,7 +2365,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
 
             {(reimbursementAmountError || cashLimitError) && <p role="alert" className="sm:col-span-2 text-[10px] font-bold text-rose-700 dark:text-rose-300">{reimbursementAmountError || cashLimitError}</p>}
 
-            {!requiresAccrualCompletion && !isPriorMembershipCollection && !isMembershipRefundStatus && (
+            {!requiresAccrualCompletion && !isPriorMembershipCollection && !isExcessRefundStatus && (
               <div className="sm:col-span-2 rounded-xl border border-dashed border-slate-300 bg-slate-50/70 p-3.5 dark:border-slate-700 dark:bg-slate-950/30">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>

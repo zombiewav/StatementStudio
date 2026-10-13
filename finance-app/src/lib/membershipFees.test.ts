@@ -72,3 +72,16 @@ describe('membership fee postings', () => {
     ]);
   });
 });
+
+describe('excess collection resolution for another refund liability', () => {
+  it('uses the supplied liability account and name', () => {
+    const lines = buildMembershipRefundResolution({ availableLiability: 300, status: 'current', amount: 100, date: '2026-10-12', liabilityCode: '2150', liabilityName: 'Refund Liability - Merchandise' });
+    expect(lines.map(line => line.accountCode)).toEqual(['2150', '1010']);
+    expect(() => buildMembershipRefundResolution({ availableLiability: 50, status: 'nonrefundable', amount: 100, liabilityCode: '2150', liabilityName: 'Refund Liability - Merchandise' })).toThrow('Amount cannot exceed Refund Liability - Merchandise.');
+  });
+
+  it('keeps the membership defaults', () => {
+    expect(buildMembershipRefundResolution({ availableLiability: 300, status: 'nonrefundable', amount: 100 }).map(line => line.accountCode)).toEqual(['2130', '4050']);
+    expect(() => buildMembershipRefundResolution({ availableLiability: 50, status: 'nonrefundable', amount: 100 })).toThrow('Amount cannot exceed Refund Liability - Membership Fees.');
+  });
+});

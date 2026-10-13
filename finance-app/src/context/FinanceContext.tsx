@@ -812,6 +812,7 @@ export const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   { keyword: 'other income', debitAccountCode: '1010', creditAccountCode: '4050', description: 'Other Income Received' },
   { keyword: 'interest', debitAccountCode: '1010', creditAccountCode: '4060', description: 'Interest Income Received' },
   { keyword: 'sale of merchandise', debitAccountCode: '1010', creditAccountCode: '4070', description: 'Sale of Merchandise' },
+  { keyword: 'excess merchandise collection', debitAccountCode: '2150', creditAccountCode: '1010', description: 'Excess Merchandise Collection - Status' },
   // Entrance ticket sales groups into Miscellaneous Income with printing-
   // services and rental income (see the dedicated section near the top of
   // this array, checked earlier) — see the comment there for why.

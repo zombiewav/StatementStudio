@@ -186,6 +186,60 @@ describe('resuming a saved draft', () => {
     });
   });
 
+  describe('Excess Merchandise Collection - Status', () => {
+    const TITLE = 'Excess Merchandise Collection - Status';
+    const seedLiability = () => { finance.addJournalEntry('2026-10-06', 'Excess collection', PROJECT, [{ accountCode: '1010', debit: 500, credit: 0 }, { accountCode: '2150', debit: 0, credit: 500 }]); };
+    const draft = (status: string, amount: number, date = '2026-10-12') => saveDraft(TITLE, 'merchandise',
+      [{ accountCode: '2150', debit: 100, credit: 0 }, { accountCode: '1010', debit: 0, credit: 100 }], {},
+      { amount, date, membershipRefundStatus: status });
+
+    it('refunds the excess in the current period: Dr Refund Liability - Merchandise / Cr Cash', () => {
+      start(seedLiability, true);
+      draft('current', 200);
+      expect(alerts()).toEqual([]);
+      expect(posted).toHaveLength(1);
+      expect(finance.accountBalances['2150']).toBe(300);
+      expect(finance.accountBalances['1010']).toBe(50000 + 500 - 200);
+    });
+
+    it('moves a non-refundable excess to Other Income', () => {
+      start(seedLiability, true);
+      draft('nonrefundable', 150);
+      expect(alerts()).toEqual([]);
+      expect(posted).toHaveLength(1);
+      expect(finance.accountBalances['2150']).toBe(350);
+      expect(finance.accountBalances['4050']).toBe(150);
+    });
+
+    it('posts nothing when the refund will be made next period and keeps the liability outstanding', () => {
+      start(seedLiability, true);
+      draft('next', 0, '');
+      expect(alerts()).toEqual([]);
+      expect(posted).toHaveLength(1);
+      expect(finance.draftTransactions).toHaveLength(0);
+      expect(finance.accountBalances['2150']).toBe(500);
+    });
+
+    it('cannot exceed the available Refund Liability - Merchandise', () => {
+      start(seedLiability, true);
+      draft('current', 600);
+      expect(alerts()).toEqual(['Amount cannot exceed Refund Liability - Merchandise.']);
+      expect(posted).toEqual([]);
+      expect(finance.draftTransactions).toHaveLength(1);
+    });
+
+    it('cannot refund more cash than the organization has', () => {
+      start(() => {
+        finance.addJournalEntry('2026-10-05', 'Spend down', PROJECT, [{ accountCode: '5030', debit: 49800, credit: 0 }, { accountCode: '1010', debit: 0, credit: 49800 }]);
+        finance.addJournalEntry('2026-10-06', 'Excess collection', PROJECT, [{ accountCode: '1010', debit: 100, credit: 0 }, { accountCode: '2150', debit: 0, credit: 100 }]);
+        finance.addJournalEntry('2026-10-07', 'Spend down more', PROJECT, [{ accountCode: '5030', debit: 250, credit: 0 }, { accountCode: '1010', debit: 0, credit: 250 }]);
+      }, true);
+      draft('current', 100);
+      expect(alerts()[0]).toMatch(/cannot exceed the available cash balance/);
+      expect(posted).toEqual([]);
+    });
+  });
+
   it('shows the total-cost reminder, as a noticeable callout, under Total cost of this batch', () => {
     start(() => undefined, false);
     saveDraft('Acquisition of Merchandise for Sale - Goods Received and On Hand', 'merchandise',
