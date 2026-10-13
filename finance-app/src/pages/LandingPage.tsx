@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { ArrowRight, TrendingUp, Zap } from 'lucide-react';
 import FeaturesSection from '../components/landing/FeaturesSection';
 import AnalyticsSection from '../components/landing/AnalyticsSection';
@@ -10,6 +10,12 @@ interface LandingPageProps {
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onEnterApp }) => {
+  // The landing page is always dark; make the page scrollbar and overscroll match it in light theme.
+  useEffect(() => {
+    document.documentElement.classList.add('landing-dark');
+    return () => document.documentElement.classList.remove('landing-dark');
+  }, []);
+
   const scrollToSection = (id: string) => {
     const element = document.getElementById(id);
     element?.scrollIntoView({ behavior: 'smooth' });

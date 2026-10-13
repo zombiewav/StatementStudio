@@ -183,6 +183,16 @@ button:is(.bg-blue-600, .bg-blue-700, .bg-blue-800, .bg-blue-900).text-white:is(
   --scrollbar-thumb-hover: #454c5a;
 }
 
+/* Landing page is always dark, whatever the saved theme is. */
+html.landing-dark {
+  color-scheme: dark;
+  --bg: #0b0d11;
+  --scrollbar: #3a3f4a;
+  --scrollbar-track: #0b0d11;
+  --scrollbar-thumb: #2e3440;
+  --scrollbar-thumb-hover: #454c5a;
+}
+
 /* color-scheme on an ancestor doesn't reliably reach a native <select>'s
    own dropdown popup in every browser — declaring it on the control itself
    is what actually makes the popup render dark instead of the OS default
