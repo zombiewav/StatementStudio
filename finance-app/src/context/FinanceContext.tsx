@@ -538,7 +538,7 @@ export const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   { keyword: 'income from projector rental', debitAccountCode: '1010', creditAccountCode: '4055', description: 'Income from Projector Rental' },
   { keyword: 'income from extension wire rental', debitAccountCode: '1010', creditAccountCode: '4055', description: 'Income from Extension Wire Rental' },
   { keyword: 'received from renting', debitAccountCode: '1010', creditAccountCode: '4055', description: 'Income from Renting Equipment/Supplies' },
-  { keyword: 'rental income', debitAccountCode: '1010', creditAccountCode: '4055', description: 'Rental Income Received' },
+  { keyword: 'rental income', debitAccountCode: '1010', creditAccountCode: '4055', description: 'Other Rental Income Received' },
 
   // --- Office Supplies ------------------------------------------------------
   { keyword: 'bond paper', debitAccountCode: '5040', creditAccountCode: '1010', description: 'Office Supplies Purchase' },
