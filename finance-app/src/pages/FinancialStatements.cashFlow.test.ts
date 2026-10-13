@@ -33,3 +33,24 @@ describe('Statement of Cash Flows tab', () => {
     expect(page).not.toContain('Financing Activities');
   });
 });
+
+describe('Financial Statements page', () => {
+  it('no longer offers Changes in Fund Balance, the restriction table, or the Prepared By / Approved By footer', () => {
+    act(() => { renderer = create(createElement(FinanceProvider, null, createElement(Probe))); });
+    const openTab = (label: string) => {
+      const tab = renderer.root.findAllByType('button').find(button => text(button).trim() === label);
+      expect(tab).toBeTruthy();
+      act(() => { tab!.props.onClick(); });
+      return text(renderer.root);
+    };
+    const tabs = ['Statement of Financial Position', 'Statement of Activities', 'Statement of Functional Expenses', 'Statement of Cash Flows'];
+    tabs.forEach(label => {
+      const page = openTab(label);
+      expect(page).not.toContain('Changes in Fund Balance');
+      expect(page).not.toContain('Prepared By');
+      expect(page).not.toContain('Approved By');
+      expect(page).not.toContain('by restriction');
+    });
+    expect(renderer.root.findAllByType('button').some(button => text(button).includes('Changes in Fund Balance'))).toBe(false);
+  });
+});

@@ -21,14 +21,13 @@ import { CLOSING_PAGES_ENABLED } from '../lib/featureFlags';
 import { periodForSemester } from '../lib/reportingPeriod';
 import { combineOpeningAndPeriodBalances } from '../lib/reportingPeriodBalances';
 
-type ActiveStatementTab = 'position' | 'activities' | 'functional' | 'cashflow' | 'changes';
+type ActiveStatementTab = 'position' | 'activities' | 'functional' | 'cashflow';
 
 const STATEMENT_OPTIONS: { id: ActiveStatementTab; label: string }[] = [
   { id: 'position', label: 'Financial Position' },
   { id: 'activities', label: 'Activities' },
   { id: 'functional', label: 'Functional Expenses' },
   { id: 'cashflow', label: 'Cash Flows' },
-  { id: 'changes', label: 'Changes in Fund Balance' },
 ];
 
 export function FinancialStatements(): React.ReactElement {
@@ -49,7 +48,6 @@ export function FinancialStatements(): React.ReactElement {
     activities: true,
     functional: true,
     cashflow: true,
-    changes: true,
   });
   const [startDate, setStartDate] = useState('2026-01-01');
   const [endDate, setEndDate] = useState('2026-12-31');
@@ -145,11 +143,6 @@ export function FinancialStatements(): React.ReactElement {
     const priorEntries = journalEntries.filter(je => !je.isDraft && je.date < startDate);
     return computeTypeTotals(computeAccountBalances(priorEntries, accounts), accounts)['Fund Balance'];
   }, [journalEntries, startDate, accounts]);
-  const beginningNetAssetsByRestriction = useMemo(() => {
-    const priorEntries = journalEntries.filter(je => !je.isDraft && je.date < startDate);
-    const balances = combineOpeningAndPeriodBalances(openingBalances, computeAccountBalances(priorEntries, accounts), accounts);
-    return { unrestricted: balances['3010'] || 0, temporary: balances['3020'] || 0, permanent: balances['3030'] || 0 };
-  }, [journalEntries, startDate, accounts, openingBalances]);
 
   const fNetIncome = filteredTotals.Revenue - filteredTotals.Expenses;
   const unclosedNetIncome = ledgerPeriodTotals.Revenue - ledgerPeriodTotals.Expenses;
@@ -188,36 +181,6 @@ export function FinancialStatements(): React.ReactElement {
     return other.length ? [...grouped, ['Other Liabilities', other] as const] : grouped;
   }, [accounts]);
 
-  const activitiesRestrictionColumns = useMemo(() => {
-    const temporarilyRestricted = performanceEntries
-      .filter(entry => !entry.settlesEntryId)
-      .flatMap(entry => entry.lines)
-      .filter(line => line.accountCode === '4035')
-      .reduce((sum, line) => sum + line.credit - line.debit, 0);
-    const restrictionReleases = performanceEntries
-      .filter(entry => Boolean(entry.settlesEntryId))
-      .flatMap(entry => entry.lines)
-      .filter(line => line.accountCode === '4035')
-      .reduce((sum, line) => sum + line.debit - line.credit, 0);
-    const permanentlyRestricted = performanceEntries
-      .flatMap(entry => entry.lines)
-      .filter(line => line.accountCode === '4036')
-      .reduce((sum, line) => sum + line.credit - line.debit, 0);
-    const totalRevenue = filteredTotals.Revenue;
-    // A release debits 4035 and credits 4030.  It belongs on its own row,
-    // rather than being counted once in revenue and again as a release.
-    const unrestrictedRevenue = totalRevenue - temporarilyRestricted - permanentlyRestricted;
-    return {
-      unrestrictedRevenue,
-      temporarilyRestricted,
-      permanentlyRestricted,
-      restrictionReleases,
-      unrestrictedChange: unrestrictedRevenue - filteredTotals.Expenses,
-      temporaryChange: temporarilyRestricted - restrictionReleases,
-      permanentChange: permanentlyRestricted,
-      beginning: beginningNetAssetsByRestriction,
-    };
-  }, [filteredTotals, performanceEntries, beginningNetAssetsByRestriction]);
 
   const saveFinalSnapshot = (action: 'Print' | 'Export PDF' | 'Export Excel') => {
     if (!settings.semester || !settings.reportingYear) return;
@@ -306,15 +269,6 @@ export function FinancialStatements(): React.ReactElement {
           csvContent += `"${acc.name}",${filteredBalances[acc.code] || 0}\n`;
         });
         csvContent += `"Total Revenue",${filteredTotals.Revenue}\n\n`;
-        csvContent += 'STATEMENT OF ACTIVITIES BY RESTRICTION\n';
-        csvContent += 'Category,Unrestricted,Temporarily Restricted,Permanently Restricted,Total\n';
-        csvContent += `"Revenues and gains",${activitiesRestrictionColumns.unrestrictedRevenue},${activitiesRestrictionColumns.temporarilyRestricted},${activitiesRestrictionColumns.permanentlyRestricted},${filteredTotals.Revenue}\n`;
-        csvContent += `"Net assets released from restrictions",${activitiesRestrictionColumns.restrictionReleases},${-activitiesRestrictionColumns.restrictionReleases},0,0\n`;
-        csvContent += `"Expenses and losses",${-filteredTotals.Expenses},0,0,${-filteredTotals.Expenses}\n`;
-        csvContent += `"Increase (decrease) in net assets",${activitiesRestrictionColumns.unrestrictedChange},${activitiesRestrictionColumns.temporaryChange},${activitiesRestrictionColumns.permanentChange},${fNetIncome}\n`;
-        csvContent += `"Net assets at beginning of year",${activitiesRestrictionColumns.beginning.unrestricted},${activitiesRestrictionColumns.beginning.temporary},${activitiesRestrictionColumns.beginning.permanent},${activitiesRestrictionColumns.beginning.unrestricted + activitiesRestrictionColumns.beginning.temporary + activitiesRestrictionColumns.beginning.permanent}\n`;
-        csvContent += `"Net assets at end of year",${activitiesRestrictionColumns.beginning.unrestricted + activitiesRestrictionColumns.unrestrictedChange},${activitiesRestrictionColumns.beginning.temporary + activitiesRestrictionColumns.temporaryChange},${activitiesRestrictionColumns.beginning.permanent + activitiesRestrictionColumns.permanentChange},${activitiesRestrictionColumns.beginning.unrestricted + activitiesRestrictionColumns.unrestrictedChange + activitiesRestrictionColumns.beginning.temporary + activitiesRestrictionColumns.temporaryChange + activitiesRestrictionColumns.beginning.permanent + activitiesRestrictionColumns.permanentChange}\n\n`;
-
         csvContent += "GENERAL & ADMINISTRATIVE EXPENSES\n";
         accounts.filter(a => a.type === 'Expenses').forEach(acc => {
           csvContent += `"${acc.name}",${activitiesExpenseBreakdown.generalAdminByAccount[acc.code] || 0}\n`;
@@ -360,10 +314,6 @@ export function FinancialStatements(): React.ReactElement {
         csvContent += `"Net increase (decrease) in cash and cash equivalents",${cashFlowDetails.netChange}\n`;
         csvContent += `"Cash and cash equivalents at beginning of year",${cashFlowDetails.beginningCash}\n`;
         csvContent += `"Cash and cash equivalents at end of year",${cashFlowDetails.endingCash}\n`;
-      } else if (activeTab === 'changes') {
-        csvContent += `"Beginning Fund Balance",${beginningFundBalance}\n`;
-        csvContent += `"Net Surplus / (Deficit)",${fNetIncome}\n`;
-        csvContent += `"Ending Fund Balance",${fEndingFundBalance}\n`;
       }
 
       // Trigger download
@@ -492,7 +442,7 @@ export function FinancialStatements(): React.ReactElement {
               <p className="text-[10px] font-bold text-slate-700 dark:text-slate-200">Custom FS set</p>
               <button
                 type="button"
-                onClick={() => setSelectedStatements({ position: true, activities: true, functional: true, cashflow: true, changes: true })}
+                onClick={() => setSelectedStatements({ position: true, activities: true, functional: true, cashflow: true })}
                 className="text-[9px] font-bold text-blue-700 hover:underline dark:text-blue-300"
               >
                 Select all
@@ -563,17 +513,6 @@ export function FinancialStatements(): React.ReactElement {
             <Eye className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 text-blue-600 dark:text-blue-400 transition-opacity" />
           </button>
 
-          <button
-            onClick={() => setActiveTab('changes')}
-            disabled={!selectedStatements.changes}
-            className={`w-full text-left px-3.5 py-2.5 rounded-xl font-semibold text-xs transition-colors flex items-center justify-between group ${
-              !selectedStatements.changes ? 'hidden' : activeTab === 'changes' ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-            }`}
-            type="button"
-          >
-            <span>Changes in Fund Balance</span>
-            <Eye className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 text-blue-600 dark:text-blue-400 transition-opacity" />
-          </button>
         </div>
 
         {/* Report Canvas - Right */}
@@ -614,7 +553,6 @@ export function FinancialStatements(): React.ReactElement {
               {activeTab === 'activities' && 'Statement of Activities (Income Statement)'}
               {activeTab === 'functional' && 'Statement of Functional Expenses'}
               {activeTab === 'cashflow' && 'Statement of Cash Flows (Direct Method)'}
-              {activeTab === 'changes' && 'Statement of Changes in Fund Balance'}
             </h2>
             <p className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold mt-1">
               {activeTab === 'position' 
@@ -732,22 +670,6 @@ export function FinancialStatements(): React.ReactElement {
                     <span className="uppercase text-[10px] tracking-wider">Total Revenue & Inflows</span>
                     <span className="border-b border-slate-200 dark:border-slate-700">{formatCurrency(filteredTotals.Revenue)}</span>
                   </div>
-                </div>
-
-                <div className="overflow-x-auto border border-slate-200 dark:border-slate-700 rounded-lg">
-                  <table className="min-w-full text-[10px]">
-                    <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200"><tr><th className="px-3 py-2 text-left font-bold">Statement of Activities by restriction</th><th className="px-3 py-2 text-right font-bold">Unrestricted</th><th className="px-3 py-2 text-right font-bold">Temporarily Restricted</th><th className="px-3 py-2 text-right font-bold">Permanently Restricted</th><th className="px-3 py-2 text-right font-bold">Total</th></tr></thead>
-                    <tbody>
-                      <tr className="border-t border-slate-100 dark:border-slate-800"><th className="px-3 py-2 text-left font-medium">Revenues and gains</th><td className="px-3 py-2 text-right">{formatCurrency(activitiesRestrictionColumns.unrestrictedRevenue)}</td><td className="px-3 py-2 text-right">{formatCurrency(activitiesRestrictionColumns.temporarilyRestricted)}</td><td className="px-3 py-2 text-right">{formatCurrency(activitiesRestrictionColumns.permanentlyRestricted)}</td><td className="px-3 py-2 text-right font-semibold">{formatCurrency(filteredTotals.Revenue)}</td></tr>
-                      <tr className="border-t border-slate-100 dark:border-slate-800"><th className="px-3 py-2 text-left font-medium">Net assets released from restrictions</th><td className="px-3 py-2 text-right">{formatCurrency(activitiesRestrictionColumns.restrictionReleases)}</td><td className="px-3 py-2 text-right">{formatCurrency(-activitiesRestrictionColumns.restrictionReleases)}</td><td className="px-3 py-2 text-right">{formatCurrency(0)}</td><td className="px-3 py-2 text-right font-semibold">{formatCurrency(0)}</td></tr>
-                      <tr className="border-t border-slate-100 dark:border-slate-800"><th className="px-3 py-2 text-left font-medium">Expenses and losses</th><td className="px-3 py-2 text-right">{formatCurrency(-filteredTotals.Expenses)}</td><td className="px-3 py-2 text-right">{formatCurrency(0)}</td><td className="px-3 py-2 text-right">{formatCurrency(0)}</td><td className="px-3 py-2 text-right font-semibold">{formatCurrency(-filteredTotals.Expenses)}</td></tr>
-                    </tbody>
-                    <tfoot className="border-t-2 border-slate-300 bg-slate-50 font-bold dark:border-slate-600 dark:bg-slate-800">
-                      <tr><th className="px-3 py-2 text-left">Increase (decrease) in net assets</th><td className="px-3 py-2 text-right">{formatCurrency(activitiesRestrictionColumns.unrestrictedChange)}</td><td className="px-3 py-2 text-right">{formatCurrency(activitiesRestrictionColumns.temporaryChange)}</td><td className="px-3 py-2 text-right">{formatCurrency(activitiesRestrictionColumns.permanentChange)}</td><td className="px-3 py-2 text-right">{formatCurrency(fNetIncome)}</td></tr>
-                      <tr><th className="px-3 py-2 text-left">Net assets at beginning of year</th><td className="px-3 py-2 text-right">{formatCurrency(activitiesRestrictionColumns.beginning.unrestricted)}</td><td className="px-3 py-2 text-right">{formatCurrency(activitiesRestrictionColumns.beginning.temporary)}</td><td className="px-3 py-2 text-right">{formatCurrency(activitiesRestrictionColumns.beginning.permanent)}</td><td className="px-3 py-2 text-right">{formatCurrency(activitiesRestrictionColumns.beginning.unrestricted + activitiesRestrictionColumns.beginning.temporary + activitiesRestrictionColumns.beginning.permanent)}</td></tr>
-                      <tr><th className="px-3 py-2 text-left">Net assets at end of year</th><td className="px-3 py-2 text-right">{formatCurrency(activitiesRestrictionColumns.beginning.unrestricted + activitiesRestrictionColumns.unrestrictedChange)}</td><td className="px-3 py-2 text-right">{formatCurrency(activitiesRestrictionColumns.beginning.temporary + activitiesRestrictionColumns.temporaryChange)}</td><td className="px-3 py-2 text-right">{formatCurrency(activitiesRestrictionColumns.beginning.permanent + activitiesRestrictionColumns.permanentChange)}</td><td className="px-3 py-2 text-right">{formatCurrency(activitiesRestrictionColumns.beginning.unrestricted + activitiesRestrictionColumns.unrestrictedChange + activitiesRestrictionColumns.beginning.temporary + activitiesRestrictionColumns.temporaryChange + activitiesRestrictionColumns.beginning.permanent + activitiesRestrictionColumns.permanentChange)}</td></tr>
-                    </tfoot>
-                  </table>
                 </div>
 
                 {/* Program Services is deliberately a single linked amount: its detail belongs in the Statement of Functional Expenses. */}
@@ -918,43 +840,6 @@ export function FinancialStatements(): React.ReactElement {
                 </div>
               </div>
             )}
-
-            {/* 4. Statement of Changes in Fund Balance */}
-            {activeTab === 'changes' && (
-              <div className="space-y-6">
-                <div className="space-y-3 px-4">
-                  <div className="flex justify-between py-1.5 border-b border-slate-200 dark:border-slate-700 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                    <span>General Unrestricted Fund, Starting Balance</span>
-                    <span className="font-bold">{formatCurrency(beginningFundBalance)}</span>
-                  </div>
-                  <div className="flex justify-between py-1.5 border-b border-slate-200 dark:border-slate-700 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                    <span>Add: Net Surplus (Deficit) for the period</span>
-                    <span className={`font-semibold ${fNetIncome >= 0 ? 'text-slate-900 dark:text-slate-100' : 'text-rose-600 dark:text-rose-400'}`}>{formatCurrency(fNetIncome)}</span>
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t-2 border-slate-200 dark:border-slate-700">
-                  <div className="flex justify-between font-black text-sm px-2 text-slate-900 dark:text-slate-100">
-                    <span className="uppercase tracking-wider text-[10px]">Fund Balance, End of Period</span>
-                    <span className="border-b-4 border-double border-slate-200 dark:border-slate-700">{formatCurrency(fEndingFundBalance)}</span>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Signatures placeholder */}
-          <div className="mt-16 pt-8 border-t border-dashed border-slate-200 dark:border-slate-700 grid grid-cols-2 text-center text-[10px] text-slate-500 dark:text-slate-400 font-sans font-bold">
-            <div>
-              <p className="border-b border-slate-200 dark:border-slate-700 mx-auto w-32 pb-1.5 mb-1"></p>
-              <p className="uppercase text-slate-900 dark:text-slate-100">Prepared By</p>
-              <p className="text-[9px] text-slate-500 dark:text-slate-400 font-medium">Finance Controller / Accountant</p>
-            </div>
-            <div>
-              <p className="border-b border-slate-200 dark:border-slate-700 mx-auto w-32 pb-1.5 mb-1"></p>
-              <p className="uppercase text-slate-900 dark:text-slate-100">Approved By</p>
-              <p className="text-[9px] text-slate-500 dark:text-slate-400 font-medium">Chief Executive / Auditor</p>
-            </div>
           </div>
             </>
           )}
