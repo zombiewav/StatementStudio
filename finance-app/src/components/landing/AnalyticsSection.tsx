@@ -36,7 +36,7 @@ const AnalyticsSection = () => {
       description: 'Last 30 days',
     },
     {
-      icon: <PieChart className="w-6 h-6 text-emerald-400" />,
+      icon: <PieChart className="w-6 h-6 text-blue-400" />,
       title: 'Budget Efficiency',
       metric: '87%',
       trend: '+4.2%',
@@ -192,7 +192,7 @@ const AnalyticsSection = () => {
         >
           {/* Left Side - Large Dashboard Card */}
           <div className="lg:col-span-2">
-            <div className="rounded-3xl bg-slate-900/80 border border-slate-800 backdrop-blur-sm p-8 hover:border-blue-500/40 transition-all duration-300 hover:shadow-[0_0_40px_rgba(37,99,235,0.15)]">
+            <div className="rounded-3xl bg-slate-900/80 border border-slate-800 backdrop-blur-sm p-8 hover:border-blue-500/40 transition-all duration-300">
               {/* Card Header */}
               <div className="flex items-center justify-between mb-8">
                 <div>
@@ -224,27 +224,13 @@ const AnalyticsSection = () => {
                   aria-label="Revenue and expenses line chart"
                 >
                   <defs>
-                    <filter id="revenueGlow" x="-40%" y="-40%" width="180%" height="180%">
-                      <feGaussianBlur stdDeviation="4" result="blur" />
-                      <feMerge>
-                        <feMergeNode in="blur" />
-                        <feMergeNode in="SourceGraphic" />
-                      </feMerge>
-                    </filter>
-                    <filter id="expenseGlow" x="-40%" y="-40%" width="180%" height="180%">
-                      <feGaussianBlur stdDeviation="4" result="blur" />
-                      <feMerge>
-                        <feMergeNode in="blur" />
-                        <feMergeNode in="SourceGraphic" />
-                      </feMerge>
-                    </filter>
                     <linearGradient id="chartGlow" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor="#1d4ed8" stopOpacity="0.22" />
-                      <stop offset="100%" stopColor="#0f172a" stopOpacity="0" />
+                      <stop offset="0%" stopColor="#8b6a2e" stopOpacity="0.22" />
+                      <stop offset="100%" stopColor="#12151b" stopOpacity="0" />
                     </linearGradient>
                     <linearGradient id="revenueAreaFill" x1="0%" y1="0%" x2="0%" y2="100%">
-                      <stop offset="0%" stopColor="#3B82F6" stopOpacity="0.3" />
-                      <stop offset="100%" stopColor="#3B82F6" stopOpacity="0" />
+                      <stop offset="0%" stopColor="#d4b47a" stopOpacity="0.3" />
+                      <stop offset="100%" stopColor="#d4b47a" stopOpacity="0" />
                     </linearGradient>
                   </defs>
 
@@ -304,7 +290,7 @@ const AnalyticsSection = () => {
                       y1={chartPadding.top}
                       x2={hoveredX}
                       y2={chartPadding.top + innerHeight}
-                      stroke="#93c5fd"
+                      stroke="#e6d3a3"
                       strokeOpacity="0.45"
                       strokeWidth="1.5"
                       strokeDasharray="4 6"
@@ -313,11 +299,10 @@ const AnalyticsSection = () => {
 
                   <path
                     d={expensePath}
-                    stroke="#F97316"
+                    stroke="#7d818b"
                     strokeWidth="4"
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    filter="url(#expenseGlow)"
                     className={`transition-opacity duration-700 ${
                       isVisible ? 'opacity-100' : 'opacity-0'
                     }`}
@@ -331,11 +316,10 @@ const AnalyticsSection = () => {
                   />
                   <path
                     d={revenuePath}
-                    stroke="#3B82F6"
+                    stroke="#d4b47a"
                     strokeWidth="4"
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    filter="url(#revenueGlow)"
                     className={`transition-opacity duration-700 ${
                       isVisible ? 'opacity-100' : 'opacity-0'
                     }`}
@@ -349,13 +333,12 @@ const AnalyticsSection = () => {
                   />
                   <path
                     d={revenuePath}
-                    stroke="#93c5fd"
+                    stroke="#e6d3a3"
                     strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     fill="none"
                     strokeDasharray="8 34"
-                    filter="url(#revenueGlow)"
                     opacity={isVisible ? 0.95 : 0}
                     style={{
                       animation: 'linePulse 1.7s linear infinite',
@@ -391,15 +374,14 @@ const AnalyticsSection = () => {
                         cx={point.x}
                         cy={point.y}
                         r="9"
-                        fill="#F97316"
+                        fill="#7d818b"
                         fillOpacity="0.16"
                       />
                       <circle
                         cx={point.x}
                         cy={point.y}
                         r="5"
-                        fill="#F97316"
-                        filter="url(#expenseGlow)"
+                        fill="#7d818b"
                         className="transition-all duration-300 group-hover:scale-125"
                         style={{
                           transformBox: 'fill-box',
@@ -424,15 +406,14 @@ const AnalyticsSection = () => {
                         cx={point.x}
                         cy={point.y}
                         r="10"
-                        fill="#3B82F6"
+                        fill="#d4b47a"
                         fillOpacity="0.18"
                       />
                       <circle
                         cx={point.x}
                         cy={point.y}
                         r="5"
-                        fill="#3B82F6"
-                        filter="url(#revenueGlow)"
+                        fill="#d4b47a"
                         className="transition-all duration-300 group-hover:scale-125"
                         style={{
                           transformBox: 'fill-box',
@@ -445,7 +426,7 @@ const AnalyticsSection = () => {
 
                 {hoveredPoint && hoveredX !== null && (
                   <div
-                    className="pointer-events-none absolute z-20 rounded-2xl border border-blue-500/20 bg-slate-950/95 px-3 py-2 text-xs shadow-2xl shadow-blue-950/30 transition-all duration-200"
+                    className="pointer-events-none absolute z-20 rounded-2xl border border-slate-700 bg-slate-950/95 px-3 py-2 text-xs shadow-xl transition-all duration-200"
                     style={{
                       left: `clamp(1rem, calc(${((hoveredX / chartWidth) * 100).toFixed(
                         2
@@ -462,21 +443,21 @@ const AnalyticsSection = () => {
 
               {/* Analytics Badges */}
               <div className="flex flex-wrap gap-3 pt-6 border-t border-slate-800/50">
-                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                <div className="flex items-center gap-2 px-3 py-2 rounded-full bg-transparent border border-slate-700">
                   <TrendingUp className="w-4 h-4 text-blue-400" />
-                  <span className="text-xs text-blue-300">
+                  <span className="text-xs text-slate-300">
                     Revenue Up 35%
                   </span>
                 </div>
-                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-green-500/10 border border-green-500/20">
-                  <ArrowUp className="w-4 h-4 text-green-400" />
-                  <span className="text-xs text-green-300">
+                <div className="flex items-center gap-2 px-3 py-2 rounded-full bg-transparent border border-slate-700">
+                  <ArrowUp className="w-4 h-4 text-blue-400" />
+                  <span className="text-xs text-slate-300">
                     Margins Healthy
                   </span>
                 </div>
-                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
-                  <Activity className="w-4 h-4 text-amber-400" />
-                  <span className="text-xs text-amber-300">
+                <div className="flex items-center gap-2 px-3 py-2 rounded-full bg-transparent border border-slate-700">
+                  <Activity className="w-4 h-4 text-blue-400" />
+                  <span className="text-xs text-slate-300">
                     Cash Positive
                   </span>
                 </div>
@@ -489,7 +470,7 @@ const AnalyticsSection = () => {
             {insights.map((insight, index) => (
               <div
                 key={index}
-                className="rounded-2xl bg-slate-900/80 border border-slate-800 p-6 hover:border-blue-500/40 transition-all duration-300 hover:shadow-[0_0_30px_rgba(37,99,235,0.1)]"
+                className="rounded-2xl bg-slate-900/80 border border-slate-800 p-6 hover:border-blue-500/40 transition-all duration-300"
               >
                 {/* Card Header */}
                 <div className="flex items-start justify-between mb-4">
@@ -504,7 +485,7 @@ const AnalyticsSection = () => {
                       <div
                         className={`flex items-center gap-1 text-sm ${
                           insight.trendUp
-                            ? 'text-green-400'
+                            ? 'text-blue-400'
                             : 'text-red-400'
                         }`}
                       >

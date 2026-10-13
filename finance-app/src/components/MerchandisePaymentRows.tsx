@@ -23,7 +23,7 @@ export function MerchandisePaymentRows({ label, rows, onChange, currencySymbol, 
   const total = rows.reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 payment-group">
       <p className="text-[10px] font-black uppercase tracking-wide text-indigo-900 dark:text-indigo-200">{label}</p>
       <DatedAmountRows
         label="Payment on the Date Merchandise is Received On Hand"

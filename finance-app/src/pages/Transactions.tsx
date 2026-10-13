@@ -1833,7 +1833,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                 )}
 
                 {(merchandisePaymentMethod === 'organization-advance' || merchandisePaymentMethod === 'advance-and-personal') && (
-                  <div className="space-y-2">
+                  <div className="space-y-2 payment-group">
                     <MerchandisePaymentRows label={`Payments using ${counterpartyName.trim() || 'the selected officer'}'s cash advance (available: ${formatCurrency(selectedOfficerAdvanceBalance)})`} rows={merchandiseAdvancePayments} onChange={setMerchandiseAdvancePayments} currencySymbol={settings.currencySymbol} addLabel="Add advance payment" />
                     {(merchandisePaymentMethod === 'organization-advance' || acquisitionNoAdvanceRecord) && <OfficerAdvanceSummary rows={officerAdvanceSummary} formatCurrency={formatCurrency} />}
                     {acquisitionNoAdvanceRecord && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[10px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">{ADVANCE_NO_RECORD_CAUTION}</p>}
@@ -1842,7 +1842,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                 )}
 
                 {(merchandisePaymentMethod === 'officer-personal' || merchandisePaymentMethod === 'advance-and-personal') && (
-                  <div className="space-y-2">
+                  <div className="space-y-2 payment-group">
                     <MerchandisePaymentRows label="Payments made personally by the officer" rows={merchandiseOfficerPayments} onChange={setMerchandiseOfficerPayments} currencySymbol={settings.currencySymbol} addLabel="Add officer payment" />
                     {(merchandisePaymentMethod === 'officer-personal' || merchandiseOfficerPaymentTotal > 0) && <p className="rounded-lg bg-white/80 p-3 text-[10px] font-semibold text-rose-700 dark:bg-slate-900/60 dark:text-rose-300">{OFFICER_REIMBURSEMENT_NOTE}</p>}
                   </div>

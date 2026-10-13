@@ -426,3 +426,9 @@ button:not(:disabled):active {
     transition-duration: 1ms !important;
   }
 }
+
+/* A hairline divider between stacked payment groups (organization / advance / personal). */
+.payment-group + .payment-group {
+  border-top: 1px solid var(--border-strong);
+  padding-top: 1rem;
+}

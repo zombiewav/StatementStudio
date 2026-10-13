@@ -4,16 +4,16 @@ interface LogoMarkProps {
   className?: string;
 }
 
-/** The ledger mark: a statement page with three balanced lines. Uses currentColor. */
+/** The StatementStudio mark: an "S" inside a rounded square. Uses currentColor. */
 export function LogoMark({ className = 'h-8 w-8' }: LogoMarkProps): React.ReactElement {
   return (
     <svg className={className} viewBox="0 0 40 40" fill="none" aria-hidden="true">
       <rect x="2" y="2" width="36" height="36" rx="9" stroke="currentColor" strokeWidth="2" />
-      <g stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-        <path d="M11 14h18" />
-        <path d="M11 20h12" />
-        <path d="M11 26h16" />
-      </g>
+      <path
+        transform="translate(20 20) scale(0.6) translate(-33 -33.25)"
+        d="M42.8 20.6c-2.4-1.7-5.5-2.6-9.1-2.6-7.1 0-11.7 3.5-11.7 8.9 0 4.9 3.4 7.1 10.8 8.7 4.5 1 5.8 1.8 5.8 3.6 0 1.9-1.8 3-4.9 3-3.8 0-6.7-1.3-9.5-3.9l-4.2 5.1c3.4 3.4 8.1 5.1 13.5 5.1 7.7 0 12.5-3.7 12.5-9.7 0-5.4-3.2-7.8-10.6-9.4-4.7-1-6-1.7-6-3.4 0-1.6 1.5-2.6 4.2-2.6 3 0 5.8 1.1 8.4 3.2l3.8-5.4Z"
+        fill="currentColor"
+      />
     </svg>
   );
 }
