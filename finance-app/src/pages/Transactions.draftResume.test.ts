@@ -106,6 +106,18 @@ describe('resuming a saved draft', () => {
     expect(finance.accountBalances['1010']).toBe(50000 - 500 - 500);
   });
 
+  it('no longer offers the Customer pre-orders / actual sales switch in Merchandise Transactions', () => {
+    start(() => undefined, false);
+    saveDraft('Acquisition of Merchandise for Sale - Goods Received and On Hand', 'merchandise',
+      [{ accountCode: '1700', debit: 1000, credit: 0 }, { accountCode: '1010', debit: 0, credit: 1000 }],
+      { merchandiseItem: 'Pins', merchandiseBatch: 'Batch 1' },
+      { amount: 1000, date: '2026-10-12', merchandiseItem: 'Pins', merchandiseBatch: 'Batch 1', merchandisePaymentMethod: 'organization-funds',
+        merchandiseOrganizationPayments: [{ id: 'o1', date: '2026-10-12', amount: '1000' }] });
+    const buttons = renderer.root.findAllByType('button').map(button => text(button));
+    expect(buttons.some(label => label.includes('Customer pre-orders'))).toBe(false);
+    expect(buttons.some(label => label.includes('Purchases / ordinary sales'))).toBe(false);
+  });
+
   it('shows the total-cost reminder, as a noticeable callout, under Total cost of this batch', () => {
     start(() => undefined, false);
     saveDraft('Acquisition of Merchandise for Sale - Goods Received and On Hand', 'merchandise',

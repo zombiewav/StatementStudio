@@ -3,7 +3,6 @@ import { act, create, ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FinanceProvider, useFinance } from '../context/FinanceContext';
 import { Transactions } from './Transactions';
-import { CUSTOMER_ORDER_DRAFT } from '../components/CustomerOrderEntry';
 
 vi.mock('../hooks/useWorkspaceSync', () => ({ useWorkspaceSync: () => ({ workspaceStatus: 'ready' }) }));
 vi.mock('canvas-confetti', () => ({ default: () => undefined }));
@@ -74,16 +73,5 @@ describe('Review "Post" for drafts that only store form state', () => {
     expect(finance.draftTransactions).toHaveLength(0);
     expect(posted).toHaveLength(1);
     expect(finance.activityFeeRecords.map(record => record.eventName)).toEqual(['Fair']);
-  });
-
-  it('posts a Customer Order draft and removes it', () => {
-    start();
-    saveDraft(CUSTOMER_ORDER_DRAFT, 'Customer pre-order: Pins — B1', {
-      mode: 'new', orderId: '', item: 'Pins', other: '', batch: 'B1', kind: 'service', total: '1000', estimatedCost: '0', date: '2026-10-12', sales: '', cost: '', quantity: '', batchEntryId: '', refund: '',
-      collections: [{ id: 'c1', date: '2026-10-12', amount: '500' }],
-    });
-    expect(finance.draftTransactions).toHaveLength(0);
-    expect(posted).toHaveLength(1);
-    expect(finance.journalEntries.some(entry => entry.description.startsWith('Customer pre-order: Pins'))).toBe(true);
   });
 });

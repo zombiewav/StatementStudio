@@ -3,7 +3,7 @@ import { ClipboardCheck, CheckCircle2, AlertCircle, Trash2, Undo2, Pencil, X } f
 import { useFinance } from '../context/FinanceContext';
 import { JournalEntry } from '../types';
 import { ReceiptAttachments } from '../components/ReceiptAttachments';
-import { CustomerOrderFollowUp } from '../components/CustomerOrderEntry';
+import { CustomerOrderFollowUp, CUSTOMER_ORDER_DRAFT } from '../components/CustomerOrderEntry';
 import { ActivityFeeReview } from '../components/ActivityFeeReview';
 import { isActivityFeeIncomplete } from '../lib/activityFees';
 import {
@@ -368,6 +368,9 @@ export function Review({ onContinueDraft, onPostDraft, notice, onNoticeShown }: 
                   <p className="mt-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">Saved {new Date(draft.savedAt).toLocaleString()}</p>
                 </div>
                 <div className="flex shrink-0 gap-2">
+                  {draft.category === CUSTOMER_ORDER_DRAFT ? (
+                    <p className="max-w-[16rem] self-center text-[10px] font-semibold text-amber-800 dark:text-amber-300">This pre-order form has been retired. Delete this draft.</p>
+                  ) : (<>
                   <button
                     type="button"
                     onClick={() => onContinueDraft(draft.id)}
@@ -383,6 +386,7 @@ export function Review({ onContinueDraft, onPostDraft, notice, onNoticeShown }: 
                   >
                     Post
                   </button>
+                  </>)}
                   <button
                     type="button"
                     onClick={() => handleDeleteDraft(draft.id, draft.label)}
