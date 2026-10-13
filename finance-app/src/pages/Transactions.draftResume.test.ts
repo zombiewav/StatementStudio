@@ -118,6 +118,34 @@ describe('resuming a saved draft', () => {
     expect(buttons.some(label => label.includes('Purchases / ordinary sales'))).toBe(false);
   });
 
+  it('posts a buyer downpayment as Dr Cash / Cr Unearned Merchandise Revenue, one entry per date', () => {
+    start(() => undefined, true);
+    saveDraft('Downpayment by Buyer for Pre-Ordered Merchandise', 'merchandise',
+      [{ accountCode: '1010', debit: 600, credit: 0 }, { accountCode: '2140', debit: 0, credit: 600 }], { merchandiseItem: 'Pins', merchandiseBatch: 'Batch 1' },
+      { amount: 850, date: '', merchandiseItem: 'Pins', merchandiseBatch: 'Batch 1',
+        buyerInitialDownpayment: [{ id: 'i1', date: '2026-10-05', amount: '500' }],
+        buyerSubsequentDownpayments: [{ id: 's1', date: '', amount: '100' }, { id: 's2', date: '2026-10-20', amount: '250' }] });
+    expect(alerts()).toEqual([]);
+    expect(posted).toHaveLength(1);
+    expect(finance.draftTransactions).toHaveLength(0);
+    expect(finance.accountBalances['2140']).toBe(850);
+    expect(finance.accountBalances['1010']).toBe(50000 + 850);
+    const entries = finance.journalEntries.filter(entry => entry.description.startsWith('Downpayment by Buyer'));
+    expect(entries.map(entry => entry.date).sort()).toEqual(['2026-10-05', '2026-10-20']);
+    expect(entries.map(entry => [entry.transactionDetails?.merchandiseBuyerDownpayment, entry.transactionDetails?.merchandiseItem, entry.transactionDetails?.merchandiseBatch])).toEqual([[true, 'Pins', 'Batch 1'], [true, 'Pins', 'Batch 1']]);
+  });
+
+  it('asks for the initial downpayment date before posting a buyer downpayment', () => {
+    start(() => undefined, true);
+    saveDraft('Downpayment by Buyer for Pre-Ordered Merchandise', 'merchandise',
+      [{ accountCode: '1010', debit: 500, credit: 0 }, { accountCode: '2140', debit: 0, credit: 500 }], { merchandiseItem: 'Pins', merchandiseBatch: 'Batch 1' },
+      { amount: 500, date: '', merchandiseItem: 'Pins', merchandiseBatch: 'Batch 1',
+        buyerInitialDownpayment: [{ id: 'i1', date: '', amount: '500' }], buyerSubsequentDownpayments: [] });
+    expect(alerts()).toEqual(['Enter the date of the initial downpayment.']);
+    expect(posted).toEqual([]);
+    expect(finance.draftTransactions).toHaveLength(1);
+  });
+
   it('shows the total-cost reminder, as a noticeable callout, under Total cost of this batch', () => {
     start(() => undefined, false);
     saveDraft('Acquisition of Merchandise for Sale - Goods Received and On Hand', 'merchandise',

@@ -51,7 +51,7 @@ const isRetiredAccountRow = (account: Account) =>
 // that an older workspace never had.
 export function restoreSavedAccounts(saved: Account[]): Account[] {
   const active = saved.filter(account => !isRetiredAccountRow(account)).map(account => {
-    const current = INITIAL_ACCOUNTS.find(defaultAccount => defaultAccount.code === account.code && ['1270', '1360', '2010', '2020', '5080', '5180', '5200'].includes(account.code));
+    const current = INITIAL_ACCOUNTS.find(defaultAccount => defaultAccount.code === account.code && ['1270', '1360', '2010', '2020', '2140', '2150', '5080', '5180', '5200'].includes(account.code));
     return current ? { ...account, name: current.name, description: current.description } : account;
   });
   return [...active, ...INITIAL_ACCOUNTS.filter(a => BACKFILLED_DEFAULT_ACCOUNT_CODES.has(a.code) && !active.some(existing => existing.code === a.code))];
@@ -265,8 +265,8 @@ export const INITIAL_ACCOUNTS: Account[] = [
   { code: '2120', name: 'Refund Liability - Activity Fees', type: 'Liabilities', normalBalance: 'Credit', description: 'Activity fee collections received in excess of the required amount and still refundable', isActive: true },
   { code: '2130', name: 'Refund Liability - Membership Fees', type: 'Liabilities', normalBalance: 'Credit', description: 'Membership fee collections received in excess of the required amount and still refundable', isActive: true },
   { code: '2200', name: 'Loans & Financial Obligations', type: 'Liabilities', normalBalance: 'Credit', description: 'Loans and other financial obligations payable within a year', isActive: true },
-  { code: '2140', name: 'Unearned Merchandise / Service Revenue', type: 'Liabilities', normalBalance: 'Credit', description: 'Customer advances for undelivered merchandise or services', isActive: true },
-  { code: '2150', name: 'Due to Customers', type: 'Liabilities', normalBalance: 'Credit', description: 'Refundable customer payments exceeding the full order price', isActive: true },
+  { code: '2140', name: 'Unearned Merchandise Revenue', type: 'Liabilities', normalBalance: 'Credit', description: 'Buyer downpayments received for pre-ordered merchandise, held until the merchandise is sold', isActive: true },
+  { code: '2150', name: 'Refund Liability - Merchandise', type: 'Liabilities', normalBalance: 'Credit', description: 'Buyer collections for merchandise in excess of the sales and still refundable', isActive: true },
   { code: '2300', name: 'Accrued Liabilities', type: 'Liabilities', normalBalance: 'Credit', description: 'Accrued unpaid expenses such as taxes or interest', isActive: true },
   
   // Fund Balance / Equity (Normal: Credit)
@@ -621,6 +621,7 @@ export const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
 
   // --- Inventory (goods for resale) ---------------------------------------------
   { keyword: 'acquisition of merchandise', debitAccountCode: '1700', creditAccountCode: '1010', description: 'Acquisition of Merchandise for Sale - Goods Received and On Hand' },
+  { keyword: 'downpayment by buyer for pre-ordered merchandise', debitAccountCode: '1010', creditAccountCode: '2140', description: 'Downpayment by Buyer for Pre-Ordered Merchandise' },
   { keyword: 'downpayment to suppliers for pre-ordered merchandise', debitAccountCode: '1270', creditAccountCode: '1010', description: 'Downpayment to Suppliers for Pre-Ordered Merchandise' },
   // Former title, kept (hidden from the picker) so saved entries and drafts still resolve.
   { keyword: 'downpayment for pre-ordered merchandise', debitAccountCode: '1270', creditAccountCode: '1010', description: 'Downpayment for Pre-ordered Merchandise' },

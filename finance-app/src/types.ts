@@ -81,6 +81,8 @@ export interface TransactionDetails {
   priorPeriodPayablePaymentMethod?: 'organization-funds' | 'officer-personal' | 'officer-advance' | 'combination';
   inventoryCost?: number;
   merchandiseItem?: string;
+  /** Set on a Downpayment by Buyer for Pre-Ordered Merchandise entry (credited to Unearned Merchandise Revenue). */
+  merchandiseBuyerDownpayment?: boolean;
   merchandiseBatch?: string;
   merchandisePurchaseDate?: string;
   merchandisePrepaymentEntryId?: string;

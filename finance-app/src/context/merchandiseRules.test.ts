@@ -23,6 +23,14 @@ describe('merchandise transaction types', () => {
     expect(pickerTitles(finance)).not.toContain('Downpayment for Pre-ordered Merchandise');
   });
 
+  it('offers Downpayment by Buyer for Pre-Ordered Merchandise as Dr Cash / Cr Unearned Merchandise Revenue', () => {
+    const finance = loadFinance();
+    expect(pickerTitles(finance)).toContain('Downpayment by Buyer for Pre-Ordered Merchandise');
+    expect(finance.suggestTransactionClassification('Downpayment by Buyer for Pre-Ordered Merchandise')).toMatchObject({ debitAccountCode: '1010', creditAccountCode: '2140' });
+    expect(finance.accounts.find(account => account.code === '2140')?.name).toBe('Unearned Merchandise Revenue');
+    expect(finance.accounts.find(account => account.code === '2150')?.name).toBe('Refund Liability - Merchandise');
+  });
+
   it('classifies both the new and the former title as Dr Advances to Suppliers / Cr Cash', () => {
     const finance = loadFinance();
     expect(finance.suggestTransactionClassification('Downpayment to Suppliers for Pre-Ordered Merchandise')).toMatchObject({ debitAccountCode: '1270', creditAccountCode: '1010' });

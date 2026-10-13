@@ -62,6 +62,7 @@ import { buildOutrightExpensePosting, selectExpensePaymentRows, splitBalancedJou
 import { counterpartyBalance, counterpartyBalances, counterpartySummary } from '../lib/counterpartyBalances';
 import { ledgerWithoutDraftEntry } from '../lib/draftLedger';
 import { creditCodesForPaymentMethod } from '../lib/paymentCreditAccounts';
+import { BUYER_DOWNPAYMENT_TITLE, buildBuyerDownpaymentPosting } from '../lib/buyerDownpayments';
 import { automaticPostingDate, isDateWithinReportingPeriod, periodForSemester, reportingPeriodBounds } from '../lib/reportingPeriod';
 
 const GENERAL_FUND_PROJECT = 'General Fund Operations';
@@ -129,6 +130,8 @@ interface TransactionFormSnapshot {
   merchandiseCollections: DatedAmountInputRow[];
   merchandiseRemittances: DatedAmountInputRow[];
   merchandiseCollectionOfficer: string;
+  buyerInitialDownpayment: DatedAmountInputRow[];
+  buyerSubsequentDownpayments: DatedAmountInputRow[];
 }
 
 interface TransactionsProps {
@@ -211,6 +214,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   const [merchandiseCollections, setMerchandiseCollections] = useState<DatedAmountInputRow[]>([{ id: 'collection-1', date, amount: '' }]);
   const [merchandiseRemittances, setMerchandiseRemittances] = useState<DatedAmountInputRow[]>([{ id: 'remittance-1', date, amount: '' }]);
   const [merchandiseCollectionOfficer, setMerchandiseCollectionOfficer] = useState('');
+  const [buyerInitialDownpayment, setBuyerInitialDownpayment] = useState<DatedAmountInputRow[]>([{ id: 'buyer-initial-1', date: '', amount: '' }]);
+  const [buyerSubsequentDownpayments, setBuyerSubsequentDownpayments] = useState<DatedAmountInputRow[]>([]);
   const [outrightPaymentMethod, setOutrightPaymentMethod] = useState<OutrightExpensePaymentMethod>('organization-funds');
   const [outrightOrganizationPayments, setOutrightOrganizationPayments] = useState<DatedAmountInputRow[]>([{ id: 'expense-org-1', date, amount: '' }]);
   const [outrightOfficerPayments, setOutrightOfficerPayments] = useState<DatedAmountInputRow[]>([{ id: 'expense-officer-1', date, amount: '' }]);
@@ -362,6 +367,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   // payable account, "whose money paid for it?" no longer applies.
   const isMerchandiseAcquisition = selectedCategory === 'merchandise' && debitCode === '1700';
   const isMerchandisePrepayment = selectedCategory === 'merchandise' && debitCode === '1270';
+  const isBuyerDownpayment = selectedCategory === 'merchandise' && classificationPreview?.defaultDesc === BUYER_DOWNPAYMENT_TITLE;
 
   const isCashSponsorshipDonation = classificationPreview?.defaultDesc === 'Sponsorships and Donations';
   const isSponsorshipContribution = !!classificationPreview?.sponsorshipKind && (creditCode === UNRESTRICTED_REVENUE_CODE || isCashSponsorshipDonation);
@@ -592,6 +598,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     setMerchandiseCollections(snapshot.merchandiseCollections?.length ? snapshot.merchandiseCollections : [{ id: `collection-${Date.now()}`, date: fallbackDate, amount: '' }]);
     setMerchandiseRemittances(snapshot.merchandiseRemittances?.length ? snapshot.merchandiseRemittances : [{ id: `remittance-${Date.now()}`, date: fallbackDate, amount: '' }]);
     setMerchandiseCollectionOfficer(snapshot.merchandiseCollectionOfficer || '');
+    setBuyerInitialDownpayment(snapshot.buyerInitialDownpayment?.length ? snapshot.buyerInitialDownpayment : [{ id: `buyer-initial-${Date.now()}`, date: '', amount: '' }]);
+    setBuyerSubsequentDownpayments(snapshot.buyerSubsequentDownpayments || []);
     setPendingAutoPost(autoPostDraft);
 
     const match = resumedExpenseItem
@@ -818,6 +826,23 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     }
   }, [isMerchandisePrepayment, transactionAmount, merchandisePaymentMethod, merchandisePrepaymentDate, merchandiseOrganizationPayments, merchandiseOfficerPayments, merchandiseAdvancePayments, cashAvailable, selectedOfficerAdvanceBalance]);
 
+  const buyerDownpaymentTotalEntered = sumDatedAmounts(buyerInitialDownpayment) + sumDatedAmounts(buyerSubsequentDownpayments);
+  useEffect(() => {
+    if (isBuyerDownpayment) setAmount(buyerDownpaymentTotalEntered);
+  }, [isBuyerDownpayment, buyerDownpaymentTotalEntered]);
+  const buyerDownpaymentResult = useMemo(() => {
+    if (!isBuyerDownpayment) return { lines: [] as JournalLine[], error: '' };
+    try {
+      const initial = buyerInitialDownpayment[0];
+      return { lines: buildBuyerDownpaymentPosting({
+        initial: { date: initial?.date || '', amount: Number(initial?.amount) || 0 },
+        subsequent: buyerSubsequentDownpayments.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })),
+      }), error: '' };
+    } catch (error) {
+      return { lines: [] as JournalLine[], error: error instanceof Error ? error.message : 'The downpayment amounts are invalid.' };
+    }
+  }, [isBuyerDownpayment, buyerInitialDownpayment, buyerSubsequentDownpayments]);
+
   const isDepreciationEntry = debitCode === '5090' || debitCode === '5095';
   const isEventProgramExpense = selectedCategory === 'event-program-expenses' && debitCode === '5300';
   const isOutrightExpense = !!classificationPreview && activeAccounts.find(account => account.code === debitCode)?.type === 'Expenses' && !isMerchandiseAcquisition && !isDepreciationEntry && !isEventProgramExpense;
@@ -887,6 +912,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     if (transactionAmount <= 0) return [];
     if (isMerchandiseAcquisition) return merchandiseAcquisitionResult.posting?.lines || [];
     if (isMerchandisePrepayment) return merchandisePrepaymentResult.lines;
+    if (isBuyerDownpayment) return buyerDownpaymentResult.lines;
     if (isSupplierReceivableCollection) {
       try { return buildSupplierReceivableCollectionPosting(amount, date, supplierReceivableOutstanding); } catch { return []; }
     }
@@ -903,7 +929,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       ]);
     }
     return buildJournalLines(debitCode, effectiveCreditCode, amount);
-  }, [classificationPreview, transactionAmount, amount, date, debitCode, effectiveCreditCode, isMembershipRefundStatus, membershipRefundResolutionResult, isMerchandiseAcquisition, merchandiseAcquisitionResult, isMerchandisePrepayment, merchandisePrepaymentResult, isSupplierReceivableCollection, supplierReceivableOutstanding, isGuidedPurchase, outrightExpenseResult, requiresAccrualCompletion, isPriorMembershipCollection, membershipPostingResult, isMerchandiseSale, merchandiseSaleResult, showDeferPortionQuestion, notYetUsedAmount]);
+  }, [classificationPreview, transactionAmount, amount, date, debitCode, effectiveCreditCode, isMembershipRefundStatus, membershipRefundResolutionResult, isMerchandiseAcquisition, merchandiseAcquisitionResult, isMerchandisePrepayment, merchandisePrepaymentResult, isBuyerDownpayment, buyerDownpaymentResult, isSupplierReceivableCollection, supplierReceivableOutstanding, isGuidedPurchase, outrightExpenseResult, requiresAccrualCompletion, isPriorMembershipCollection, membershipPostingResult, isMerchandiseSale, merchandiseSaleResult, showDeferPortionQuestion, notYetUsedAmount]);
 
   // The rule's own debit/credit pair is only the starting point — payment method,
   // advances, payables and receivables change which accounts really get posted,
@@ -1010,6 +1036,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     merchandiseCollections,
     merchandiseRemittances,
     merchandiseCollectionOfficer,
+    buyerInitialDownpayment,
+    buyerSubsequentDownpayments,
   });
 
   // A failed save or Post leaves the form open with its message at the top of a
@@ -1081,11 +1109,11 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       setErrorMessage('Please enter a valid amount greater than zero.');
       return;
     }
-    if ((isMerchandiseAcquisition || isMerchandisePrepayment) && !merchandiseItemLabel) {
+    if ((isMerchandiseAcquisition || isMerchandisePrepayment || isBuyerDownpayment) && !merchandiseItemLabel) {
       setErrorMessage('Please select the merchandise purchased and enter a title when choosing Others.');
       return;
     }
-    if ((isMerchandiseAcquisition || isMerchandisePrepayment) && !merchandiseBatch.trim()) {
+    if ((isMerchandiseAcquisition || isMerchandisePrepayment || isBuyerDownpayment) && !merchandiseBatch.trim()) {
       setErrorMessage('Please enter the merchandise batch or pre-order reference.');
       return;
     }
@@ -1099,6 +1127,10 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     }
     if (isMerchandiseAcquisition && merchandiseAcquisitionResult.error) {
       setErrorMessage(merchandiseAcquisitionResult.error);
+      return;
+    }
+    if (isBuyerDownpayment && buyerDownpaymentResult.error) {
+      setErrorMessage(buyerDownpaymentResult.error);
       return;
     }
     if (isMerchandisePrepayment && merchandisePrepaymentResult.error) {
@@ -1235,7 +1267,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
         ? (description || txName)
         : isMerchandiseAcquisition
         ? `${description || txName} - ${merchandiseItemLabel} - ${merchandiseBatch.trim()}`
-        : isMerchandisePrepayment
+        : isMerchandisePrepayment || isBuyerDownpayment
           ? `${description || txName} - ${merchandiseItemLabel} - ${merchandiseBatch.trim()}`
         : isSupplierReceivableCollection
           ? 'Collection of Receivables from Suppliers'
@@ -1253,6 +1285,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
         ? membershipPostingResult.posting?.collections[0]?.date || date
         : isMerchandisePrepayment
           ? merchandisePrepaymentDate
+          : isBuyerDownpayment ? buyerInitialDownpayment[0]?.date || date
           : isMerchandiseAcquisition ? merchandisePurchaseDate
           : date || defaultPostingDate;
       const draftEntryId = editingDraftId
@@ -1306,7 +1339,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
             expectedUsePeriod: deferredAmount > 0 ? expectedUsePeriod : undefined,
             inventoryCost: isMerchandiseSale ? Number(merchandiseCost) : undefined,
             merchandiseQuantity: isMerchandiseAcquisition && merchandiseQuantity.trim() ? Number(merchandiseQuantity) : undefined,
-            merchandiseBatch: (isMerchandiseAcquisition || isMerchandisePrepayment) ? merchandiseBatch.trim() : undefined,
+            merchandiseBatch: (isMerchandiseAcquisition || isMerchandisePrepayment || isBuyerDownpayment) ? merchandiseBatch.trim() : undefined,
+            merchandiseBuyerDownpayment: isBuyerDownpayment ? true : undefined,
             merchandisePurchaseDate: isMerchandiseAcquisition ? merchandisePurchaseDate : undefined,
             merchandisePrepaymentEntryId: isMerchandiseAcquisition ? merchandisePrepaymentEntryId || undefined : undefined,
             merchandisePrepaymentEntryIds: isMerchandiseAcquisition ? selectedMerchandisePrepayment?.entryIds : undefined,
@@ -1319,7 +1353,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
             merchandiseAdvancePayment: (isMerchandiseAcquisition || isMerchandisePrepayment) ? merchandiseAdvancePaymentTotal : undefined,
             merchandiseAdvancePayments: (isMerchandiseAcquisition || isMerchandisePrepayment) ? merchandiseAdvancePayments.filter(row => Number(row.amount) > 0).map(row => ({ date: row.date, amount: Number(row.amount) })) : undefined,
             merchandisePayableAmount: isMerchandiseAcquisition ? merchandiseAcquisitionResult.posting?.merchandisePayable : undefined,
-            merchandiseItem: isMerchandiseSale ? selectedMerchandiseBatch?.item : (isMerchandiseAcquisition || isMerchandisePrepayment) ? merchandiseItemLabel : undefined,
+            merchandiseItem: isMerchandiseSale ? selectedMerchandiseBatch?.item : (isMerchandiseAcquisition || isMerchandisePrepayment || isBuyerDownpayment) ? merchandiseItemLabel : undefined,
             merchandiseBatchEntryId: isMerchandiseSale ? merchandiseSaleBatchId : undefined,
             merchandiseQuantitySold: isMerchandiseSale ? Number(merchandiseQuantitySold) : undefined,
             merchandiseSellingPrice: isMerchandiseSale ? Number(merchandiseSellingPrice) : undefined,
@@ -1375,6 +1409,10 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                 memo: description.trim() || undefined,
                 eventRelated: isOutrightExpense ? expenseEvent === 'yes' : false,
                 counterpartyName: (isGuidedPurchase && outrightOfficer.trim()) || counterpartyName.trim() || undefined,
+                // Later buyer downpayments stay findable by item and batch when the sale applies them.
+                merchandiseItem: isBuyerDownpayment ? merchandiseItemLabel : undefined,
+                merchandiseBatch: isBuyerDownpayment ? merchandiseBatch.trim() : undefined,
+                merchandiseBuyerDownpayment: isBuyerDownpayment ? true : undefined,
                 receiptAttachmentIds: [],
               },
             },
@@ -1774,6 +1812,37 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                 {officerAdvanceBalances.length > 0 && <OfficerAdvanceSummary rows={officerAdvanceSummary} formatCurrency={formatCurrency} />}
                 </>}
                 {merchandisePrepaymentResult.error && transactionAmount > 0 && <p className="text-[10px] font-bold text-rose-700 dark:text-rose-300">{merchandisePrepaymentResult.error}</p>}
+              </div>
+            )}
+
+            {isBuyerDownpayment && (
+              <div className="sm:col-span-2 space-y-4 rounded-xl border border-violet-200 bg-violet-50 p-4 dark:border-violet-500/20 dark:bg-violet-500/10">
+                <div>
+                  <h4 className="flex items-center gap-2 text-xs font-black text-violet-700 dark:text-violet-300">Buyer downpayment for pre-ordered merchandise</h4>
+                  <p className="mt-1 text-[10px] font-medium text-violet-700 dark:text-violet-300">Record what the buyer paid in advance. It is held as Unearned Merchandise Revenue until you record the sale of this item and batch.</p>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Merchandise pre-ordered</label>
+                    <select value={merchandiseItem} onChange={event => { setMerchandiseItem(event.target.value); if (event.target.value !== 'Others') setMerchandiseOtherTitle(''); }} className="mt-1.5 w-full rounded-lg border border-violet-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-violet-500/30 dark:bg-slate-800 dark:text-slate-100" required>
+                      <option value="" disabled>Select merchandise…</option>
+                      {MERCHANDISE_ITEM_OPTIONS.map(item => <option key={item} value={item}>{item}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Batch / pre-order reference</label>
+                    <input type="text" value={merchandiseBatch} onChange={event => setMerchandiseBatch(event.target.value)} placeholder="Example: Lanyard Batch 1" className="mt-1.5 w-full rounded-lg border border-violet-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-violet-500/30 dark:bg-slate-800 dark:text-slate-100" required />
+                  </div>
+                </div>
+                {merchandiseItem === 'Others' && <div><label className="block text-[10px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Other merchandise title</label><input type="text" value={merchandiseOtherTitle} onChange={event => setMerchandiseOtherTitle(event.target.value)} placeholder="Enter the merchandise name" className="mt-1.5 w-full rounded-lg border border-violet-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-violet-500/30 dark:bg-slate-800 dark:text-slate-100" required /></div>}
+                <DatedAmountRows label="Initial downpayment" rows={buyerInitialDownpayment} onChange={setBuyerInitialDownpayment} currencySymbol={settings.currencySymbol} defaultDate={date} allowMultiple={false} />
+                <DatedAmountRows label="Subsequent downpayments (optional)" rows={buyerSubsequentDownpayments} onChange={setBuyerSubsequentDownpayments} currencySymbol={settings.currencySymbol} defaultDate={buyerInitialDownpayment[0]?.date || date} addLabel="Add subsequent downpayment" allowBlankDates allowEmptyAmounts minRows={0} blankDateHelp="Date is optional; a blank date uses the initial downpayment date." />
+                <div className="rounded-lg bg-white/80 p-3 dark:bg-slate-900/60">
+                  <span className="text-[9px] font-bold uppercase text-slate-500">Total downpayments — automatically computed</span>
+                  <p className="mt-1 text-lg font-black text-violet-800 dark:text-violet-200">{formatCurrency(buyerDownpaymentTotalEntered)}</p>
+                  <p className="text-[9px] text-slate-500">Initial downpayment + total subsequent downpayments</p>
+                </div>
+                {buyerDownpaymentResult.error && buyerDownpaymentTotalEntered > 0 && <p className="text-[10px] font-bold text-rose-700 dark:text-rose-300">{buyerDownpaymentResult.error}</p>}
               </div>
             )}
 
@@ -2212,7 +2281,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               <p className="rounded-lg bg-slate-50 p-3 text-[10px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">Event: General and Administrative (automatic classification)</p>
             </div>}
 
-            {!isGuidedPurchase && !isMerchandiseAcquisition && !isMerchandiseSale && !isMerchandisePrepayment && !requiresAccrualCompletion && !isPriorMembershipCollection && !isMembershipRefundStatus && <div>
+            {!isGuidedPurchase && !isMerchandiseAcquisition && !isMerchandiseSale && !isMerchandisePrepayment && !isBuyerDownpayment && !requiresAccrualCompletion && !isPriorMembershipCollection && !isMembershipRefundStatus && <div>
               <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">{isMerchandisePrepayment ? 'Payment' : isSupplierReceivableCollection ? 'Amount collected' : 'Amount'}</label>
               <div className="relative">
                 <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 dark:text-slate-400">{settings.currencySymbol}</span>
@@ -2250,7 +2319,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               />
             </div>}
 
-            {!isMerchandiseAcquisition && !isMerchandisePrepayment && !requiresAccrualCompletion && !isPriorMembershipCollection && !isMembershipRefundStatus && !isOutrightExpense && <div>
+            {!isMerchandiseAcquisition && !isMerchandisePrepayment && !isBuyerDownpayment && !requiresAccrualCompletion && !isPriorMembershipCollection && !isMembershipRefundStatus && !isOutrightExpense && <div>
               <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">{isSupplierReceivableCollection ? 'Collection date' : 'Date'} <span className="normal-case font-medium text-slate-400">(optional; leave blank to use {defaultPostingDate})</span></label>
               <input
                 type="date"
