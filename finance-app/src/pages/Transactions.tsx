@@ -132,6 +132,16 @@ interface TransactionFormSnapshot {
   merchandiseCollectionOfficer: string;
   buyerInitialDownpayment: DatedAmountInputRow[];
   buyerSubsequentDownpayments: DatedAmountInputRow[];
+  additionalEvents: EventExpenseRow[];
+}
+
+// Event/Program Expense: each line is one event with its own amount and date. The first line
+// uses the form's own amount / event name / date; "+ Add Event" adds more lines here.
+interface EventExpenseRow {
+  id: string;
+  amount: string;
+  eventName: string;
+  date: string;
 }
 
 interface TransactionsProps {
@@ -216,6 +226,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   const [merchandiseCollectionOfficer, setMerchandiseCollectionOfficer] = useState('');
   const [buyerInitialDownpayment, setBuyerInitialDownpayment] = useState<DatedAmountInputRow[]>([{ id: 'buyer-initial-1', date: '', amount: '' }]);
   const [buyerSubsequentDownpayments, setBuyerSubsequentDownpayments] = useState<DatedAmountInputRow[]>([]);
+  const [additionalEvents, setAdditionalEvents] = useState<EventExpenseRow[]>([]);
   const [outrightPaymentMethod, setOutrightPaymentMethod] = useState<OutrightExpensePaymentMethod>('organization-funds');
   const [outrightOrganizationPayments, setOutrightOrganizationPayments] = useState<DatedAmountInputRow[]>([{ id: 'expense-org-1', date, amount: '' }]);
   const [outrightOfficerPayments, setOutrightOfficerPayments] = useState<DatedAmountInputRow[]>([{ id: 'expense-officer-1', date, amount: '' }]);
@@ -604,6 +615,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     setMerchandiseCollectionOfficer(snapshot.merchandiseCollectionOfficer || '');
     setBuyerInitialDownpayment(snapshot.buyerInitialDownpayment?.length ? snapshot.buyerInitialDownpayment : [{ id: `buyer-initial-${Date.now()}`, date: '', amount: '' }]);
     setBuyerSubsequentDownpayments(snapshot.buyerSubsequentDownpayments || []);
+    setAdditionalEvents(snapshot.additionalEvents || []);
     setPendingAutoPost(autoPostDraft);
 
     const match = resumedExpenseItem
@@ -857,6 +869,14 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
 
   const isDepreciationEntry = debitCode === '5090' || debitCode === '5095';
   const isEventProgramExpense = selectedCategory === 'event-program-expenses' && debitCode === '5300';
+  // Every event line, first line first. The total is what leaves cash.
+  const eventExpenseRows = isEventProgramExpense
+    ? [{ id: 'event-1', amount: String(amount || ''), eventName: expenseEventName, date }, ...additionalEvents]
+    : [];
+  const eventExpenseTotal = eventExpenseRows.reduce((sum, row) => sum + (Number(row.amount) > 0 ? Number(row.amount) : 0), 0);
+  const eventCashError = isEventProgramExpense && eventExpenseTotal > cashAvailable
+    ? `The event amounts cannot exceed the available cash balance of ${formatCurrency(cashAvailable)}.`
+    : '';
   const isOutrightExpense = !!classificationPreview && activeAccounts.find(account => account.code === debitCode)?.type === 'Expenses' && !isMerchandiseAcquisition && !isDepreciationEntry && !isEventProgramExpense;
   const debitCodeNumber = Number(debitCode);
   const isPpeAcquisition = selectedCategory === 'ppe-transactions' && ((debitCodeNumber >= 1500 && debitCodeNumber <= 1516) || (debitCodeNumber >= 1650 && debitCodeNumber <= 1653));
@@ -941,8 +961,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
         { debitAccountCode: PREPAID_EXPENSE_CODE, creditAccountCode: effectiveCreditCode, amount: deferredAmount },
       ]);
     }
-    return buildJournalLines(debitCode, effectiveCreditCode, amount);
-  }, [classificationPreview, transactionAmount, amount, date, debitCode, effectiveCreditCode, isExcessRefundStatus, membershipRefundResolutionResult, isMerchandiseAcquisition, merchandiseAcquisitionResult, isMerchandisePrepayment, merchandisePrepaymentResult, isBuyerDownpayment, buyerDownpaymentResult, isSupplierReceivableCollection, supplierReceivableOutstanding, isGuidedPurchase, outrightExpenseResult, requiresAccrualCompletion, isPriorMembershipCollection, membershipPostingResult, isMerchandiseSale, merchandiseSaleResult, showDeferPortionQuestion, notYetUsedAmount]);
+    return buildJournalLines(debitCode, effectiveCreditCode, isEventProgramExpense ? eventExpenseTotal : amount);
+  }, [classificationPreview, transactionAmount, amount, isEventProgramExpense, eventExpenseTotal, date, debitCode, effectiveCreditCode, isExcessRefundStatus, membershipRefundResolutionResult, isMerchandiseAcquisition, merchandiseAcquisitionResult, isMerchandisePrepayment, merchandisePrepaymentResult, isBuyerDownpayment, buyerDownpaymentResult, isSupplierReceivableCollection, supplierReceivableOutstanding, isGuidedPurchase, outrightExpenseResult, requiresAccrualCompletion, isPriorMembershipCollection, membershipPostingResult, isMerchandiseSale, merchandiseSaleResult, showDeferPortionQuestion, notYetUsedAmount]);
 
   // The rule's own debit/credit pair is only the starting point — payment method,
   // advances, payables and receivables change which accounts really get posted,
@@ -1051,6 +1071,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     merchandiseCollectionOfficer,
     buyerInitialDownpayment,
     buyerSubsequentDownpayments,
+    additionalEvents,
   });
 
   // A failed save or Post leaves the form open with its message at the top of a
@@ -1184,6 +1205,14 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       setErrorMessage('Please enter an event name for this Event/Program Expense.');
       return;
     }
+    if (!savingDraft && isEventProgramExpense && additionalEvents.some(row => !(Number(row.amount) > 0) || !row.eventName.trim())) {
+      setErrorMessage('Enter an amount and an event name on every event line, or remove the line.');
+      return;
+    }
+    if (isEventProgramExpense && eventCashError) {
+      setErrorMessage(eventCashError);
+      return;
+    }
     if (isGuidedPurchase && (outrightPaymentMethod === 'officer-personal' || outrightPaymentMethod === 'officer-advance' || outrightPaymentMethod === 'combination') && (outrightOfficerTotal > 0 || outrightAdvanceTotal > 0) && !outrightOfficer.trim()) {
       setErrorMessage('Please enter the accountable officer for this payment.');
       return;
@@ -1273,7 +1302,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
         : '';
 
       const entryDescription = isEventProgramExpense
-        ? `${description || txName} - ${expenseEventName.trim()}`
+        ? `${description || txName} - ${savingDraft ? eventExpenseRows.map(row => row.eventName.trim()).filter(Boolean).join(', ') : (eventExpenseRows.filter(row => Number(row.amount) > 0)[0]?.eventName || expenseEventName).trim()}`
         : isOutrightExpense
         ? `${description || txName}${expenseEvent === 'yes' ? ` - ${expenseEventName.trim()}` : ' - General and Administrative Expense'}`
         : isPpeAcquisition
@@ -1311,19 +1340,29 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       const datedPostingBatches = !savingDraft && merchandiseBatches.length === 0
         ? splitBalancedJournalLinesByDate(lines, journalDate)
         : [];
-      const primaryJournalLines = merchandiseBatches.length > 0
+      // Several events post as one entry per event, each carrying its own event name and date.
+      const multiEventRows = !savingDraft && isEventProgramExpense ? eventExpenseRows.filter(row => Number(row.amount) > 0) : [];
+      const postsPerEvent = multiEventRows.length > 1;
+      const primaryJournalLines = postsPerEvent
+        ? buildJournalLines(debitCode, effectiveCreditCode, Number(multiEventRows[0].amount))
+        : merchandiseBatches.length > 0
         ? merchandiseBatches[0].lines
         : datedPostingBatches.length > 1 ? datedPostingBatches[0].lines : lines;
-      const primaryJournalDate = datedPostingBatches.length > 1
+      const primaryJournalDate = postsPerEvent
+        ? multiEventRows[0].date || defaultPostingDate
+        : datedPostingBatches.length > 1
         ? datedPostingBatches[0].date
         : journalDate;
+      const entryEventName = isEventProgramExpense
+        ? (postsPerEvent ? multiEventRows[0].eventName : expenseEventName).trim()
+        : isOutrightExpense && expenseEvent === 'yes' ? expenseEventName.trim() : undefined;
       const posted = runAtomicPosting(() => {
       const firstEntry = addJournalEntry(
         primaryJournalDate,
         entryDescription,
         GENERAL_FUND_PROJECT,
         savingDraft ? lines : primaryJournalLines,
-        isEventProgramExpense ? expenseEventName.trim() : isOutrightExpense && expenseEvent === 'yes' ? expenseEventName.trim() : undefined,
+        entryEventName,
         undefined,
         {
           transactionType: txName,
@@ -1434,6 +1473,29 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
           );
         });
       }
+      if (postsPerEvent) {
+        multiEventRows.slice(1).forEach(row => {
+          addJournalEntry(
+            row.date || defaultPostingDate,
+            `${description || txName} - ${row.eventName.trim()}`,
+            GENERAL_FUND_PROJECT,
+            buildJournalLines(debitCode, effectiveCreditCode, Number(row.amount)),
+            row.eventName.trim(),
+            undefined,
+            {
+              transactionType: txName,
+              details: {
+                memo: description.trim() || undefined,
+                semester,
+                reportingPeriod,
+                reportingYear: parsedReportingYear,
+                eventRelated: true,
+                receiptAttachmentIds: [],
+              },
+            },
+          );
+        });
+      }
       return firstEntry;
       });
       const je = posted;
@@ -1458,7 +1520,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
         setEditingDraftId(null);
         appliedDraftIdRef.current = null;
       }
-      if (wasDraft) onDraftPosted?.(`${je.reference} was posted${datedPostingBatches.length > 1 || merchandiseBatches.length > 1 ? ' with its dated payment batches' : ''}.`);
+      if (wasDraft) onDraftPosted?.(`${je.reference} was posted${datedPostingBatches.length > 1 || merchandiseBatches.length > 1 ? ' with its dated payment batches' : postsPerEvent ? ` with ${multiEventRows.length - 1} more event ${multiEventRows.length - 1 === 1 ? 'entry' : 'entries'}` : ''}.`);
 
       // Trigger Confetti micro-animation!
       confetti({
@@ -2316,7 +2378,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               <p className="rounded-lg bg-slate-50 p-3 text-[10px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">Event: General and Administrative (automatic classification)</p>
             </div>}
 
-            {!isGuidedPurchase && !isMerchandiseAcquisition && !isMerchandiseSale && !isMerchandisePrepayment && !isBuyerDownpayment && !requiresAccrualCompletion && !isPriorMembershipCollection && !isExcessRefundStatus && <div>
+            {!isGuidedPurchase && !isEventProgramExpense && !isMerchandiseAcquisition && !isMerchandiseSale && !isMerchandisePrepayment && !isBuyerDownpayment && !requiresAccrualCompletion && !isPriorMembershipCollection && !isExcessRefundStatus && <div>
               <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">{isMerchandisePrepayment ? 'Payment' : isSupplierReceivableCollection ? 'Amount collected' : 'Amount'}</label>
               <div className="relative">
                 <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 dark:text-slate-400">{settings.currencySymbol}</span>
@@ -2343,18 +2405,44 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               <div className="hidden" />
             </div>}
 
-            {isEventProgramExpense && <div>
-              <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Event Name</label>
-              <input
-                type="text"
-                value={expenseEventName}
-                onChange={event => setExpenseEventName(event.target.value)}
-                placeholder="Name of event or program"
-                className="w-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-blue-900 focus:ring-blue-900/10 rounded-xl text-xs font-semibold p-2.5 outline-none transition-colors dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/20"
-              />
-            </div>}
+            {isEventProgramExpense && (
+              <div className="sm:col-span-2 space-y-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1.4fr_1fr_auto]">
+                  <div>
+                    <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Amount</label>
+                    <div className="relative">
+                      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">{settings.currencySymbol}</span>
+                      <input type="number" step="0.01" value={amount || ''} onChange={event => setAmount(Number(event.target.value))} placeholder="0.00" className="w-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-blue-900 focus:ring-blue-900/10 rounded-xl text-xs font-semibold p-2.5 outline-none transition-colors dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/20 pl-8" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Event Name</label>
+                    <input type="text" value={expenseEventName} onChange={event => setExpenseEventName(event.target.value)} placeholder="Name of event or program" className="w-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-blue-900 focus:ring-blue-900/10 rounded-xl text-xs font-semibold p-2.5 outline-none transition-colors dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/20" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Date <span className="normal-case font-medium text-slate-400">(optional)</span></label>
+                    <input type="date" value={date} onChange={event => setDate(event.target.value)} className="w-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-blue-900 focus:ring-blue-900/10 rounded-xl text-xs font-semibold p-2.5 outline-none transition-colors dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/20" />
+                  </div>
+                  <span className="hidden sm:block sm:w-9" aria-hidden="true" />
+                </div>
+                {additionalEvents.map((row, index) => (
+                  <div key={row.id} className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1.4fr_1fr_auto]">
+                    <div className="relative">
+                      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">{settings.currencySymbol}</span>
+                      <input type="number" step="0.01" aria-label={`Event ${index + 2} amount`} value={row.amount} onChange={event => setAdditionalEvents(previous => previous.map(item => item.id === row.id ? { ...item, amount: event.target.value } : item))} placeholder="0.00" className="w-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-blue-900 focus:ring-blue-900/10 rounded-xl text-xs font-semibold p-2.5 outline-none transition-colors dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/20 pl-8" />
+                    </div>
+                    <input type="text" aria-label={`Event ${index + 2} name`} value={row.eventName} onChange={event => setAdditionalEvents(previous => previous.map(item => item.id === row.id ? { ...item, eventName: event.target.value } : item))} placeholder="Name of event or program" className="w-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-blue-900 focus:ring-blue-900/10 rounded-xl text-xs font-semibold p-2.5 outline-none transition-colors dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/20" />
+                    <input type="date" aria-label={`Event ${index + 2} date`} value={row.date} onChange={event => setAdditionalEvents(previous => previous.map(item => item.id === row.id ? { ...item, date: event.target.value } : item))} className="w-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-blue-900 focus:ring-blue-900/10 rounded-xl text-xs font-semibold p-2.5 outline-none transition-colors dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/20" />
+                    <button type="button" aria-label={`Remove event ${index + 2}`} onClick={() => setAdditionalEvents(previous => previous.filter(item => item.id !== row.id))} className="rounded-xl border border-slate-200 px-2.5 text-slate-500 hover:text-rose-600 dark:border-slate-700"><X className="h-3.5 w-3.5" /></button>
+                  </div>
+                ))}
+                <button type="button" onClick={() => setAdditionalEvents(previous => [...previous, { id: `event-${Date.now()}-${previous.length}`, amount: '', eventName: '', date: '' }])} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"><PlusCircle className="h-3.5 w-3.5" /> Add Event</button>
+                {additionalEvents.length > 0 && <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Total of all events: {formatCurrency(eventExpenseTotal)}. Each event is posted as its own entry with its own event name.</p>}
+                {eventCashError && <p role="alert" className="text-[10px] font-bold text-rose-700 dark:text-rose-300">{eventCashError}</p>}
+              </div>
+            )}
 
-            {!isMerchandiseAcquisition && !isMerchandisePrepayment && !isBuyerDownpayment && !requiresAccrualCompletion && !isPriorMembershipCollection && !isExcessRefundStatus && !isOutrightExpense && <div>
+            {!isMerchandiseAcquisition && !isMerchandisePrepayment && !isBuyerDownpayment && !isEventProgramExpense && !requiresAccrualCompletion && !isPriorMembershipCollection && !isExcessRefundStatus && !isOutrightExpense && <div>
               <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">{isSupplierReceivableCollection ? 'Collection date' : 'Date'} <span className="normal-case font-medium text-slate-400">(optional; leave blank to use {defaultPostingDate})</span></label>
               <input
                 type="date"

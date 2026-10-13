@@ -248,6 +248,74 @@ describe('resuming a saved draft', () => {
     });
   });
 
+  describe('Event/Program Expense with several events', () => {
+    const draft = (extra: Record<string, unknown>[], first = { amount: 300, eventName: 'October Fest', date: '2026-10-10' }) => saveDraft('Event/Program Expense', 'event-program-expenses',
+      [{ accountCode: '5300', debit: 300, credit: 0 }, { accountCode: '1010', debit: 0, credit: 300 }], {},
+      { amount: first.amount, date: first.date, expenseEventName: first.eventName, additionalEvents: extra });
+    const eventEntries = () => finance.journalEntries.filter(entry => entry.description.startsWith('Event/Program Expense') && !entry.isDraft);
+
+    it('posts one entry per event, each with its own event name, amount and date', () => {
+      start(() => undefined, true);
+      draft([{ id: 'e2', amount: '200', eventName: 'Foundation Day', date: '2026-10-15' }, { id: 'e3', amount: '100', eventName: 'Sports Fest', date: '' }]);
+      expect(alerts()).toEqual([]);
+      expect(posted).toHaveLength(1);
+      expect(finance.draftTransactions).toHaveLength(0);
+      const entries = eventEntries();
+      expect(entries.map(entry => entry.eventName).sort()).toEqual(['Foundation Day', 'October Fest', 'Sports Fest']);
+      expect(entries.find(entry => entry.eventName === 'Foundation Day')).toMatchObject({ date: '2026-10-15' });
+      expect(entries.find(entry => entry.eventName === 'Sports Fest')?.lines).toEqual([
+        { accountCode: '5300', debit: 100, credit: 0 }, { accountCode: '1010', debit: 0, credit: 100 },
+      ]);
+      expect(finance.accountBalances['5300']).toBe(600);
+      expect(finance.accountBalances['1010']).toBe(50000 - 600);
+    });
+
+    it('shows Amount, Event Name and Date on one line with an Add Event button', () => {
+      start(() => undefined, false);
+      draft([{ id: 'e2', amount: '200', eventName: 'Foundation Day', date: '' }]);
+      const labels = renderer.root.findAllByType('label').map(label => text(label).replace(/\s+/g, ' ').trim());
+      expect(labels.filter(label => label.startsWith('Amount'))).toHaveLength(1);
+      expect(labels).toContain('Event Name');
+      expect(renderer.root.findAllByType('button').some(button => text(button).includes('Add Event'))).toBe(true);
+      expect(renderer.root.findAllByType('input').some(input => input.props['aria-label'] === 'Event 2 name' && input.props.value === 'Foundation Day')).toBe(true);
+    });
+
+    it('keeps a single entry when there is only one event', () => {
+      start(() => undefined, true);
+      draft([]);
+      expect(alerts()).toEqual([]);
+      expect(eventEntries().map(entry => entry.eventName)).toEqual(['October Fest']);
+    });
+
+    it('asks for an amount and an event name on every added line', () => {
+      start(() => undefined, true);
+      draft([{ id: 'e2', amount: '200', eventName: '', date: '' }]);
+      expect(alerts()).toEqual(['Enter an amount and an event name on every event line, or remove the line.']);
+      expect(posted).toEqual([]);
+      expect(finance.draftTransactions).toHaveLength(1);
+    });
+
+    it('checks the total of all events against the available cash', () => {
+      start(() => {
+        finance.addJournalEntry('2026-10-05', 'Spend down', PROJECT, [{ accountCode: '5030', debit: 49500, credit: 0 }, { accountCode: '1010', debit: 0, credit: 49500 }]);
+      }, true);
+      draft([{ id: 'e2', amount: '300', eventName: 'Foundation Day', date: '' }]);
+      expect(alerts()[0]).toMatch(/cannot exceed the available cash balance/);
+      expect(posted).toEqual([]);
+    });
+
+    it('saves several events as one draft entry holding the total', () => {
+      start(() => undefined, false);
+      draft([{ id: 'e2', amount: '200', eventName: 'Foundation Day', date: '' }]);
+      submit();
+      const drafts = finance.journalEntries.filter(entry => entry.isDraft && entry.description.startsWith('Event/Program Expense'));
+      expect(drafts).toHaveLength(1);
+      expect(drafts[0].lines.find(line => line.accountCode === '5300')?.debit).toBe(500);
+      expect(drafts[0].description).toContain('October Fest, Foundation Day');
+      expect(finance.draftTransactions).toHaveLength(1);
+    });
+  });
+
   it('shows the total-cost reminder, as a noticeable callout, under Total cost of this batch', () => {
     start(() => undefined, false);
     saveDraft('Acquisition of Merchandise for Sale - Goods Received and On Hand', 'merchandise',
