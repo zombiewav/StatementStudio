@@ -63,7 +63,7 @@ const FeaturesSection = () => {
               CORE FEATURES
             </span>
           </div>
-          <h2 className="text-4xl md:text-5xl font-bold text-white mb-6 leading-tight">
+          <h2 className="text-4xl md:text-5xl font-display font-normal text-slate-100 mb-6 leading-tight">
             Everything needed to manage institutional finances
           </h2>
           <p className="text-lg text-slate-400 max-w-2xl mx-auto">
@@ -78,7 +78,7 @@ const FeaturesSection = () => {
           {features.map((feature, index) => (
             <div
               key={index}
-              className="group rounded-2xl bg-slate-900/80 border border-slate-800 p-8 hover:border-blue-500/40 transition-all duration-300 hover:shadow-lg hover:shadow-blue-500/10"
+              className="group rounded-2xl bg-slate-900/80 border border-slate-800 p-8 hover:border-blue-500/40 transition-all duration-300 hover:shadow-lg"
             >
               <div className="mb-4 text-blue-400 group-hover:scale-110 transition-transform duration-300">
                 {feature.icon}

@@ -94,7 +94,7 @@ export function ProjectsPage(): React.ReactElement {
       <div className="flex justify-between items-center">
 
         <div>
-          <h2 id="p2" className="text-xl font-bold text-slate-900 dark:text-slate-100">Activities & Programs</h2>
+          <h2 id="p2" className="font-display text-3xl text-slate-900 dark:text-slate-100">Activities &amp; <em className="text-blue-700 dark:text-blue-400">Programs</em></h2>
           <p id="p3" className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">Allocate funding, monitor budgets, and audit margin efficiencies for distinct activities.</p>
         </div>
         

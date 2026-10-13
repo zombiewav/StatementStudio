@@ -116,7 +116,9 @@ function DashboardLayout() {
         <WorkspaceSyncStatus />
         <main className="app-shell flex-1 overflow-y-auto px-4 py-4 md:px-6 md:py-5 z-10 custom-scrollbar select-none">
           <div className="max-w-[1520px] mx-auto pb-10">
-            {renderActivePage()}
+            <div key={activePage} className="page-enter">
+              {renderActivePage()}
+            </div>
           </div>
         </main>
       </div>

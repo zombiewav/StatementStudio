@@ -1,9 +1,9 @@
 import React from 'react';
-import { ArrowRight, BarChart3, TrendingUp, Zap } from 'lucide-react';
+import { ArrowRight, TrendingUp, Zap } from 'lucide-react';
 import FeaturesSection from '../components/landing/FeaturesSection';
 import AnalyticsSection from '../components/landing/AnalyticsSection';
 import AboutSection from '../components/landing/AboutSection';
-import AuroraBackground from '../components/landing/AuroraBackground';
+import { LogoMark } from '../components/LogoMark';
 
 interface LandingPageProps {
   onEnterApp?: () => void;
@@ -16,8 +16,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterApp }) => {
   };
 
   return (
-    <div className="bg-black text-white overflow-x-hidden relative">
-      <AuroraBackground />
+    <div className="bg-slate-950 text-slate-100 overflow-x-hidden relative">
       <div className="relative z-10">
         <div className="pr-4 sm:pr-6 lg:pr-8">
 
@@ -28,11 +27,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterApp }) => {
 
               {/* LOGO */}
               <div className="flex-shrink-0 flex items-center gap-2">
-                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
-                  <BarChart3 className="w-5 h-5 text-white" />
-                </div>
+                <LogoMark className="h-8 w-8 text-blue-400" />
 
-                <span className="text-xl font-bold text-white tracking-tight">
+                <span className="text-[17px] font-medium text-slate-100 tracking-tight">
                   StatementStudio
                 </span>
               </div>
@@ -67,7 +64,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterApp }) => {
                 {/* CTA */}
                 <button
                   onClick={onEnterApp}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium transition-colors"
                 >
                   Get Started
                 </button>
@@ -92,18 +89,18 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterApp }) => {
               <div className="grid md:grid-cols-2 gap-12 lg:gap-16 items-center">
 
                 {/* LEFT SIDE */}
-                <div className="space-y-8">
+                <div className="space-y-8 hero-stagger">
 
                   <div>
-                    <h1 className="text-5xl lg:text-6xl font-bold text-white tracking-tight leading-tight mb-4">
+                    <h1 className="font-display text-5xl lg:text-7xl text-slate-100 leading-[1.05] mb-6">
                       Modern Financial
                       <br />
                       Management for
                       <br />
-                      Institutions
+                      <em className="text-blue-400">Institutions</em>
                     </h1>
 
-                    <p className="text-lg text-slate-400 leading-relaxed">
+                    <p className="text-lg text-slate-400 leading-relaxed max-w-lg">
                       Track transactions, manage ledgers, generate financial statements,
                       and monitor project budgets in one unified accounting workspace.
                     </p>
@@ -112,7 +109,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterApp }) => {
                   <div className="flex flex-col sm:flex-row gap-4 pt-4">
                     <button
                       onClick={onEnterApp}
-                      className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold flex items-center justify-center gap-2 transition-all hover:shadow-lg hover:shadow-blue-500/20"
+                      className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold flex items-center justify-center gap-2 transition-all hover:shadow-lg"
                     >
                       Get Started
                       <ArrowRight className="w-5 h-5" />
@@ -132,14 +129,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterApp }) => {
                   <div className="relative w-full max-w-md h-96">
 
                     {/* MAIN CARD */}
-                    <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 shadow-2xl shadow-blue-500/10 p-6 space-y-4">
+                    <div className="absolute inset-0 rounded-2xl bg-slate-900 border border-slate-700/50 p-6 space-y-4">
 
                       <div className="flex items-center justify-between">
                         <h3 className="text-sm font-semibold text-slate-200">
                           General Ledger
                         </h3>
 
-                        <div className="w-2 h-2 bg-green-500 rounded-full" />
+                        <div className="w-2 h-2 bg-emerald-400 rounded-full" />
                       </div>
 
                       <div className="space-y-2">
@@ -176,8 +173,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterApp }) => {
                               <span
                                 className={
                                   item.change.startsWith('+')
-                                    ? 'text-green-400'
-                                    : 'text-red-400'
+                                    ? 'text-emerald-300'
+                                    : 'text-rose-300'
                                 }
                               >
                                 {item.change}
@@ -189,14 +186,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterApp }) => {
                     </div>
 
                     {/* REVENUE CARD */}
-                    <div className="absolute -top-8 -right-8 w-40 h-32 rounded-xl bg-gradient-to-br from-blue-500/20 to-blue-600/10 border border-blue-500/30 shadow-lg shadow-blue-500/20 p-4 backdrop-blur-sm">
+                    <div className="absolute -top-8 -right-8 w-40 h-32 rounded-xl bg-slate-900 border border-slate-800 p-4 backdrop-blur-sm">
 
                       <div className="flex items-center justify-between mb-3">
                         <span className="text-xs font-semibold text-blue-300">
                           Revenue
                         </span>
 
-                        <TrendingUp className="w-4 h-4 text-green-400" />
+                        <TrendingUp className="w-4 h-4 text-emerald-300" />
                       </div>
 
                       <div className="text-lg font-bold text-white mb-3">
@@ -207,7 +204,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterApp }) => {
                         {[40, 55, 35, 65, 45, 70].map((height, idx) => (
                           <div
                             key={idx}
-                            className="flex-1 bg-gradient-to-t from-blue-500 to-blue-400 rounded-sm"
+                            className="flex-1 bg-blue-400 rounded-sm"
                             style={{ height: `${height}%` }}
                           />
                         ))}
@@ -215,7 +212,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterApp }) => {
                     </div>
 
                     {/* TRANSACTIONS CARD */}
-                    <div className="absolute -bottom-6 -left-6 w-48 rounded-xl bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 border border-emerald-500/30 shadow-lg shadow-emerald-500/20 p-4 backdrop-blur-sm">
+                    <div className="absolute -bottom-6 -left-6 w-48 rounded-xl bg-slate-900 border border-slate-800 p-4 backdrop-blur-sm">
 
                       <div className="flex items-center justify-between">
                         <div>
@@ -233,10 +230,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterApp }) => {
                     </div>
 
                     {/* ACCOUNT BALANCE */}
-                    <div className="absolute -bottom-8 -right-4 w-40 rounded-lg bg-gradient-to-br from-purple-500/20 to-purple-600/10 border border-purple-500/30 shadow-lg shadow-purple-500/20 p-3 backdrop-blur-sm">
+                    <div className="absolute -bottom-8 -right-4 w-40 rounded-lg bg-slate-900 border border-slate-800 p-3 backdrop-blur-sm">
 
                       <div className="space-y-2">
-                        <p className="text-xs text-purple-300 font-semibold">
+                        <p className="text-xs text-blue-300 font-semibold">
                           Account Balance
                         </p>
 
@@ -246,13 +243,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterApp }) => {
 
                         <div className="w-full bg-slate-700/50 rounded-full h-1.5">
                           <div
-                            className="bg-gradient-to-r from-purple-500 to-pink-500 h-1.5 rounded-full"
+                            className="bg-blue-400 h-1.5 rounded-full"
                             style={{ width: '72%' }}
                           />
                         </div>
                       </div>
                     </div>
-n                  </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -260,14 +257,14 @@ n                  </div>
         </section>
         {/* MOBILE PREVIEW */}
         <div className="md:hidden px-4 sm:px-6 pb-16">
-          <div className="rounded-2xl bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 shadow-2xl p-6 space-y-4">
+          <div className="rounded-2xl bg-slate-900 border border-slate-700/50 shadow-2xl p-6 space-y-4">
 
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-slate-200">
                 General Ledger
               </h3>
 
-              <div className="w-2 h-2 bg-green-500 rounded-full" />
+              <div className="w-2 h-2 bg-emerald-400 rounded-full" />
             </div>
 
             <div className="space-y-2">
@@ -304,8 +301,8 @@ n                  </div>
                     <span
                       className={
                         item.change.startsWith('+')
-                          ? 'text-green-400'
-                          : 'text-red-400'
+                          ? 'text-emerald-300'
+                          : 'text-rose-300'
                       }
                     >
                       {item.change}

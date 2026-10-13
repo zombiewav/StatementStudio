@@ -34,7 +34,7 @@ export function FinancialPreviewPanels({ lines, fallbackDate = '', accounts, acc
           ) : orderLinesDebitsFirst(lines, fallbackDate).map((line, index) => {
             const account = accounts.find(candidate => candidate.code === line.accountCode);
             return (
-              <div key={`${line.accountCode}-${line.date || fallbackDate}-${index}`} className={`grid grid-cols-[1fr_7rem] items-center gap-3 rounded-xl p-2 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800/50 ${line.credit > 0 ? 'pl-6' : ''}`}>
+              <div key={`${line.accountCode}-${line.date || fallbackDate}-${index}`} className={`preview-line grid grid-cols-[1fr_7rem] items-center gap-3 rounded-xl p-2 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800/50 ${line.credit > 0 ? 'pl-6' : ''}`}>
                 <div><p className="text-slate-900 dark:text-slate-100">{account?.name || line.accountCode}</p><p className="text-[9px] text-slate-500 dark:text-slate-400">Code: {line.accountCode} • Date: {line.date || fallbackDate || 'Not set'} • Normal: {account?.normalBalance}</p></div>
                 <div className="grid grid-cols-2 gap-3 text-right"><span>{line.debit > 0 ? formatCurrency(line.debit) : '—'}</span><span>{line.credit > 0 ? formatCurrency(line.credit) : '—'}</span></div>
               </div>

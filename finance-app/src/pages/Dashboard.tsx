@@ -22,6 +22,7 @@ import {
 } from 'recharts';
 import { useFinance } from '../context/FinanceContext';
 import { useTheme } from '../context/ThemeContext';
+import { CountUp } from '../components/CountUp';
 import { CASH_ACCOUNT_CODES } from '../lib/cashAccounts';
 
 const DISMISSED_ACTIVITY_KEY = 'ss_dismissed_activity_ids';
@@ -114,22 +115,24 @@ export function Dashboard(): React.ReactElement {
   const chartFormatter = (value: number) => (value >= 1000 ? `${value / 1000}k` : `${value}`);
 
   const isDark = theme === 'dark';
-  const chartGrid = isDark ? '#334155' : '#e2e8f0';
-  const chartAxis = isDark ? '#94a3b8' : '#64748b';
+  const chartGrid = isDark ? '#232833' : '#e0dbcf';
+  const chartAxis = isDark ? '#7d818b' : '#70737c';
+  const chartGold = isDark ? '#d4b47a' : '#8b6a2e';
+  const chartMuted = isDark ? '#4b5060' : '#b8b2a3';
   const tooltipStyle = {
     borderRadius: '12px',
-    border: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`,
+    border: `1px solid ${isDark ? '#232833' : '#e0dbcf'}`,
     fontSize: '12px',
     fontWeight: 600,
-    backgroundColor: isDark ? '#0f172a' : '#ffffff',
-    color: isDark ? '#f8fafc' : '#0f172a',
+    backgroundColor: isDark ? '#12151b' : '#ffffff',
+    color: isDark ? '#ece8df' : '#14161c',
   };
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">{settings.organizationName} Dashboard</h2>
+          <h2 className="font-display text-3xl text-slate-900 dark:text-slate-100">{settings.organizationName} <em className="text-blue-700 dark:text-blue-400">Dashboard</em></h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">
             Real-time overview of your student organization's financial position and fund activity.
           </p>
@@ -168,7 +171,7 @@ export function Dashboard(): React.ReactElement {
             </div>
           </div>
           <div>
-            <h3 className="text-lg font-bold text-blue-950 dark:text-blue-100 truncate">{formatCurrency(totals.Assets)}</h3>
+            <h3 className="text-lg font-bold text-blue-950 dark:text-blue-100 truncate"><CountUp id="dash-assets" value={totals.Assets} format={formatCurrency} /></h3>
             <span className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold flex items-center gap-1 mt-1">
               <TrendingUp className="w-3 h-3 text-emerald-500" /> Cash, Receivables, Equipment
             </span>
@@ -183,7 +186,7 @@ export function Dashboard(): React.ReactElement {
             </div>
           </div>
           <div>
-            <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 truncate">{formatCurrency(totals.Liabilities)}</h3>
+            <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 truncate"><CountUp id="dash-liabilities" value={totals.Liabilities} format={formatCurrency} /></h3>
             <span className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold flex items-center gap-1 mt-1">
               Payables & Financial Obligations
             </span>
@@ -198,7 +201,7 @@ export function Dashboard(): React.ReactElement {
             </div>
           </div>
           <div>
-            <h3 className="text-lg font-bold text-emerald-700 dark:text-emerald-300 truncate">{formatCurrency(totals.Revenue)}</h3>
+            <h3 className="text-lg font-bold text-emerald-700 dark:text-emerald-300 truncate"><CountUp id="dash-revenue" value={totals.Revenue} format={formatCurrency} /></h3>
             <span className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold flex items-center gap-1 mt-1">
               Grants, Donations & Student Organization Funds
             </span>
@@ -213,7 +216,7 @@ export function Dashboard(): React.ReactElement {
             </div>
           </div>
           <div>
-            <h3 className="text-lg font-bold text-rose-600 dark:text-rose-300 truncate">{formatCurrency(totals.Expenses)}</h3>
+            <h3 className="text-lg font-bold text-rose-600 dark:text-rose-300 truncate"><CountUp id="dash-expenses" value={totals.Expenses} format={formatCurrency} /></h3>
             <span className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold flex items-center gap-1 mt-1">
               Program and Operational Expenses
             </span>
@@ -287,8 +290,8 @@ export function Dashboard(): React.ReactElement {
                 <XAxis dataKey="name" tickLine={false} axisLine={false} style={{ fontSize: '10px', fill: chartAxis, fontWeight: 600 }} />
                 <YAxis tickLine={false} axisLine={false} tickFormatter={chartFormatter} style={{ fontSize: '10px', fill: chartAxis, fontWeight: 600 }} />
                 <Tooltip formatter={(value) => [formatCurrency(Number(value)), '']} contentStyle={tooltipStyle} />
-                <Bar dataKey="Revenue" fill="#1e3a8a" radius={[6, 6, 0, 0]} maxBarSize={28} />
-                <Bar dataKey="Expenses" fill="#f97316" radius={[6, 6, 0, 0]} maxBarSize={28} />
+                <Bar dataKey="Revenue" fill={chartGold} radius={[6, 6, 0, 0]} maxBarSize={28} animationDuration={560} animationEasing="ease-out" />
+                <Bar dataKey="Expenses" fill={chartMuted} radius={[6, 6, 0, 0]} maxBarSize={28} animationDuration={560} animationBegin={50} animationEasing="ease-out" />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -304,15 +307,15 @@ export function Dashboard(): React.ReactElement {
               <AreaChart data={cashFlowTrendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorCash" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#1e3a8a" stopOpacity={0.1} />
-                    <stop offset="95%" stopColor="#1e3a8a" stopOpacity={0} />
+                    <stop offset="5%" stopColor={chartGold} stopOpacity={0.18} />
+                    <stop offset="95%" stopColor={chartGold} stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={chartGrid} />
                 <XAxis dataKey="date" tickLine={false} axisLine={false} style={{ fontSize: '9px', fill: chartAxis, fontWeight: 600 }} />
                 <YAxis tickLine={false} axisLine={false} tickFormatter={chartFormatter} style={{ fontSize: '10px', fill: chartAxis, fontWeight: 600 }} />
                 <Tooltip formatter={(value) => [formatCurrency(Number(value)), 'Cash Balance']} contentStyle={tooltipStyle} />
-                <Area type="monotone" dataKey="Balance" stroke="#1e3a8a" strokeWidth={2.5} fillOpacity={1} fill="url(#colorCash)" />
+                <Area type="monotone" dataKey="Balance" stroke={chartGold} strokeWidth={2} fillOpacity={1} fill="url(#colorCash)" animationDuration={900} animationEasing="ease-out" />
               </AreaChart>
             </ResponsiveContainer>
           </div>

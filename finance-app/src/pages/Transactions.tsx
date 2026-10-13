@@ -1379,7 +1379,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
         particleCount: 100,
         spread: 70,
         origin: { y: 0.6 },
-        colors: ['#1e3a8a', '#3b82f6', '#10b981', '#f59e0b']
+        colors: ['#d4b47a', '#e0c48e', '#8fcba4', '#f4f1ea']
       });
 
       // Clear Form & Alert
@@ -1440,7 +1440,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   return (
     <div className="space-y-6 bg-slate-50 dark:bg-slate-950">
       <div>
-        <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 font-sans">Smart Transaction Entry</h2>
+        <h2 className="font-display text-3xl text-slate-900 dark:text-slate-100">Smart Transaction <em className="text-blue-700 dark:text-blue-400">Entry</em></h2>
         <p className="text-xs text-slate-700 dark:text-slate-400 mt-1 font-medium">Auto-classify transaction fields instantly using our rule-based accounting engine.</p>
       </div>
 
@@ -2333,7 +2333,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               ) : orderLinesDebitsFirst(previewLines, date).map((line, index) => {
                 const account = activeAccounts.find(a => a.code === line.accountCode);
                 return (
-                  <div key={`${line.accountCode}-${index}`} className={`grid grid-cols-[1fr_7rem] items-center gap-3 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800/50 p-2 rounded-xl ${line.credit > 0 ? 'pl-6' : ''}`}>
+                  <div key={`${line.accountCode}-${index}`} className={`preview-line grid grid-cols-[1fr_7rem] items-center gap-3 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800/50 p-2 rounded-xl ${line.credit > 0 ? 'pl-6' : ''}`}>
                     <div>
                       <p className="text-slate-900 dark:text-slate-100">{account?.name || line.accountCode}</p>
                       <p className="text-[9px] text-slate-500 dark:text-slate-400">Code: {line.accountCode} • Date: {line.date || date} • Normal: {account?.normalBalance}</p>

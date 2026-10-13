@@ -25,7 +25,7 @@ export function TransactionHistory({ onNavigate }: { onNavigate: (page: string) 
     return (
       <div className="space-y-5 bg-slate-50 dark:bg-slate-950">
         <button type="button" onClick={() => setSelected(null)} className="text-xs font-bold text-blue-700 hover:underline dark:text-blue-300">← Back to semester history</button>
-        <div><h2 className="text-xl font-black text-slate-900 dark:text-slate-100">{selected.semester} {selected.schoolYear}</h2><p className="mt-1 text-xs text-slate-500">Final snapshot for {selected.period} · {selected.startDate} to {selected.endDate}</p></div>
+        <div><h2 className="font-display text-3xl text-slate-900 dark:text-slate-100">{selected.semester} {selected.schoolYear}</h2><p className="mt-1 text-xs text-slate-500">Final snapshot for {selected.period} · {selected.startDate} to {selected.endDate}</p></div>
         <div className="flex gap-2"><button type="button" onClick={() => setView('statements')} className={`rounded-xl px-4 py-2 text-xs font-bold ${view === 'statements' ? 'bg-blue-700 text-white' : 'border bg-white dark:bg-slate-900'}`}><FileSpreadsheet className="mr-1.5 inline h-4 w-4" />Financial Statements</button><button type="button" onClick={() => setView('ledger')} className={`rounded-xl px-4 py-2 text-xs font-bold ${view === 'ledger' ? 'bg-blue-700 text-white' : 'border bg-white dark:bg-slate-900'}`}><BookOpen className="mr-1.5 inline h-4 w-4" />Final Ledger Balances</button></div>
         {view === 'statements' ? <section className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900"><p className="mb-4 text-sm font-bold">{selected.statements.join(' · ')}</p><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{[
           ['Total Assets', totals.totalAssets], ['Total Liabilities', totals.totalLiabilities], ['Total Fund Balance', totals.totalFundBalance], ['Total Revenue', totals.totalRevenue], ['Total Expenses', totals.totalExpenses], ['Net Surplus / (Deficit)', totals.netSurplus], ['Cash at Beginning', totals.beginningCash], ['Cash at End', totals.endingCash], ['Beginning Fund Balance', totals.beginningFundBalance],
@@ -36,7 +36,7 @@ export function TransactionHistory({ onNavigate }: { onNavigate: (page: string) 
 
   return (
     <div className="space-y-6 bg-slate-50 dark:bg-slate-950">
-      <div><h2 className="flex items-center gap-2 text-xl font-bold text-slate-900 dark:text-slate-100"><History className="h-5 w-5" /> Semester Workspace History</h2><p className="mt-1 text-xs font-medium text-slate-500">Every semester keeps its own editable Transactions, Review, journals, Ledger, Trial Balance, and Financial Statements.</p></div>
+      <div><h2 className="flex items-center gap-2 font-display text-3xl text-slate-900 dark:text-slate-100"><History className="h-5 w-5 text-blue-700 dark:text-blue-400" /> Semester Workspace <em className="text-blue-700 dark:text-blue-400">History</em></h2><p className="mt-1 text-xs font-medium text-slate-500">Every semester keeps its own editable Transactions, Review, journals, Ledger, Trial Balance, and Financial Statements.</p></div>
       {notice && <p role="status" className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">{notice}</p>}
       {deleting && <AlertDialog.Root open onOpenChange={open => { if (!open) setDeleting(null); }}><AlertDialog.Portal>
         <AlertDialog.Overlay className="fixed inset-0 z-50 bg-black/50" />

@@ -14,7 +14,7 @@ import {
 } from 'recharts';
 import { useFinance } from '../context/FinanceContext';
 
-const COLORS = ['#1e3a8a', '#2563eb', '#f97316', '#10b981', '#a855f7', '#6b7280'];
+const COLORS = ['#c9a96a', '#8b6a2e', '#e79a7e', '#8fcba4', '#7d818b', '#565963'];
 
 export function Analytics(): React.ReactElement {
   const { journalEntries, accounts, projects, formatCurrency } = useFinance();
@@ -112,7 +112,7 @@ return (
     <div id="a1" className="space-y-6 bg-slate-50 dark:bg-slate-950">
       {/* Title */}
       <div>
-        <h2 id="a2" className="text-xl font-bold text-slate-900 dark:text-slate-100">Financial Analytics</h2>
+        <h2 id="a2" className="font-display text-3xl text-slate-900 dark:text-slate-100">Financial <em className="text-blue-700 dark:text-blue-400">Analytics</em></h2>
         <p id="a3" className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">Visual intelligence tools for expenses tracking, activity margins, and efficiency metrics.</p>
       </div>
 
@@ -178,9 +178,9 @@ return (
                   }}
                 />
                 <Legend wrapperStyle={{ fontSize: '10px', fontWeight: 600, paddingTop: '10px', color: 'inherit' }} />
-                <Bar dataKey="Budget" fill="#1e3a8a" radius={[4, 4, 0, 0]} maxBarSize={20} />
-                <Bar dataKey="Revenue" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={20} />
-                <Bar dataKey="ActualSpending" fill="#f97316" radius={[4, 4, 0, 0]} maxBarSize={20} name="Actual Cost" />
+                <Bar dataKey="Budget" fill="#8a8d96" radius={[4, 4, 0, 0]} maxBarSize={20} animationDuration={560} animationEasing="ease-out" />
+                <Bar dataKey="Revenue" fill="#c9a96a" radius={[4, 4, 0, 0]} maxBarSize={20} animationDuration={560} animationEasing="ease-out" />
+                <Bar dataKey="ActualSpending" fill="#e79a7e" radius={[4, 4, 0, 0]} maxBarSize={20} animationDuration={560} animationEasing="ease-out" name="Actual Cost" />
               </BarChart>
             </ResponsiveContainer>
           </div>

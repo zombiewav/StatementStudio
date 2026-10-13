@@ -321,7 +321,7 @@ export function Review({ onContinueDraft, onPostDraft, notice, onNoticeShown }: 
   return (
     <div className="space-y-6 bg-slate-50 dark:bg-slate-950">
       <div>
-        <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 font-sans flex items-center gap-2">
+        <h2 className="font-display text-3xl text-slate-900 dark:text-slate-100 flex items-center gap-2">
           <ClipboardCheck className="w-5 h-5 text-blue-700 dark:text-blue-400" /> REVIEW
         </h2>
         <p className="text-xs text-slate-700 dark:text-slate-400 mt-1 font-medium">

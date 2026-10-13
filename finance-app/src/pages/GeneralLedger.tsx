@@ -74,7 +74,7 @@ export function GeneralLedger(): React.ReactElement {
   return (
     <div className="space-y-6 bg-slate-50 dark:bg-slate-950">
       <div>
-        <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">General Ledger</h2>
+        <h2 className="font-display text-3xl text-slate-900 dark:text-slate-100">General <em className="text-blue-700 dark:text-blue-400">Ledger</em></h2>
         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">Detailed accounting records sorted by account code, showing running posting balances.</p>
       </div>
 
@@ -248,7 +248,7 @@ export function GeneralLedger(): React.ReactElement {
       {visibleAccounts.length > accountsPerPage && (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">
-            Showing {(currentPage - 1) * accountsPerPage + 1}–{Math.min(currentPage * accountsPerPage, visibleAccounts.length)} of {visibleAccounts.length} accounts
+            Showing {(currentPage - 1) * accountsPerPage + 1}â€“{Math.min(currentPage * accountsPerPage, visibleAccounts.length)} of {visibleAccounts.length} accounts
           </p>
           <nav className="flex flex-wrap items-center gap-1.5" aria-label="General Ledger pages">
             <button

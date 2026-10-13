@@ -74,7 +74,7 @@ export function JournalEntries({ searchTerm: controlledSearchTerm, onSearchTermC
     <div className="space-y-6 bg-slate-50 dark:bg-slate-950">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">Journal Entries</h2>
+          <h2 className="font-display text-3xl text-slate-900 dark:text-slate-100">Journal <em className="text-blue-700 dark:text-blue-400">Entries</em></h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">Historical register of all financial events logged in double-entry bookkeeping style.</p>
         </div>
       </div>

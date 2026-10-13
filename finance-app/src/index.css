@@ -1,38 +1,186 @@
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* ------------------------------------------------------------------
+   Premium redesign - design tokens.
+   Visual only: the app keeps its existing Tailwind classes, and this
+   palette re-maps them. Warm ink (dark) / warm paper (light), one gold
+   accent, green for gains and coral for losses.
+   ------------------------------------------------------------------ */
+@theme {
+  --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Instrument Serif", "Iowan Old Style", Georgia, serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Neutrals: ink to paper. 950 = Ink, 900 = Surface, 800 = Line (dark);
+     50 = Paper, 100 = Text (dark). */
+  --color-slate-50: #f4f1ea;
+  --color-slate-100: #ece8df;
+  --color-slate-200: #e0dbcf;
+  --color-slate-300: #c9c5ba;
+  --color-slate-400: #a3a6ae;
+  --color-slate-500: #70737c;
+  --color-slate-600: #565963;
+  --color-slate-700: #3a3f4a;
+  --color-slate-800: #232833;
+  --color-slate-900: #12151b;
+  --color-slate-950: #0b0d11;
+  --color-gray-50: #f4f1ea;
+  --color-gray-100: #ece8df;
+  --color-gray-200: #e0dbcf;
+  --color-gray-300: #c9c5ba;
+  --color-gray-400: #a3a6ae;
+  --color-gray-500: #70737c;
+  --color-gray-600: #565963;
+  --color-gray-700: #3a3f4a;
+  --color-gray-800: #232833;
+  --color-gray-900: #12151b;
+  --color-gray-950: #0b0d11;
+
+  /* Gold replaces blue / indigo / violet as the single accent. Fills and
+     accents adapt per theme through the --ds-* variables below. */
+  --color-blue-50: #f8f2e4;
+  --color-blue-100: #f0e4c6;
+  --color-blue-200: #e6d3a3;
+  --color-blue-300: #dbc088;
+  --color-blue-400: #d4b47a;
+  --color-blue-500: var(--ds-gold-accent);
+  --color-blue-600: var(--ds-gold-fill);
+  --color-blue-700: var(--ds-gold-fill);
+  --color-blue-800: var(--ds-gold-fill);
+  --color-blue-900: var(--ds-gold-fill);
+  --color-blue-950: #33280f;
+  --color-indigo-50: #f8f2e4;
+  --color-indigo-100: #f0e4c6;
+  --color-indigo-200: #e6d3a3;
+  --color-indigo-300: #dbc088;
+  --color-indigo-400: #d4b47a;
+  --color-indigo-500: var(--ds-gold-accent);
+  --color-indigo-600: var(--ds-gold-fill);
+  --color-indigo-700: var(--ds-gold-fill);
+  --color-indigo-800: var(--ds-gold-fill);
+  --color-indigo-900: var(--ds-gold-fill);
+  --color-indigo-950: #33280f;
+  --color-violet-50: #f8f2e4;
+  --color-violet-100: #f0e4c6;
+  --color-violet-200: #e6d3a3;
+  --color-violet-300: #dbc088;
+  --color-violet-400: #d4b47a;
+  --color-violet-500: var(--ds-gold-accent);
+  --color-violet-600: var(--ds-gold-fill);
+  --color-violet-700: var(--ds-gold-fill);
+  --color-violet-800: var(--ds-gold-fill);
+  --color-violet-900: var(--ds-gold-fill);
+  --color-violet-950: #33280f;
+
+  /* Gain */
+  --color-emerald-50: #eaf4ee;
+  --color-emerald-100: #d6eadd;
+  --color-emerald-200: #b4d9c1;
+  --color-emerald-300: #8fcba4;
+  --color-emerald-400: #6fb88a;
+  --color-emerald-500: #4fa377;
+  --color-emerald-600: #3a8a62;
+  --color-emerald-700: #2c7050;
+  --color-emerald-800: #235a40;
+  --color-emerald-900: #1c4733;
+  --color-emerald-950: #0f2a1e;
+  --color-green-300: #8fcba4;
+  --color-green-500: #4fa377;
+  --color-green-600: #3a8a62;
+  --color-green-700: #2c7050;
+
+  /* Loss */
+  --color-rose-50: #fbede8;
+  --color-rose-100: #f6dad0;
+  --color-rose-200: #f0c0b0;
+  --color-rose-300: #e79a7e;
+  --color-rose-400: #e08766;
+  --color-rose-500: #d4704e;
+  --color-rose-600: #c0573a;
+  --color-rose-700: #a04530;
+  --color-rose-800: #7f3626;
+  --color-rose-900: #5e2a1e;
+  --color-rose-950: #351710;
+  --color-red-50: #fbede8;
+  --color-red-100: #f6dad0;
+  --color-red-200: #f0c0b0;
+  --color-red-300: #e79a7e;
+  --color-red-400: #e08766;
+  --color-red-500: #d4704e;
+  --color-red-600: #c0573a;
+  --color-red-700: #a04530;
+  --color-red-800: #7f3626;
+  --color-red-900: #5e2a1e;
+
+  /* Softer corners to match the design: controls ~10px, cards 16-20px */
+  --radius-xl: 0.625rem;
+  --radius-3xl: 1.25rem;
+}
+
+:root {
+  --ds-gold-fill: #8b6a2e;
+  --ds-gold-accent: #a68146;
+  --ds-on-gold: #ffffff;
+  --ds-gold-hover: #6e5324;
+  --ds-ease-standard: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.dark {
+  --ds-gold-fill: #d4b47a;
+  --ds-gold-accent: #d4b47a;
+  --ds-on-gold: #14110a;
+  --ds-gold-hover: #e0c48e;
+}
+
+/* Text on a gold fill must flip to ink in dark mode, and hover must
+   lighten instead of darkening. Applies to every filled primary control. */
+.dark :is(.bg-blue-500, .bg-blue-600, .bg-blue-700, .bg-blue-800, .bg-blue-900).text-white {
+  color: var(--ds-on-gold);
+}
+.dark :is(.bg-blue-500, .bg-blue-600, .bg-blue-700, .bg-blue-800, .bg-blue-900).text-white:hover {
+  background-color: var(--ds-gold-hover);
+}
+:is(.bg-blue-500, .bg-blue-600, .bg-blue-700, .bg-blue-800, .bg-blue-900).text-white:hover {
+  background-color: var(--ds-gold-hover);
+}
+/* Primary buttons are pills; nav items opt out with data-nav. */
+button:is(.bg-blue-600, .bg-blue-700, .bg-blue-800, .bg-blue-900).text-white:is(.rounded-lg, .rounded-xl):not([data-nav]) {
+  border-radius: 9999px;
+}
+
 :root {
   color-scheme: light;
-  --bg: #f8fafc;
+  --bg: #f4f1ea;
   --card: #ffffff;
-  --card-muted: #f8fafc;
-  --text: #0f172a;
-  --text-muted: #475569;
-  --text-soft: #94a3b8;
-  --border: #e2e8f0;
-  --border-strong: #cbd5e1;
-  --hover: #f1f5f9;
-  --scrollbar: #cbd5e1;
-  --scrollbar-track: #f1f5f9;
-  --scrollbar-thumb: #1d4ed8;
-  --scrollbar-thumb-hover: #2563eb;
+  --card-muted: #efebe3;
+  --text: #14161c;
+  --text-muted: #565963;
+  --text-soft: #8a8d96;
+  --border: #e0dbcf;
+  --border-strong: #c9c5ba;
+  --hover: #ece8df;
+  --scrollbar: #c9c5ba;
+  --scrollbar-track: #f4f1ea;
+  --scrollbar-thumb: #cfc9bb;
+  --scrollbar-thumb-hover: #b9b2a1;
 }
 
 .dark {
   color-scheme: dark;
-  --bg: #020617;
-  --card: #0f172a;
-  --card-muted: #111827;
-  --text: #f8fafc;
-  --text-muted: #cbd5e1;
-  --text-soft: #94a3b8;
-  --border: #1e293b;
-  --border-strong: #334155;
-  --hover: #172033;
-  --scrollbar: #334155;
-  --scrollbar-track: #020617;
-  --scrollbar-thumb: #1d4ed8;
-  --scrollbar-thumb-hover: #2563eb;
+  --bg: #0b0d11;
+  --card: #12151b;
+  --card-muted: #171b22;
+  --text: #ece8df;
+  --text-muted: #a3a6ae;
+  --text-soft: #7d818b;
+  --border: #232833;
+  --border-strong: #3a3f4a;
+  --hover: #171b22;
+  --scrollbar: #3a3f4a;
+  --scrollbar-track: #0b0d11;
+  --scrollbar-thumb: #2e3440;
+  --scrollbar-thumb-hover: #454c5a;
 }
 
 /* color-scheme on an ancestor doesn't reliably reach a native <select>'s
@@ -53,6 +201,26 @@ html,
 body {
   background-color: var(--bg);
   color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+
+::selection {
+  background-color: color-mix(in srgb, var(--ds-gold-fill) 35%, transparent);
+}
+
+/* Keyboard focus: a 2px gold ring, instant, never animated. */
+:focus-visible {
+  outline: 2px solid var(--ds-gold-accent);
+  outline-offset: 2px;
+}
+
+/* Display type: Instrument Serif for page titles. */
+.font-display {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  letter-spacing: -0.01em;
 }
 
 body {
@@ -166,4 +334,95 @@ body {
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background-color: var(--scrollbar-thumb-hover);
+}
+
+/* ------------------------------------------------------------------
+   Motion - "settle, never bounce". Opacity and transform only, every
+   interaction under 600ms. Recipes R01-R17 from the design handoff.
+   ------------------------------------------------------------------ */
+:root {
+  --dur-instant: 90ms;
+  --dur-fast: 160ms;
+  --dur-base: 240ms;
+  --dur-slow: 420ms;
+  --dur-page: 560ms;
+  --ease-standard: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ease-glide: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(8px); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+}
+
+/* R01 page content enters: each top-level section rises in, up to 6 staggered by 40ms. */
+.page-enter > * > * {
+  animation: rise var(--dur-base) var(--ease-glide) both;
+}
+.page-enter > * > *:nth-child(2) { animation-delay: 40ms; }
+.page-enter > * > *:nth-child(3) { animation-delay: 80ms; }
+.page-enter > * > *:nth-child(4) { animation-delay: 120ms; }
+.page-enter > * > *:nth-child(5) { animation-delay: 160ms; }
+.page-enter > * > *:nth-child(n + 6) { animation-delay: 200ms; }
+
+/* R14 landing hero: headline, copy and actions rise in turn. */
+.hero-stagger > * {
+  animation: rise var(--dur-page) var(--ease-glide) both;
+}
+.hero-stagger > *:nth-child(2) { animation-delay: 120ms; }
+.hero-stagger > *:nth-child(3) { animation-delay: 240ms; }
+.hero-stagger > *:nth-child(4) { animation-delay: 360ms; }
+
+/* R03 hover and R16 theme switch: color changes only, no lift. */
+@layer base {
+  a,
+  button,
+  input,
+  select,
+  textarea,
+  tr {
+    transition-property: background-color, border-color, color, opacity;
+    transition-duration: var(--dur-fast);
+    transition-timing-function: var(--ease-standard);
+  }
+}
+.theme-fade,
+.theme-fade *,
+.theme-fade *::before,
+.theme-fade *::after {
+  transition: background-color var(--dur-base) var(--ease-standard), border-color var(--dur-base) var(--ease-standard), color var(--dur-base) var(--ease-standard), fill var(--dur-base) var(--ease-standard), stroke var(--dur-base) var(--ease-standard) !important;
+}
+
+/* R04 button press: scales to 97% and back. */
+button:not(:disabled):active {
+  transform: scale(0.97);
+  transition-property: transform, background-color, border-color, color, opacity;
+  transition-duration: var(--dur-instant);
+}
+
+/* R05 dialogs and drawers fade in (opacity only so centering is untouched). */
+[role="dialog"][data-state="open"],
+[role="alertdialog"][data-state="open"],
+[data-radix-popper-content-wrapper] {
+  animation: fade-in var(--dur-base) var(--ease-glide) both;
+}
+
+/* R11 journal preview lines rise in. */
+.preview-line {
+  animation: rise var(--dur-base) var(--ease-glide) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+    transition-duration: 1ms !important;
+  }
 }

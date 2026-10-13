@@ -406,7 +406,7 @@ export function FinancialStatements(): React.ReactElement {
       {/* Page Title & Toolbar */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 print:hidden">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 font-sans">Financial Statements</h2>
+          <h2 className="font-display text-3xl text-slate-900 dark:text-slate-100">Financial <em className="text-blue-700 dark:text-blue-400">Statements</em></h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">Generate, inspect, and print official GAAP-compliant financial summaries.</p>
         </div>
 

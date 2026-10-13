@@ -28,6 +28,13 @@ function getInitialTheme(): ThemeMode {
 }
 
 export function applyTheme(theme: ThemeMode): void {
+  // Cross-fade colors for 240ms so switching theme never flashes (motion recipe R16).
+  const root = document.documentElement;
+  if (root.dataset.themeApplied) {
+    root.classList.add('theme-fade');
+    window.setTimeout(() => root.classList.remove('theme-fade'), 260);
+  }
+  root.dataset.themeApplied = '1';
   if (theme === 'dark') {
     document.documentElement.classList.add('dark');
     return;

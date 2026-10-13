@@ -52,7 +52,7 @@ const AnalyticsSection = () => {
       description: 'Monthly surplus',
     },
     {
-      icon: <Target className="w-6 h-6 text-orange-400" />,
+      icon: <Target className="w-6 h-6 text-slate-400" />,
       title: 'Active Projects',
       metric: '24',
       trend: '-2.1%',
@@ -174,7 +174,7 @@ const AnalyticsSection = () => {
               FINANCIAL ANALYTICS
             </span>
           </div>
-          <h2 className="text-4xl md:text-5xl font-bold text-white mb-6 leading-tight">
+          <h2 className="text-4xl md:text-5xl font-display font-normal text-slate-100 mb-6 leading-tight">
             Real-time insights across your institution
           </h2>
           <p className="text-lg text-slate-400 max-w-2xl mx-auto">
@@ -209,7 +209,7 @@ const AnalyticsSection = () => {
                     <span className="text-xs text-slate-400">Revenue</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-orange-500" />
+                    <div className="w-3 h-3 rounded-full bg-slate-500" />
                     <span className="text-xs text-slate-400">Expenses</span>
                   </div>
                 </div>
@@ -217,8 +217,6 @@ const AnalyticsSection = () => {
 
               {/* Chart Area */}
               <div className="relative mb-8">
-                <div className="pointer-events-none absolute inset-x-12 top-8 h-24 rounded-full bg-blue-500/10 blur-3xl animate-pulse" />
-                <div className="pointer-events-none absolute bottom-6 right-16 h-24 w-40 rounded-full bg-orange-500/10 blur-3xl animate-pulse" />
                 <svg
                   viewBox={`0 0 ${chartWidth} ${chartHeight}`}
                   className="relative h-72 w-full"
@@ -457,7 +455,7 @@ const AnalyticsSection = () => {
                   >
                     <p className="font-semibold text-white">{hoveredPoint.month}</p>
                     <p className="text-blue-300">Revenue: ${hoveredPoint.revenue}K</p>
-                    <p className="text-orange-300">Expenses: ${hoveredPoint.expense}K</p>
+                    <p className="text-slate-300">Expenses: ${hoveredPoint.expense}K</p>
                   </div>
                 )}
               </div>

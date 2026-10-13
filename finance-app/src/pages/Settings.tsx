@@ -325,7 +325,7 @@ export function Settings(): React.ReactElement {
     <div className="space-y-6 bg-slate-50 dark:bg-slate-950">
       {/* Title */}
       <div>
-        <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">Workspace Settings</h2>
+        <h2 className="font-display text-3xl text-slate-900 dark:text-slate-100">Workspace <em className="text-blue-700 dark:text-blue-400">Settings</em></h2>
         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">Configure chart of accounts, fiscal-year controls, transaction types, currency, and organization access.</p>
       </div>
 
