@@ -32,9 +32,12 @@ function DashboardLayout() {
   // Set from Review's "Continue" on a draft — looked up fresh each render
   // so Transactions always sees the current saved state, then cleared once
   // Transactions has consumed it.
-  const [resumeDraftId, setResumeDraftId] = useState<string | null>(null);
+  // `post` is set by Review's "Post" button: the draft is loaded and posted
+  // straight away with the form's own validation, instead of being edited.
+  const [resumeDraft, setResumeDraft] = useState<{ id: string; post: boolean } | null>(null);
+  const [reviewNotice, setReviewNotice] = useState('');
   const { draftTransactions } = useFinance();
-  const draftToResume = resumeDraftId ? draftTransactions.find(d => d.id === resumeDraftId) || null : null;
+  const draftToResume = resumeDraft ? draftTransactions.find(d => d.id === resumeDraft.id) || null : null;
 
   const renderActivePage = () => {
     switch (activePage) {
@@ -44,14 +47,21 @@ function DashboardLayout() {
         return (
           <Transactions
             draftToResume={draftToResume}
-            onDraftResumed={() => setResumeDraftId(null)}
+            autoPostDraft={!!resumeDraft?.post}
+            onDraftResumed={() => setResumeDraft(null)}
             onDraftSaved={() => setActivePage('review')}
+            onDraftPosted={(message) => { setReviewNotice(message); setActivePage('review'); }}
           />
         );
       case 'transaction-history':
         return <TransactionHistory onNavigate={setActivePage} />;
       case 'review':
-        return <Review onContinueDraft={(draftId) => { setResumeDraftId(draftId); setActivePage('transactions'); }} />;
+        return <Review
+          onContinueDraft={(draftId) => { setResumeDraft({ id: draftId, post: false }); setActivePage('transactions'); }}
+          onPostDraft={(draftId) => { setResumeDraft({ id: draftId, post: true }); setActivePage('transactions'); }}
+          notice={reviewNotice}
+          onNoticeShown={() => setReviewNotice('')}
+        />;
       case 'journals':
         return <JournalEntries searchTerm={searchTerm} onSearchTermChange={setSearchTerm} />;
       case 'ledger':

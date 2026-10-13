@@ -6,6 +6,7 @@ import {
   buildJournalLines,
   projectJournalLineImpacts,
   computeStatementImpact,
+  orderLinesDebitsFirst,
   FUNDING_SOURCE_OPTIONS,
   UnknownAccountError,
 } from './journalEngine';
@@ -124,5 +125,23 @@ describe('FUNDING_SOURCE_OPTIONS', () => {
       'officer-personal-money',
       'on-account',
     ]);
+  });
+});
+
+describe('orderLinesDebitsFirst', () => {
+  it('lists every debit before every credit, keeping each side in its own order', () => {
+    const lines = [
+      { accountCode: '1700', debit: 2000, credit: 0 },
+      { accountCode: '1270', debit: 0, credit: 2000 },
+      { accountCode: '2050', debit: 0, credit: 1500 },
+      { accountCode: '1360', debit: 1500, credit: 0 },
+    ];
+    expect(orderLinesDebitsFirst(lines).map(line => line.accountCode)).toEqual(['1700', '1360', '1270', '2050']);
+  });
+
+  it('does not change the stored lines', () => {
+    const lines = [{ accountCode: 'a', debit: 0, credit: 5 }, { accountCode: 'b', debit: 5, credit: 0 }];
+    orderLinesDebitsFirst(lines);
+    expect(lines.map(line => line.accountCode)).toEqual(['a', 'b']);
   });
 });

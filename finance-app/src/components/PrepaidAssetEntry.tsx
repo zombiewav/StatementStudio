@@ -43,9 +43,9 @@ function PaymentRows({ label, rows, setRows, defaultDate }: { label: string; row
   </div>;
 }
 
-interface PrepaidAssetEntryProps { draftToResume?: TransactionDraft | null; onDraftResumed?: () => void; onDraftSaved?: () => void }
+interface PrepaidAssetEntryProps { draftToResume?: TransactionDraft | null; onDraftResumed?: () => void; onDraftSaved?: () => void; autoPostDraft?: boolean; onDraftPosted?: (message: string) => void }
 
-export function PrepaidAssetEntry({ draftToResume = null, onDraftResumed, onDraftSaved }: PrepaidAssetEntryProps): React.ReactElement {
+export function PrepaidAssetEntry({ draftToResume = null, onDraftResumed, onDraftSaved, autoPostDraft = false, onDraftPosted }: PrepaidAssetEntryProps): React.ReactElement {
   const { accounts, journalEntries, addJournalEntry, accountBalances, formatCurrency, settings, finalizePrepaidAssetForSemester, saveDraftTransaction, deleteDraftTransaction } = useFinance();
   const [mode, setMode] = useState<Mode>('purchase');
   const [item, setItem] = useState('');
@@ -66,6 +66,8 @@ export function PrepaidAssetEntry({ draftToResume = null, onDraftResumed, onDraf
   const [error, setError] = useState('');
   const [semesterFinal, setSemesterFinal] = useState<'' | 'yes' | 'no'>('');
   const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
+  // Raised when Review's "Post" opened this draft; it posts once the saved fields are restored.
+  const [pendingAutoPost, setPendingAutoPost] = useState(false);
 
   useEffect(() => {
     if (!draftToResume || draftToResume.category !== 'prepaid-assets') return;
@@ -87,13 +89,14 @@ export function PrepaidAssetEntry({ draftToResume = null, onDraftResumed, onDraf
     setSelectedDownpaymentId(typeof snapshot.selectedDownpaymentId === 'string' ? snapshot.selectedDownpaymentId : '');
     setSelectedPurchaseId(typeof snapshot.selectedPurchaseId === 'string' ? snapshot.selectedPurchaseId : '');
     setSemesterFinal(snapshot.semesterFinal === 'yes' || snapshot.semesterFinal === 'no' ? snapshot.semesterFinal : '');
+    setPendingAutoPost(autoPostDraft);
     onDraftResumed?.();
   }, [draftToResume, onDraftResumed]);
 
   const saveAsDraft = () => {
     const id = saveDraftTransaction({ id: editingDraftId || undefined, category: 'prepaid-assets', label: `${mode === 'consumption' ? 'Consumption' : mode === 'downpayment' ? 'Downpayment' : 'Purchase'} of ${item || 'Prepaid Asset'}`, formState: { mode, item, categoryValue: category, date, amount, quantity, purpose, eventName, paymentMethod, officer, organizationPayments, officerPayments, advancePayments, selectedDownpaymentId, selectedPurchaseId, semesterFinal } });
     setEditingDraftId(id);
-    setMessage('Saved as a draft. Continue it from Review when ready.');
+    setMessage('Saved as a draft. Continue or Post it from Review when ready.');
     setError('');
     onDraftSaved?.();
   };
@@ -142,8 +145,8 @@ export function PrepaidAssetEntry({ draftToResume = null, onDraftResumed, onDraf
     setSelectedDownpaymentId(''); setSelectedPurchaseId(''); setSemesterFinal('');
   };
 
-  const submit = (event: React.FormEvent) => {
-    event.preventDefault(); setError(''); setMessage('');
+  const submit = (event?: React.FormEvent) => {
+    event?.preventDefault(); setError(''); setMessage('');
     if (!settings.semester || !settings.reportingYear) return setError('Set the organization Semester and Year before posting.');
     const semester = settings.semester;
     const reportingYear = settings.reportingYear;
@@ -197,10 +200,20 @@ export function PrepaidAssetEntry({ draftToResume = null, onDraftResumed, onDraf
         }
       }
       setMessage('Prepaid-asset transaction posted successfully.');
-      if (editingDraftId) { deleteDraftTransaction(editingDraftId); setEditingDraftId(null); }
+      if (editingDraftId) {
+        deleteDraftTransaction(editingDraftId);
+        setEditingDraftId(null);
+        onDraftPosted?.('Prepaid-asset transaction posted successfully.');
+      }
       reset();
     } catch (caught) { setError(caught instanceof Error ? caught.message : 'Unable to post the prepaid-asset transaction.'); }
   };
+
+  useEffect(() => {
+    if (!pendingAutoPost) return;
+    setPendingAutoPost(false);
+    submit();
+  }, [pendingAutoPost]);
 
   const showOrg = paymentMethod === 'organization-funds' || paymentMethod === 'combination';
   const showOfficer = paymentMethod === 'officer-personal' || paymentMethod === 'combination';
@@ -223,7 +236,7 @@ export function PrepaidAssetEntry({ draftToResume = null, onDraftResumed, onDraf
     }
   }, [advancePayments, amount, automaticPostingDate, availableAdvance, availableCash, category, date, mode, officerPayments, organizationPayments, paymentMethod, selectedDownpayment?.remaining, selectedPurchase?.entry?.transactionDetails?.prepaidAssetCategory]);
 
-  return <form onSubmit={event => { event.preventDefault(); if (editingDraftId) submit(event); else saveAsDraft(); }} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-5">
+  return <form onSubmit={event => { event.preventDefault(); saveAsDraft(); }} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-5">
     <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Prepaid Expenses and Other Assets</h3>
     <p className="mt-1 text-[10px] font-medium text-slate-500">(Record assets acquired in advance, whether paid or unpaid, that will be used or consumed later.)</p>
     <div className="mt-4 flex flex-wrap gap-2">
@@ -257,6 +270,6 @@ export function PrepaidAssetEntry({ draftToResume = null, onDraftResumed, onDraf
     <div className="h-fit"><FinancialPreviewPanels lines={previewLines} fallbackDate={date || automaticPostingDate} accounts={accounts} accountBalances={accountBalances} formatCurrency={formatCurrency} /></div>
     </div>
     {error && <p className="mt-3 text-xs font-semibold text-rose-600">{error}</p>}{message && <p className="mt-3 text-xs font-semibold text-emerald-600">{message}</p>}
-    <button type="submit" className="mt-4 rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-xs font-bold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">{editingDraftId ? 'Post Reviewed Prepaid Transaction' : 'Save as Draft'}</button>
+    <button type="submit" className="mt-4 rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-xs font-bold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">Save as Draft</button>
   </form>;
 }

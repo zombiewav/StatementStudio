@@ -117,6 +117,17 @@ export function buildCompoundJournalLines(pairs: JournalLinePair[]): JournalLine
   return lines;
 }
 
+/**
+ * Journal entries read debits first, then credits. The builders emit lines in
+ * posting order (a payment's debit and credit, then the next), which can
+ * interleave the sides, so screens show this ordering instead. The stored
+ * order is left alone because batch-splitting relies on it. The order within
+ * each side is unchanged.
+ */
+export function orderLinesDebitsFirst<T extends { debit: number; credit: number }>(lines: readonly T[]): T[] {
+  return [...lines.filter(line => line.debit > 0), ...lines.filter(line => !(line.debit > 0))];
+}
+
 export interface ProjectedAccountImpact {
   account: Account;
   accountCode: string;

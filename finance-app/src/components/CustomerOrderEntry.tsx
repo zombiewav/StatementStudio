@@ -12,8 +12,10 @@ const button = 'rounded-lg border border-blue-300 px-3 py-2 text-xs font-bold te
 const empty = () => ({ mode: 'new', orderId: '', item: 'Lanyard', other: '', batch: '', kind: 'merchandise', total: '', estimatedCost: '', date: '', sales: '', cost: '', quantity: '', batchEntryId: '', refund: '', collections: [{ id: 'cash-1', date: '', amount: '' }] as DatedAmountInputRow[] });
 type Form = ReturnType<typeof empty>;
 
-export function CustomerOrderEntry({ orderId, editOriginal = false, draftToResume, onDraftResumed, onDraftSaved }: {
+export function CustomerOrderEntry({ orderId, editOriginal = false, draftToResume, onDraftResumed, onDraftSaved, autoPostDraft = false, onDraftPosted }: {
   orderId?: string; editOriginal?: boolean; draftToResume?: TransactionDraft | null; onDraftResumed?: () => void; onDraftSaved?: () => void;
+  // Set when Review's "Post" opened this draft; it posts once the saved fields are restored.
+  autoPostDraft?: boolean; onDraftPosted?: (message: string) => void;
 }) {
   const { journalEntries, accounts, settings, formatCurrency, addJournalEntry, updateJournalEntry, saveDraftTransaction, deleteDraftTransaction } = useFinance();
   const original = orderId ? journalEntries.find(entry => entry.id === orderId) : undefined;
@@ -34,6 +36,7 @@ export function CustomerOrderEntry({ orderId, editOriginal = false, draftToResum
   };
   const [form, setForm] = useState<Form>(originalForm);
   const [draftId, setDraftId] = useState<string>();
+  const [pendingAutoPost, setPendingAutoPost] = useState(false);
   const [message, setMessage] = useState('');
   const applied = useRef('');
   const change = (patch: Partial<Form>) => { setForm(old => ({ ...old, ...patch })); setMessage(''); };
@@ -42,6 +45,7 @@ export function CustomerOrderEntry({ orderId, editOriginal = false, draftToResum
     applied.current = draftToResume.id;
     setForm({ ...empty(), ...draftToResume.formState } as Form);
     setDraftId(draftToResume.id);
+    setPendingAutoPost(autoPostDraft);
     onDraftResumed?.();
   }, [draftToResume, onDraftResumed]);
   const orders = journalEntries.filter(e => e.transactionDetails?.customerOrder && !e.reversalOfEntryId && !e.reversedByEntryId);
@@ -54,8 +58,8 @@ export function CustomerOrderEntry({ orderId, editOriginal = false, draftToResum
   const batches = buildMerchandiseBatchBalances(journalEntries).filter(b => sameMerchandise(b.item, item) && sameMerchandise(b.batch, batch));
   const noInventory = kind === 'merchandise' && !batches.length;
   const total = terms?.total ?? Number(form.total);
-  const post = (event: React.FormEvent) => {
-    event.preventDefault();
+  const post = (event?: React.FormEvent) => {
+    event?.preventDefault();
     try {
       if (!settings.semester || !settings.reportingYear) throw new Error('Select the organization semester and reporting year first.');
       const semester = settings.semester;
@@ -84,7 +88,7 @@ export function CustomerOrderEntry({ orderId, editOriginal = false, draftToResum
         const state = customerOrderState(candidate, journalEntries.map(entry => entry.id === original.id ? candidate : entry));
         if ([state.remainingSales, state.unearned, state.receivable, state.refundable].some(value => value < 0)) throw new Error('These changes conflict with later order activity. Adjust the values or delete the later updates first.');
         updateJournalEntry(candidate);
-        if (draftId) deleteDraftTransaction(draftId);
+        if (draftId) { deleteDraftTransaction(draftId); onDraftPosted?.(`${candidate.reference} updated.`); }
         setDraftId(undefined);
         setMessage(`${candidate.reference} updated.`);
         return;
@@ -93,12 +97,17 @@ export function CustomerOrderEntry({ orderId, editOriginal = false, draftToResum
         transactionType: root ? 'Actual Sale / Delivery / Render of Service' : 'Customers’ Pre-order and Downpayment',
         details: transactionDetails,
       });
-      if (draftId) deleteDraftTransaction(draftId);
+      if (draftId) { deleteDraftTransaction(draftId); onDraftPosted?.(`${entry.reference} posted.`); }
       setDraftId(undefined);
       setForm({ ...empty(), mode: 'update', orderId: root?.id || entry.id });
       setMessage(`${entry.reference} posted. Saved order details are loaded below; enter only new activity.`);
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Could not post the customer order.'); }
   };
+  useEffect(() => {
+    if (!pendingAutoPost) return;
+    setPendingAutoPost(false);
+    post();
+  }, [pendingAutoPost]);
   const saveDraft = () => {
     const draftItem = form.item === 'Others' ? form.other : form.item;
     const id = saveDraftTransaction({
@@ -112,10 +121,10 @@ export function CustomerOrderEntry({ orderId, editOriginal = false, draftToResum
     onDraftSaved?.();
   };
   const input = (key: keyof Form, label: string, type = 'text', required = false) => <label className="block text-xs font-semibold">{label}<input aria-label={label} className={field} type={type} value={String(form[key])} onChange={e => change({ [key]: e.target.value })} required={required} {...(type === 'number' ? { min: 0, step: key === 'quantity' ? '1' : '0.01' } : {})} /></label>;
-  return <form onSubmit={event => { event.preventDefault(); if (editOriginal || draftId) post(event); else saveDraft(); }} className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+  return <form onSubmit={event => { event.preventDefault(); if (editOriginal) post(event); else saveDraft(); }} className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
     <h3 className="text-sm font-bold">Customer pre-orders and actual sales</h3>
     {!orderId && <div className="flex gap-2"><button className={button} type="button" aria-pressed={form.mode === 'new'} onClick={() => { setForm(empty()); setDraftId(undefined); setMessage(''); }}>New pre-order</button><button className={button} type="button" aria-pressed={form.mode === 'update'} onClick={() => change({ mode: 'update' })}>Actual sale / delivery / collection</button></div>}
-    {draftId && <p className="text-xs">Continuing a saved draft.</p>}
+    {draftId && <p className="text-xs">Continuing a saved draft. Save as Draft keeps your changes; Post it from Review.</p>}
     {form.mode === 'update' && !orderId && <label className="block text-xs font-semibold">Choose customer transaction<select aria-label="Choose customer transaction" className={field} value={form.orderId} onChange={e => { setForm({ ...empty(), mode: 'update', orderId: e.target.value }); setDraftId(undefined); }}><option value="">Select a saved order…</option>{orders.map(e => <option key={e.id} value={e.id}>{e.reference} — {e.transactionDetails?.merchandiseItem} — {e.transactionDetails?.merchandiseBatch}</option>)}</select></label>}
     {form.mode === 'new' && <div className="grid gap-4 sm:grid-cols-2">
       <label className="text-xs font-semibold">Order type<select aria-label="Order type" className={field} value={form.kind} onChange={e => change({ kind: e.target.value })}><option value="merchandise">Merchandise</option><option value="service">Service</option></select></label>
@@ -148,7 +157,7 @@ export function CustomerOrderEntry({ orderId, editOriginal = false, draftToResum
       <p className="text-xs text-slate-500 dark:text-slate-400">Deposits remain unearned until delivery. Later payments settle unpaid sales first. Payments exceeding the entire order are refundable.</p>
     </>}
     {message && <p role="status" className="rounded-lg bg-blue-50 p-3 text-xs font-semibold text-blue-900 dark:bg-blue-900/30 dark:text-blue-200">{message}</p>}
-    <div className="flex flex-wrap gap-3"><button type="submit" className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-bold text-white">{editOriginal ? 'Save Changes' : draftId ? `Post Reviewed ${root ? 'Update' : 'Pre-order'}` : 'Save as Draft'}</button></div>
+    <div className="flex flex-wrap gap-3"><button type="submit" className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-bold text-white">{editOriginal ? 'Save Changes' : 'Save as Draft'}</button></div>
   </form>;
 }
 

@@ -204,6 +204,18 @@ login flag. This is still local-browser authentication, not secure multi-device 
   exceed the receivable on the books. A blank Date 2, Date 3, or later collection date inherits
   Date 1; each resolved date is saved on its journal lines for the ledger.
 
+- **Draft workflow (client design)**: every transaction form only ever offers **Save as Draft**. The
+  general Transactions form writes a real draft journal entry to the ledger and re-saving replaces
+  that same entry (never a duplicate); Prepaid, Activity Fee and Customer Order drafts store form
+  state only. Review's draft card has **Continue / Post / Delete**: Post opens the draft and runs
+  the form's own validation and posting (`autoPostDraft`), then returns to Review and removes the card.
+  Because a saved draft is already in the ledger, the form reads every limit (officer payable,
+  advances, cash, linked downpayment, inventory units, preview Before/After) from
+  `ledgerWithoutDraftEntry` (`lib/draftLedger.ts`) so a draft never counts against itself. Drafts
+  are kept out of Transaction Review. Reimbursement to Officer is limited by the **total** Due to
+  Officers balance; the per-officer table is reference only. Journal lines are *displayed* debits
+  first (`orderLinesDebitsFirst`); stored order is unchanged because batch splitting relies on it.
+
 ## Known bugs / gaps, not yet fixed (flagged, intentionally left alone)
 
 - **Cash Flow "beginning cash"** (`FinancialStatements.tsx`, `cashFlowDetails`): detected via a

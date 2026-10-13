@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { Layers, Scale, TrendingDown, TrendingUp } from 'lucide-react';
 import { Account, JournalLine } from '../types';
-import { computeStatementImpact, projectJournalLineImpacts } from '../lib/journalEngine';
+import { computeStatementImpact, orderLinesDebitsFirst, projectJournalLineImpacts } from '../lib/journalEngine';
 
 interface FinancialPreviewPanelsProps {
   lines: JournalLine[];
@@ -31,7 +31,7 @@ export function FinancialPreviewPanels({ lines, fallbackDate = '', accounts, acc
           </div>
           {lines.length === 0 ? (
             <div className="p-4 text-center text-[11px] font-medium text-slate-400 dark:text-slate-500">Enter the transaction details to preview its journal lines.</div>
-          ) : lines.map((line, index) => {
+          ) : orderLinesDebitsFirst(lines).map((line, index) => {
             const account = accounts.find(candidate => candidate.code === line.accountCode);
             return (
               <div key={`${line.accountCode}-${line.date || fallbackDate}-${index}`} className={`grid grid-cols-[1fr_7rem] items-center gap-3 rounded-xl p-2 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800/50 ${line.credit > 0 ? 'pl-6' : ''}`}>

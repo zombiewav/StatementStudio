@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { orderLinesDebitsFirst } from '../lib/journalEngine';
 import {
   Search,
   ChevronDown,
@@ -247,7 +248,7 @@ export function JournalEntries({ searchTerm: controlledSearchTerm, onSearchTermC
                               </div>
 
                               {/* lines */}
-                              {je.lines.map((line, idx) => {
+                              {orderLinesDebitsFirst(je.lines).map((line, idx) => {
                                 const acc = accounts.find(a => a.code === line.accountCode);
                                 const isCredit = line.credit > 0;
                                 return (

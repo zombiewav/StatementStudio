@@ -19,7 +19,7 @@ import {
 import confetti from 'canvas-confetti';
 import { useFinance, PurposeOption } from '../context/FinanceContext';
 import { JournalLine, ReceiptAttachmentDraft, TransactionDraft } from '../types';
-import { FUNDING_SOURCE_OPTIONS, buildJournalLines, buildCompoundJournalLines, projectJournalLineImpacts, computeStatementImpact } from '../lib/journalEngine';
+import { FUNDING_SOURCE_OPTIONS, buildJournalLines, buildCompoundJournalLines, projectJournalLineImpacts, computeStatementImpact, orderLinesDebitsFirst } from '../lib/journalEngine';
 import { PREPAID_EXPENSE_CODE } from '../lib/reviewEngine';
 import { formatReceiptSize, prepareReceiptAttachment, validateReceiptCount } from '../lib/receiptAttachments';
 import { ActivityFeeEntry } from '../components/ActivityFeeEntry';
@@ -61,6 +61,7 @@ import {
 } from '../lib/membershipFees';
 import { buildOutrightExpensePosting, selectExpensePaymentRows, splitBalancedJournalLinesByDate, OutrightExpensePaymentMethod } from '../lib/outrightExpense';
 import { counterpartyBalance, counterpartyBalances, counterpartySummary } from '../lib/counterpartyBalances';
+import { ledgerWithoutDraftEntry } from '../lib/draftLedger';
 import { automaticPostingDate, isDateWithinReportingPeriod, periodForSemester, reportingPeriodBounds } from '../lib/reportingPeriod';
 
 const GENERAL_FUND_PROJECT = 'General Fund Operations';
@@ -137,9 +138,13 @@ interface TransactionsProps {
   draftToResume?: TransactionDraft | null;
   onDraftResumed?: () => void;
   onDraftSaved?: () => void;
+  // Set when Review's "Post" was pressed: the resumed draft is posted straight
+  // away with this form's own validation, then onDraftPosted reports the result.
+  autoPostDraft?: boolean;
+  onDraftPosted?: (message: string) => void;
 }
 
-export function Transactions({ draftToResume = null, onDraftResumed, onDraftSaved }: TransactionsProps = {}): React.ReactElement {
+export function Transactions({ draftToResume = null, onDraftResumed, onDraftSaved, autoPostDraft = false, onDraftPosted }: TransactionsProps = {}): React.ReactElement {
   const {
     accounts,
     journalEntries,
@@ -151,6 +156,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     classificationRules,
     isRuleAvailable,
     accountBalances,
+    openingBalances,
     formatCurrency,
     settings,
     saveDraftTransaction,
@@ -275,6 +281,10 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   // than starting a fresh entry — "Save as Draft" updates this same draft
   // instead of creating a duplicate, and a successful Post deletes it.
   const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
+  // Raised by the resume effect when Review asked to post the draft; the post
+  // runs in the render after every saved field has been restored.
+  const [pendingAutoPost, setPendingAutoPost] = useState(false);
+  const errorBannerRef = useRef<HTMLDivElement>(null);
   const [selectedExpenseAccountCode, setSelectedExpenseAccountCode] = useState('5010');
   // Set for exactly one effect pass right after a draft is hydrated, so the
   // classification-match effect below (keyed on txName, which hydration
@@ -577,6 +587,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     setMerchandiseCollections(snapshot.merchandiseCollections?.length ? snapshot.merchandiseCollections : [{ id: `collection-${Date.now()}`, date: fallbackDate, amount: '' }]);
     setMerchandiseRemittances(snapshot.merchandiseRemittances?.length ? snapshot.merchandiseRemittances : [{ id: `remittance-${Date.now()}`, date: fallbackDate, amount: '' }]);
     setMerchandiseCollectionOfficer(snapshot.merchandiseCollectionOfficer || '');
+    setPendingAutoPost(autoPostDraft);
 
     const match = resumedExpenseItem
       ? { debitAccountCode: resumedExpenseItem.accountCode, creditAccountCode: '1010', defaultDesc: resumedExpenseItem.label }
@@ -614,23 +625,33 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   // outstanding as advances means the underlying cash-advance-given
   // transaction was never recorded — or was already fully spent — so this
   // expense would silently understate what's actually owed.
-  const advancesOutstanding = accountBalances['1250'] || 0;
-  const cashAvailable = Math.max(0, accountBalances['1010'] || 0);
+  // A resumed draft already sits in the ledger, so every limit below is read
+  // from the ledger without that draft's own entry. Otherwise the draft would
+  // use up the very balance (payable, advance, cash, downpayment, inventory
+  // units) it is being re-checked against.
+  const resumedDraftEntryId = editingDraftId
+    ? draftTransactions.find(draft => draft.id === editingDraftId)?.journalEntryId
+    : undefined;
+  const { entries: ledgerEntries, balances: ledgerBalances } = useMemo(
+    () => ledgerWithoutDraftEntry(journalEntries, resumedDraftEntryId, accounts, openingBalances, accountBalances),
+    [journalEntries, resumedDraftEntryId, accounts, openingBalances, accountBalances]
+  );
+  const advancesOutstanding = ledgerBalances['1250'] || 0;
+  const cashAvailable = Math.max(0, ledgerBalances['1010'] || 0);
   // Dates are optional everywhere: a blank date is dated today, kept inside the reporting period.
   const defaultPostingDate = automaticPostingDate(settings.semester, settings.reportingYear);
-  const officerAdvanceBalances = useMemo(() => counterpartyBalances(journalEntries, '1250', 'Debit'), [journalEntries]);
-  const officerAdvanceSummary = useMemo(() => counterpartySummary(journalEntries, '1250', 'Debit'), [journalEntries]);
-  const officerPayableBalances = useMemo(() => counterpartyBalances(journalEntries, '2050', 'Credit'), [journalEntries]);
-  const organizationLoanBalances = useMemo(() => counterpartyBalances(journalEntries, '1350', 'Debit'), [journalEntries]);
-  const supplierPayableBalances = useMemo(() => counterpartyBalances(journalEntries, '2010', 'Credit'), [journalEntries]);
+  const officerAdvanceBalances = useMemo(() => counterpartyBalances(ledgerEntries, '1250', 'Debit'), [ledgerEntries]);
+  const officerAdvanceSummary = useMemo(() => counterpartySummary(ledgerEntries, '1250', 'Debit'), [ledgerEntries]);
+  const officerPayableBalances = useMemo(() => counterpartyBalances(ledgerEntries, '2050', 'Credit'), [ledgerEntries]);
+  const organizationLoanBalances = useMemo(() => counterpartyBalances(ledgerEntries, '1350', 'Debit'), [ledgerEntries]);
+  const supplierPayableBalances = useMemo(() => counterpartyBalances(ledgerEntries, '2010', 'Credit'), [ledgerEntries]);
   const merchandiseOfficerName = isMerchandiseAcquisition ? counterpartyName : outrightOfficer;
-  const selectedOfficerAdvanceBalance = counterpartyBalance(journalEntries, '1250', 'Debit', merchandiseOfficerName);
+  const selectedOfficerAdvanceBalance = counterpartyBalance(ledgerEntries, '1250', 'Debit', merchandiseOfficerName);
   // The accountable officer has no advance to draw from (or none was recorded at all).
   const acquisitionNoAdvanceRecord = acquisitionUsesAdvance && selectedOfficerAdvanceBalance <= 0 && (!!counterpartyName.trim() || officerAdvanceBalances.length === 0);
-  const selectedOfficerPayableBalance = counterpartyBalance(journalEntries, '2050', 'Credit', counterpartyName);
-  const reimbursementBreakdown = useMemo(() => officerBreakdown(journalEntries, counterpartyName), [journalEntries, counterpartyName]);
-  const selectedOrganizationLoanBalance = counterpartyBalance(journalEntries, '1350', 'Debit', counterpartyName);
-  const selectedSupplierPayableBalance = counterpartyBalance(journalEntries, '2010', 'Credit', counterpartyName);
+  const reimbursementBreakdown = useMemo(() => officerBreakdown(ledgerEntries, counterpartyName), [ledgerEntries, counterpartyName]);
+  const selectedOrganizationLoanBalance = counterpartyBalance(ledgerEntries, '1350', 'Debit', counterpartyName);
+  const selectedSupplierPayableBalance = counterpartyBalance(ledgerEntries, '2010', 'Credit', counterpartyName);
   const visibleCounterpartyBalances = isOfficerAdvance ? officerAdvanceBalances
     : isOfficerReimbursement ? officerPayableBalances
       : (isLoanToOrganization || isLoanCollection) ? organizationLoanBalances
@@ -640,8 +661,12 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     : isOfficerAdvance ? 'Available advances to officers'
       : isOfficerReimbursement ? 'Amount payable to officers'
         : 'Outstanding expense payables by supplier / payee';
-  const reimbursementAmountError = isOfficerReimbursement && amount > selectedOfficerPayableBalance
-    ? 'Reimbursement cannot exceed the amount currently payable to this accountable officer.'
+  // The limit is the account's total Due to Officers balance (like cash), not one
+  // officer's balance: carried-forward balances carry no officer name. The
+  // per-officer table stays on screen for reference only.
+  const totalDueToOfficers = Math.max(0, Math.round((ledgerBalances['2050'] || 0) * 100) / 100);
+  const reimbursementAmountError = isOfficerReimbursement && amount > totalDueToOfficers
+    ? 'Reimbursement cannot exceed the total Due to Officers balance.'
     : '';
   // Membership Fees collections are never paid via an officer's cash
   // advance (they're money coming in from members, not an expense paid
@@ -654,16 +679,16 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   // receivable requires that receivable to actually exist first — the
   // fee must have been billed (via the current-school-year accrual
   // question) before there's anything to collect.
-  const membershipReceivableOutstanding = accountBalances[MEMBERSHIP_DUES_RECEIVABLE_CODE] || 0;
-  const membershipRefundLiabilityOutstanding = Math.max(0, accountBalances[MEMBERSHIP_REFUND_LIABILITY_CODE] || 0);
+  const membershipReceivableOutstanding = ledgerBalances[MEMBERSHIP_DUES_RECEIVABLE_CODE] || 0;
+  const membershipRefundLiabilityOutstanding = Math.max(0, ledgerBalances[MEMBERSHIP_REFUND_LIABILITY_CODE] || 0);
   const membershipCollectionTotal = sumDatedAmounts(membershipCollections);
   const showMembershipReceivableWarning = isPriorMembershipCollection && membershipCollectionTotal > membershipReceivableOutstanding;
   const isMerchandiseSale = effectiveCreditCode === '4070';
-  const merchandiseBatches = useMemo(() => buildMerchandiseBatchBalances(journalEntries), [journalEntries]);
+  const merchandiseBatches = useMemo(() => buildMerchandiseBatchBalances(ledgerEntries), [ledgerEntries]);
   const merchandiseItemLabel = merchandiseItem === 'Others' ? merchandiseOtherTitle.trim() : merchandiseItem;
   const matchingMerchandisePrepayment = useMemo(
-    () => aggregateAvailableMerchandisePrepayments(journalEntries, merchandiseItemLabel, merchandiseBatch.trim()),
-    [journalEntries, merchandiseItemLabel, merchandiseBatch]
+    () => aggregateAvailableMerchandisePrepayments(ledgerEntries, merchandiseItemLabel, merchandiseBatch.trim()),
+    [ledgerEntries, merchandiseItemLabel, merchandiseBatch]
   );
   const selectedMerchandisePrepayment = merchandisePrepaymentEntryId && matchingMerchandisePrepayment.entryIds.length > 0
     ? matchingMerchandisePrepayment
@@ -688,9 +713,9 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
         : [...merchandiseOrganizationPayments, ...merchandiseOfficerPayments, ...merchandiseAdvancePayments];
   const merchandisePrepaymentDate = merchandisePrepaymentPaymentRows.find(row => Number(row.amount) > 0 && row.date)?.date || localDateInputValue();
   const transactionAmount = isMerchandisePrepayment ? merchandisePrepaymentAmount : amount;
-  const draftSupplierReceivable = journalEntries.filter(entry => entry.isDraft)
+  const draftSupplierReceivable = ledgerEntries.filter(entry => entry.isDraft)
     .reduce((sum, entry) => sum + entry.lines.filter(line => line.accountCode === '1360').reduce((lineSum, line) => lineSum + line.debit - line.credit, 0), 0);
-  const supplierReceivableOutstanding = Math.max(0, Math.round(((accountBalances['1360'] || 0) - draftSupplierReceivable) * 100) / 100);
+  const supplierReceivableOutstanding = Math.max(0, Math.round(((ledgerBalances['1360'] || 0) - draftSupplierReceivable) * 100) / 100);
 
   useEffect(() => {
     if (isPriorMembershipCollection) setAmount(membershipCollectionTotal);
@@ -871,8 +896,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   }, [classificationPreview, transactionAmount, amount, date, debitCode, effectiveCreditCode, isMembershipRefundStatus, membershipRefundResolutionResult, isMerchandiseAcquisition, merchandiseAcquisitionResult, isMerchandisePrepayment, merchandisePrepaymentResult, isSupplierReceivableCollection, supplierReceivableOutstanding, isGuidedPurchase, outrightExpenseResult, requiresAccrualCompletion, isPriorMembershipCollection, membershipPostingResult, isMerchandiseSale, merchandiseSaleResult, showDeferPortionQuestion, notYetUsedAmount]);
 
   const projectedImpacts = useMemo(
-    () => projectJournalLineImpacts(previewLines, activeAccounts, accountBalances),
-    [previewLines, activeAccounts, accountBalances]
+    () => projectJournalLineImpacts(previewLines, activeAccounts, ledgerBalances),
+    [previewLines, activeAccounts, ledgerBalances]
   );
   const { assetChange: assetImpact, netIncomeChange: netIncomeImpact } = useMemo(
     () => computeStatementImpact(previewLines, activeAccounts),
@@ -943,7 +968,16 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     merchandiseCollectionOfficer,
   });
 
-  const handleSaveDraft = () => handlePost(undefined, true);
+  // A failed save or Post leaves the form open with its message at the top of a
+  // long form, so bring it into view (also when the same message repeats).
+  const revealError = () => {
+    setTimeout(() => errorBannerRef.current?.scrollIntoView?.({ block: 'center' }), 0);
+  };
+
+  const handleSaveDraft = () => {
+    handlePost(undefined, true);
+    revealError();
+  };
 
   const handleDiscardDraft = () => {
     if (!editingDraftId) return;
@@ -1094,7 +1128,10 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       setErrorMessage(`Please enter the ${counterpartyLabel.toLowerCase()} for this transaction.`);
       return;
     }
-    if (reimbursementAmountError) return;
+    if (reimbursementAmountError) {
+      setErrorMessage(reimbursementAmountError);
+      return;
+    }
     if (isLoanCollection && amount > selectedOrganizationLoanBalance) {
       setErrorMessage('Collection cannot exceed this organization’s outstanding loan balance.');
       return;
@@ -1130,6 +1167,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       setErrorMessage('The not-yet-used amount can’t exceed the total amount paid.');
       return;
     }
+    const wasDraft = !!editingDraftId;
     try {
       if (isMembershipRefundStatus && membershipRefundStatus === 'next') {
         if (editingDraftId) {
@@ -1138,6 +1176,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
           appliedDraftIdRef.current = null;
         }
         setSuccessMessage('No journal entry was posted. The membership-fee refund liability remains payable in the next reporting period.');
+        if (!savingDraft && wasDraft) onDraftPosted?.('The membership-fee refund liability remains payable in the next reporting period. No journal entry was posted.');
         return;
       }
       // Post Journal Entry
@@ -1327,6 +1366,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
         setEditingDraftId(null);
         appliedDraftIdRef.current = null;
       }
+      if (wasDraft) onDraftPosted?.(`${je.reference} was posted${datedPostingBatches.length > 1 || merchandiseBatches.length > 1 ? ' with its dated payment batches' : ''}.`);
 
       // Trigger Confetti micro-animation!
       confetti({
@@ -1376,6 +1416,13 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     }
   };
 
+  useEffect(() => {
+    if (!pendingAutoPost) return;
+    setPendingAutoPost(false);
+    handlePost(undefined, false);
+    revealError();
+  }, [pendingAutoPost]);
+
   const handleUndoLastPost = () => {
     if (!lastPostedEntry) return;
     reverseJournalEntry(lastPostedEntry.id);
@@ -1393,7 +1440,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
 
       {editingDraftId && (
         <div className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-[11px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300 sm:flex-row sm:items-center sm:justify-between">
-          <span>Continuing a saved draft — missing details can still be completed below, then post it for real.</span>
+          <span>Continuing a saved draft — change anything below and press Save as Draft; it updates the same entry. Post it from Review when it is final.</span>
           <button
             type="button"
             onClick={handleDiscardDraft}
@@ -1471,8 +1518,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
         </div>
       )}
 
-      {selectedCategory === 'activity-fees' && <ActivityFeeEntry defaultOpen draftToResume={draftToResume} onDraftResumed={onDraftResumed} onDraftSaved={onDraftSaved} />}
-      {selectedCategory === 'prepaid-assets' && <PrepaidAssetEntry draftToResume={draftToResume} onDraftResumed={onDraftResumed} onDraftSaved={onDraftSaved} />}
+      {selectedCategory === 'activity-fees' && <ActivityFeeEntry defaultOpen draftToResume={draftToResume} onDraftResumed={onDraftResumed} onDraftSaved={onDraftSaved} autoPostDraft={autoPostDraft} onDraftPosted={onDraftPosted} />}
+      {selectedCategory === 'prepaid-assets' && <PrepaidAssetEntry draftToResume={draftToResume} onDraftResumed={onDraftResumed} onDraftSaved={onDraftSaved} autoPostDraft={autoPostDraft} onDraftPosted={onDraftPosted} />}
       {selectedCategory === 'payables' && <PayablesEntry />}
 
       {selectedCategory === 'merchandise' && <InventorySummaryCard compact />}
@@ -1480,12 +1527,12 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
         <button type="button" aria-pressed={!customerOrdersOpen} onClick={() => setCustomerOrdersOpen(false)} className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-bold text-slate-700 dark:border-slate-600 dark:text-slate-200">Purchases / ordinary sales</button>
         <button type="button" aria-pressed={customerOrdersOpen} onClick={() => setCustomerOrdersOpen(true)} className="rounded-lg border border-blue-300 px-4 py-2 text-xs font-bold text-blue-800 dark:text-blue-200">Customer pre-orders / actual sales</button>
       </div>}
-      {selectedCategory === 'merchandise' && customerOrdersOpen && <CustomerOrderEntry draftToResume={draftToResume} onDraftResumed={onDraftResumed} onDraftSaved={onDraftSaved} />}
+      {selectedCategory === 'merchandise' && customerOrdersOpen && <CustomerOrderEntry draftToResume={draftToResume} onDraftResumed={onDraftResumed} onDraftSaved={onDraftSaved} autoPostDraft={autoPostDraft} onDraftPosted={onDraftPosted} />}
 
       {selectedCategory && selectedCategory !== 'activity-fees' && selectedCategory !== 'prepaid-assets' && selectedCategory !== 'payables' && !(selectedCategory === 'merchandise' && customerOrdersOpen) && (
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
         {/* Left Column: Entry Form */}
-        <form onSubmit={event => { event.preventDefault(); if (editingDraftId) handlePost(); else handleSaveDraft(); }} className="xl:col-span-7 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm p-6 sm:p-8 space-y-5">
+        <form onSubmit={event => { event.preventDefault(); handleSaveDraft(); }} className="xl:col-span-7 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm p-6 sm:p-8 space-y-5">
           <div className="flex items-center justify-between border-b border-slate-800 pb-4">
             <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
               <PlusCircle className="w-5 h-5 text-blue-200" /> New Transaction
@@ -1497,8 +1544,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
             )}
           </div>
 
-          {errorMessage && !(isOfficerReimbursement && errorMessage === 'Reimbursement cannot exceed the amount currently payable to this accountable officer.') && (
-            <div className="p-3 bg-rose-50 border border-rose-100 text-rose-700 text-xs font-semibold rounded-xl flex items-center gap-2 dark:bg-rose-500/10 dark:border-rose-500/20 dark:text-rose-300">
+          {errorMessage && (
+            <div ref={errorBannerRef} role="alert" className="p-3 bg-rose-50 border border-rose-100 text-rose-700 text-xs font-semibold rounded-xl flex items-center gap-2 dark:bg-rose-500/10 dark:border-rose-500/20 dark:text-rose-300">
               <span className="w-1.5 h-1.5 rounded-full bg-rose-400 shrink-0" />
               {errorMessage}
             </div>
@@ -1826,7 +1873,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                       <div className="grid grid-cols-4 gap-2 px-3 py-2 font-bold text-slate-500"><span>Organization</span><span className="text-right">Amount of Loan</span><span className="text-right">Amount Repaid</span><span className="text-right">Outstanding Balance</span></div>
                       <div className="divide-y divide-slate-100 dark:divide-slate-800">{visibleCounterpartyBalances.map(item => <div key={item.name.toLocaleLowerCase()} className="grid grid-cols-4 gap-2 px-3 py-2"><span className="font-semibold text-slate-700 dark:text-slate-200">{item.name}</span><span className="text-right font-semibold text-slate-700 dark:text-slate-200">{formatCurrency(item.debit)}</span><span className="text-right font-semibold text-slate-700 dark:text-slate-200">{item.credit > 0 ? formatCurrency(item.credit) : '-'}</span><span className="text-right font-black text-blue-800 dark:text-blue-200">{formatCurrency(item.balance)}</span></div>)}</div>
                       <p className="border-t border-slate-100 px-3 py-2 font-medium text-slate-500 dark:border-slate-800">Running balance: it updates with every new loan or collection and stays here until the balance reaches zero.</p>
-                    </div> : <div className="divide-y divide-slate-100 dark:divide-slate-800">{visibleCounterpartyBalances.map(item => <div key={item.name.toLocaleLowerCase()} className="flex items-center justify-between px-3 py-2 text-[10px]"><span className="font-semibold text-slate-700 dark:text-slate-200">{item.name}</span><span className="font-black text-blue-800 dark:text-blue-200">{formatCurrency(item.balance)}</span></div>)}</div>) : <p className="px-3 py-3 text-[10px] font-medium text-amber-700 dark:text-amber-300">No outstanding balance has been recorded yet.</p>}
+                    </div> : <div className="divide-y divide-slate-100 dark:divide-slate-800">{visibleCounterpartyBalances.map(item => <div key={item.name.toLocaleLowerCase()} className="flex items-center justify-between px-3 py-2 text-[10px]"><span className="font-semibold text-slate-700 dark:text-slate-200">{item.name}</span><span className="font-black text-blue-800 dark:text-blue-200">{formatCurrency(item.balance)}</span></div>)}</div>) : <p className="px-3 py-3 text-[10px] font-medium text-amber-700 dark:text-amber-300">{isOfficerReimbursement && totalDueToOfficers > 0 ? 'No balance is tied to a named officer. The total below is still available for reimbursement.' : 'No outstanding balance has been recorded yet.'}</p>}
+                    {isOfficerReimbursement && <p className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-black text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"><span>Total Due to Officers (available to reimburse)</span><span className="text-blue-800 dark:text-blue-200">{formatCurrency(totalDueToOfficers)}</span></p>}
                   </div>
                 )}
                 {isOfficerReimbursement && <OfficerBreakdownTable officer={counterpartyName} breakdown={reimbursementBreakdown} formatCurrency={formatCurrency} />}
@@ -2244,7 +2292,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               disabled={isProcessingReceipts}
               className="rounded-xl border border-slate-200 bg-white px-4 py-3.5 text-xs font-bold text-slate-700 transition-all hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
             >
-              {editingDraftId ? 'Post Reviewed Transaction' : 'Save as Draft'}
+              Save as Draft
             </button>
           </div>
         </form>
@@ -2268,7 +2316,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                 <div className="p-4 text-center text-[11px] font-medium text-slate-400 dark:text-slate-500">
                   Select a transaction type and enter an amount to preview its journal lines.
                 </div>
-              ) : previewLines.map((line, index) => {
+              ) : orderLinesDebitsFirst(previewLines).map((line, index) => {
                 const account = activeAccounts.find(a => a.code === line.accountCode);
                 return (
                   <div key={`${line.accountCode}-${index}`} className={`grid grid-cols-[1fr_7rem] items-center gap-3 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800/50 p-2 rounded-xl ${line.credit > 0 ? 'pl-6' : ''}`}>

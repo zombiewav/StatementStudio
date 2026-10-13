@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { ClipboardCheck, CheckCircle2, AlertCircle, Trash2, Undo2, Pencil, X } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import { JournalEntry } from '../types';
@@ -199,13 +199,23 @@ interface ReviewProps {
   // Called when the user clicks "Continue" on a draft — App.tsx switches
   // the active page to Transactions and loads that draft into the form.
   onContinueDraft: (draftId: string) => void;
+  // Called when the user clicks "Post" on a draft — App.tsx loads the draft and
+  // posts it with the form's own validation (Review is shown again afterwards).
+  onPostDraft: (draftId: string) => void;
+  // Result of a Post that finished on the Transactions page, shown once here.
+  notice?: string;
+  onNoticeShown?: () => void;
 }
 
-export function Review({ onContinueDraft }: ReviewProps): React.ReactElement {
+export function Review({ onContinueDraft, onPostDraft, notice, onNoticeShown }: ReviewProps): React.ReactElement {
   const { journalEntries, accounts, settings, closedFiscalYears, activityFeeRecords, draftTransactions, deleteDraftTransaction, deleteJournalEntry, reverseJournalEntry, addJournalEntry, updateJournalEntry, formatCurrency } = useFinance();
   const semesterKey = `${settings.reportingYear}::${settings.semester}`;
-  const pendingObligations = useMemo(() => computePendingObligations(journalEntries, accounts, semesterKey), [journalEntries, accounts, semesterKey]);
-  const reviewStates = useMemo(() => computeTransactionReviewStates(journalEntries, accounts, semesterKey), [journalEntries, accounts, semesterKey]);
+  // A saved draft is listed under Draft Transactions until it is posted, so it
+  // is kept out of Transaction Review (where it would offer a second Edit and a
+  // permanent Delete that bypass the draft). Financial Statements already skips drafts.
+  const postedEntries = useMemo(() => journalEntries.filter(entry => !entry.isDraft), [journalEntries]);
+  const pendingObligations = useMemo(() => computePendingObligations(postedEntries, accounts, semesterKey), [postedEntries, accounts, semesterKey]);
+  const reviewStates = useMemo(() => computeTransactionReviewStates(postedEntries, accounts, semesterKey), [postedEntries, accounts, semesterKey]);
   const [statusFilter, setStatusFilter] = useState<'all' | ReviewStatus>('all');
   const [settlementMessage, setSettlementMessage] = useState('');
   const [lastPostedSettlement, setLastPostedSettlement] = useState<{ id: string; reference: string } | null>(null);
@@ -214,6 +224,13 @@ export function Review({ onContinueDraft }: ReviewProps): React.ReactElement {
   const [editDescription, setEditDescription] = useState('');
   const [editAmount, setEditAmount] = useState('');
   const [editError, setEditError] = useState('');
+
+  useEffect(() => {
+    if (!notice) return;
+    setSettlementMessage(notice);
+    setLastPostedSettlement(null);
+    onNoticeShown?.();
+  }, [notice]);
 
   const beginEdit = (entry: JournalEntry) => {
     setEditingEntryId(entry.id);
@@ -341,7 +358,7 @@ export function Review({ onContinueDraft }: ReviewProps): React.ReactElement {
         <section className="space-y-3">
           <div>
             <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Draft Transactions</h3>
-            <p className="mt-0.5 text-[10px] font-medium text-slate-500 dark:text-slate-400">Balanced draft journal entries are visible in the ledger, but stay out of final Financial Statements until completed. Continue the transaction to add remaining payments or collections, then post it, or discard it.</p>
+            <p className="mt-0.5 text-[10px] font-medium text-slate-500 dark:text-slate-400">Balanced draft journal entries are visible in the ledger, but stay out of final Financial Statements until completed. Continue the transaction to add or change details (it stays saved as a draft each time), then Post it when it is final, or Delete it.</p>
           </div>
           <div className="space-y-2">
             {draftTransactions.map(draft => (
@@ -357,6 +374,14 @@ export function Review({ onContinueDraft }: ReviewProps): React.ReactElement {
                     className="rounded-lg bg-blue-700 px-3 py-1.5 text-[10px] font-bold text-white transition-colors hover:bg-blue-800 dark:bg-blue-600 dark:hover:bg-blue-500"
                   >
                     Continue
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onPostDraft(draft.id)}
+                    className="rounded-lg bg-emerald-700 px-3 py-1.5 text-[10px] font-bold text-white transition-colors hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+                    title="Post this draft as a final transaction"
+                  >
+                    Post
                   </button>
                   <button
                     type="button"
