@@ -2188,12 +2188,22 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                 <input
                   type="number"
                   step="0.01"
+                  min={isSupplierReceivableCollection ? 0 : undefined}
+                  max={isSupplierReceivableCollection ? supplierReceivableOutstanding : undefined}
+                  disabled={isSupplierReceivableCollection && supplierReceivableOutstanding <= 0}
                   value={amount || ''}
                   onChange={(e) => setAmount(Number(e.target.value))}
                   placeholder="0.00"
-                  className="w-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-blue-900 focus:ring-blue-900/10 rounded-xl text-xs font-bold p-2.5 pl-8 outline-none transition-colors dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/20"
+                  className="w-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-blue-900 focus:ring-blue-900/10 rounded-xl text-xs font-bold p-2.5 pl-8 outline-none transition-colors disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/20"
                 />
               </div>
+              {isSupplierReceivableCollection && (
+                <p className={`mt-1.5 text-[10px] font-semibold ${amount > supplierReceivableOutstanding ? 'text-rose-700 dark:text-rose-300' : 'text-slate-500 dark:text-slate-400'}`}>
+                  {amount > supplierReceivableOutstanding
+                    ? `Collection cannot exceed the outstanding Accounts Receivable - Suppliers balance of ${formatCurrency(supplierReceivableOutstanding)}.`
+                    : `Up to ${formatCurrency(supplierReceivableOutstanding)} can be collected (latest Accounts Receivable - Suppliers balance).`}
+                </p>
+              )}
               {/* Remove accidental duplicate light-only amount control (was causing permanent light/dark mismatch) */}
               <div className="hidden" />
             </div>}
