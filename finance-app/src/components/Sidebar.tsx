@@ -55,6 +55,7 @@ export function Sidebar({
     { id: 'trial-balance', icon: Scale, label: "Trial Balance" },
     ...(CLOSING_PAGES_ENABLED ? [
       { id: 'closing-entries', icon: ClipboardCheck, label: "Closing Entries" },
+      { id: 'post-closing-ledger', icon: Layers, label: "Post-Closing General Ledger" },
       { id: 'post-closing-trial-balance', icon: Scale, label: "Post-Closing Trial Balance" },
     ] : []),
     { id: 'statements', icon: FileSpreadsheet, label: "Financial Statements" },

@@ -4,9 +4,22 @@ import { useFinance } from '../context/FinanceContext';
 import { reportingPeriodBounds } from '../lib/reportingPeriod';
 import { AccountHistoryLine, buildAccountPeriodHistory, buildAccountTransactionHistory } from '../lib/transactionHistory';
 import { counterpartyBalances } from '../lib/counterpartyBalances';
+import { computeAccountBalances } from '../lib/accountTotals';
+import { combineOpeningAndPeriodBalances } from '../lib/reportingPeriodBalances';
+import { excludeClosingEntries } from '../lib/closingEntries';
 
-export function GeneralLedger(): React.ReactElement {
-  const { accounts, journalEntries, accountBalances, openingBalances, formatCurrency, settings } = useFinance();
+// 'pre' is the original ledger: closing entries do not touch it. 'post' is a copy that
+// includes the closing entries, so revenues and expenses end at zero.
+export function GeneralLedger({ mode = 'pre' }: { mode?: 'pre' | 'post' } = {}): React.ReactElement {
+  const { accounts, journalEntries: allJournalEntries, openingBalances, formatCurrency, settings, closedFiscalYears } = useFinance();
+  const journalEntries = useMemo(
+    () => mode === 'pre' ? excludeClosingEntries(allJournalEntries, closedFiscalYears) : allJournalEntries,
+    [mode, allJournalEntries, closedFiscalYears]
+  );
+  const accountBalances = useMemo(
+    () => combineOpeningAndPeriodBalances(openingBalances, computeAccountBalances(journalEntries, accounts), accounts),
+    [openingBalances, journalEntries, accounts]
+  );
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedType, setSelectedType] = useState<'All' | 'Assets' | 'Liabilities' | 'Fund Balance' | 'Revenue' | 'Expenses'>('All');
   // Accounts with no activity start collapsed so the page isn't a wall of empty tables;
@@ -74,8 +87,10 @@ export function GeneralLedger(): React.ReactElement {
   return (
     <div className="space-y-6 bg-slate-50 dark:bg-slate-950">
       <div>
-        <h2 className="font-display text-3xl text-slate-900 dark:text-slate-100">General <em className="text-blue-700 dark:text-blue-400">Ledger</em></h2>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">Detailed accounting records sorted by account code, showing running posting balances.</p>
+        <h2 className="font-display text-3xl text-slate-900 dark:text-slate-100">{mode === 'post' ? 'Post-Closing General' : 'General'} <em className="text-blue-700 dark:text-blue-400">Ledger</em></h2>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">{mode === 'post'
+          ? 'A copy of the General Ledger that includes the closing entries: Revenues and Expenses end at zero and the surplus or deficit sits in Fund Balance.'
+          : 'Detailed accounting records sorted by account code, showing running posting balances.'}</p>
       </div>
 
       {/* Filter and Search */}

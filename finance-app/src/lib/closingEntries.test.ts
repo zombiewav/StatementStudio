@@ -181,22 +181,22 @@ describe('computeDirectClosingLines (client worked examples)', () => {
   ];
   const sum = (lines: { debit: number; credit: number }[], key: 'debit' | 'credit') => lines.reduce((total, line) => total + line[key], 0);
 
-  it('credits Accumulated Net Surplus when revenue exceeds expenses', () => {
+  it('credits Fund Balance when revenue exceeds expenses', () => {
     const result = computeDirectClosingLines({ '4040': 18000, '4050': 2000, '5010': 1000, '5020': 2000, '5030': 3000, '5040': 4000 }, coa);
     expect(result.netIncome).toBe(10000);
     expect(result.lines).toEqual([
       { accountCode: '4040', debit: 18000, credit: 0 }, { accountCode: '4050', debit: 2000, credit: 0 },
       { accountCode: '5010', debit: 0, credit: 1000 }, { accountCode: '5020', debit: 0, credit: 2000 },
       { accountCode: '5030', debit: 0, credit: 3000 }, { accountCode: '5040', debit: 0, credit: 4000 },
-      { accountCode: '3040', debit: 0, credit: 10000 },
+      { accountCode: '3010', debit: 0, credit: 10000 },
     ]);
     expect(sum(result.lines, 'debit')).toBe(sum(result.lines, 'credit'));
   });
 
-  it('debits Accumulated Net Deficit first when expenses exceed revenue', () => {
+  it('debits Fund Balance first when expenses exceed revenue', () => {
     const result = computeDirectClosingLines({ '4040': 7000, '4050': 2000, '5010': 1000, '5020': 2000, '5030': 3000, '5040': 4000 }, coa);
     expect(result.netIncome).toBe(-1000);
-    expect(result.lines[0]).toEqual({ accountCode: '3050', debit: 1000, credit: 0 });
+    expect(result.lines[0]).toEqual({ accountCode: '3010', debit: 1000, credit: 0 });
     expect(result.lines).toHaveLength(7);
     expect(sum(result.lines, 'debit')).toBe(sum(result.lines, 'credit'));
   });
@@ -213,7 +213,7 @@ describe('computeDirectClosingLines (client worked examples)', () => {
     const creditLine = (code: string, amount: number) => ({ accountCode: code, debit: 0, credit: amount });
     const opening = Object.entries(balances).map(([code, amount]) => (code.startsWith('4') ? creditLine(code, amount) : debitLine(code, amount)));
     const closing = computeDirectClosingLines(balances, coa).lines;
-    const all = [...coa, { code: '3040', name: 'Accumulated Net Surplus', type: 'Fund Balance', normalBalance: 'Credit', description: '', isActive: true } as Account, { code: '3050', name: 'Accumulated Net Deficit', type: 'Fund Balance', normalBalance: 'Debit', description: '', isActive: true } as Account];
+    const all = [...coa, { code: '3010', name: 'Fund Balance', type: 'Fund Balance', normalBalance: 'Credit', description: '', isActive: true } as Account];
     const entry = (id: string, lines: typeof closing) => ({ id, reference: id, date: '2026-05-31', description: id, project: 'p', lines } as JournalEntry);
     const after = computeAccountBalances([entry('open', opening), entry('close', closing)], all);
     coa.forEach(account => expect(after[account.code]).toBe(0));

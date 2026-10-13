@@ -41,7 +41,7 @@ import { isDateWithinReportingPeriod, reportingPeriodBounds } from '../lib/repor
 const GENERAL_FUND_PROJECT = 'General Fund Operations';
 const GENERAL_FUND_BALANCE_CODE = '3010';
 const INCOME_SUMMARY_ACCOUNT_CODE = '3000';
-const RETIRED_ACCOUNT_CODES = new Set(['1290', '1340', '1345', '1710', '1720', '2060']);
+const RETIRED_ACCOUNT_CODES = new Set(['1290', '1340', '1345', '1710', '1720', '2060', '3040', '3050']);
 // Professional Fee Expense once shared code 5300 with Event Expense, which made
 // both rows show the same balance. Event Expense is the only 5300 account.
 const isRetiredAccountRow = (account: Account) =>
@@ -52,7 +52,7 @@ const isRetiredAccountRow = (account: Account) =>
 // that an older workspace never had.
 export function restoreSavedAccounts(saved: Account[]): Account[] {
   const active = saved.filter(account => !isRetiredAccountRow(account)).map(account => {
-    const current = INITIAL_ACCOUNTS.find(defaultAccount => defaultAccount.code === account.code && ['1270', '1360', '2010', '2020', '2140', '2150', '5080', '5180', '5200'].includes(account.code));
+    const current = INITIAL_ACCOUNTS.find(defaultAccount => defaultAccount.code === account.code && ['1270', '1360', '2010', '2020', '2140', '2150', '3010', '5080', '5180', '5200'].includes(account.code));
     return current ? { ...account, name: current.name, description: current.description } : account;
   });
   return [...active, ...INITIAL_ACCOUNTS.filter(a => BACKFILLED_DEFAULT_ACCOUNT_CODES.has(a.code) && !active.some(existing => existing.code === a.code))];
@@ -61,7 +61,7 @@ const BACKFILLED_DEFAULT_ACCOUNT_CODES = new Set([
   '1210', '1220', '1230', '1270', '1280', '1285', '1295', '1298', '1330', '1360', '1370',
   '5020', '5120', '5180', '5290', '5330', '5340', '5350', '5360',
   '1501', '1502', '1503', '1504', '1505', '1506', '1507', '1508', '1509', '1510', '1511', '1512', '1513', '1514', '1515', '1516',
-  '3040', '3050', '1651', '1652', '1653', '2020', '2030', '2040', '2061', '2062', '2063', '2064', '2070', '2080', '2140', '2150', '4100', '4110', '5300',
+  '1651', '1652', '1653', '2020', '2030', '2040', '2061', '2062', '2063', '2064', '2070', '2080', '2140', '2150', '4100', '4110', '5300',
 ]);
 
 // Retired accounts are removed from the COA, while historical journals and
@@ -82,6 +82,7 @@ export function migrateRetiredAccountLines(entries: JournalEntry[]): JournalEntr
           : line.accountCode === '1290' ? '1260'
             : line.accountCode === '1340' || line.accountCode === '1345' ? '1270'
               : line.accountCode === '2060' ? retiredPayableCode
+                : line.accountCode === '3040' || line.accountCode === '3050' ? '3010'
                 : null;
         return replacement ? { ...line, accountCode: replacement } : line;
       }),
@@ -102,6 +103,12 @@ export function migrateRetiredOpeningBalances(balances: OpeningBalances): Openin
   move('1340', '1270');
   move('1345', '1270');
   move('2060', '2010');
+  move('3040', '3010');
+  // Accumulated Net Deficit was debit-normal, so it reduces Fund Balance.
+  if (Object.prototype.hasOwnProperty.call(migrated, '3050')) {
+    if (migrated['3050']) migrated['3010'] = (migrated['3010'] || 0) - migrated['3050'];
+    delete migrated['3050'];
+  }
   return migrated;
 }
 
@@ -272,7 +279,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
   
   // Fund Balance / Equity (Normal: Credit)
   { code: '3000', name: 'Income Summary', type: 'Fund Balance', normalBalance: 'Credit', description: 'Temporary year-end clearing account used only by Closing Entries', isActive: true },
-  { code: '3010', name: 'General Fund Balance', type: 'Fund Balance', normalBalance: 'Credit', description: 'Unrestricted accumulated fund balances', isActive: true },
+  { code: '3010', name: 'Fund Balance', type: 'Fund Balance', normalBalance: 'Credit', description: 'Accumulated fund balance; year-end Closing Entries post the surplus (credit) or deficit (debit) here', isActive: true },
   { code: '3020', name: 'Restricted Fund Balance', type: 'Fund Balance', normalBalance: 'Credit', description: 'Donor-restricted capital or specific reserves', isActive: true },
   { code: '3030', name: 'Permanently Restricted Fund Balance', type: 'Fund Balance', normalBalance: 'Credit', description: 'Donor-restricted funds that must be maintained permanently', isActive: true },
   { code: '3040', name: 'Accumulated Net Surplus', type: 'Fund Balance', normalBalance: 'Credit', description: 'Surplus carried forward by year-end Closing Entries', isActive: true },
@@ -1153,7 +1160,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     const nextBalances = computeAccountBalances([...activeEntries, { id: 'pending-validation', reference: 'PENDING', date, description, project, lines } as JournalEntry], accounts);
     Object.entries(openingBalances).forEach(([code, balance]) => { nextBalances[code] = (nextBalances[code] || 0) + balance; });
     const changedCodes = new Set(lines.map(line => line.accountCode));
-    const negativeAccount = !isDraft && accounts.find(account => changedCodes.has(account.code) && (nextBalances[account.code] || 0) < -0.005);
+    // Fund Balance may go below zero: that is a deficit, which year-end closing posts on purpose.
+    const negativeAccount = !isDraft && accounts.find(account => account.type !== 'Fund Balance' && changedCodes.has(account.code) && (nextBalances[account.code] || 0) < -0.005);
     if (negativeAccount) throw new Error(`This transaction would give ${negativeAccount.name} a negative balance. Please check the previous transactions and available balance.`);
     const reference = replaced?.reference || generateNextReference(postingEntries);
     const newEntry: JournalEntry = {
@@ -1506,7 +1514,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     const balances = computeAccountBalances(journalEntries.filter(entry => entry.date <= closingDate), accounts);
     const lines = computeClosingStageLines(balances, accounts, stage, GENERAL_FUND_BALANCE_CODE);
     if (!lines.length) throw new Error(stage === 'income-summary' ? 'Income Summary has no balance to close.' : `No ${stage} balances remain to close.`);
-    const label = stage === 'revenue' ? 'Close Revenues to Income Summary' : stage === 'expense' ? 'Close Expenses to Income Summary' : 'Close Income Summary to Accumulated Net Surplus (Deficit)';
+    const label = stage === 'revenue' ? 'Close Revenues to Income Summary' : stage === 'expense' ? 'Close Expenses to Income Summary' : 'Close Income Summary to Fund Balance';
     const entry = addJournalEntry(closingDate, `${label} — ${fiscalYear}`, GENERAL_FUND_PROJECT, lines);
     setClosedFiscalYears(previous => {
       const record: ClosingRecord = current || { id: `closing-${Date.now()}`, fiscalYear, closingDate, netIncome: 0, journalEntryId: '', closedAt: '' };
@@ -1517,7 +1525,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   };
 
   // Client's direct-closing design: a single entry closes Revenues and
-  // Expenses into Accumulated Net Surplus (Deficit); no Income Summary step.
+  // Expenses into Fund Balance (credit for a surplus, debit for a deficit); no Income Summary step.
   const postDirectClosing = (fiscalYear: string, closingDate: string) => {
     const current = closedFiscalYears.find(record => record.fiscalYear === fiscalYear);
     if (current?.completed) throw new Error(`${fiscalYear} has already been closed.`);
@@ -1528,7 +1536,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     const entry = addJournalEntry(closingDate, `Closing Entries — ${fiscalYear}`, GENERAL_FUND_PROJECT, lines);
     const record: ClosingRecord = { id: current?.id || `closing-${Date.now()}`, fiscalYear, closingDate, netIncome, journalEntryId: entry.id, closedAt: new Date().toISOString(), completed: true };
     setClosedFiscalYears(previous => current ? previous.map(item => item.fiscalYear === fiscalYear ? record : item) : [...previous, record]);
-    logAudit('Closing Entries', `Closed Revenues and Expenses to Accumulated Net ${netIncome < 0 ? 'Deficit' : 'Surplus'} for ${fiscalYear} via ${entry.reference}.`);
+    logAudit('Closing Entries', `Closed Revenues and Expenses to Fund Balance (${netIncome < 0 ? 'deficit' : 'surplus'}) for ${fiscalYear} via ${entry.reference}.`);
   };
 
   const addAccount = (account: Account) => {

@@ -48,18 +48,17 @@ export function computeClosingStageLines(accountBalances: Record<string, number>
   return lines;
 }
 
-// Client's direct-closing design: no Income Summary. A deficit goes to its own
-// debit-normal account (a contra within Fund Balance), so closing never
-// pushes a Fund Balance account below zero.
-export const ACCUMULATED_NET_SURPLUS_CODE = '3040';
-export const ACCUMULATED_NET_DEFICIT_CODE = '3050';
+// Client's direct-closing design: no Income Summary. The balancing figure goes to
+// Fund Balance: credited when revenue exceeds expenses, debited (a negative Fund
+// Balance on the Statement of Financial Position) when expenses exceed revenue.
+export const FUND_BALANCE_CODE = '3010';
 
 /**
  * One entry that closes every Revenue and Expense account directly:
- * Dr Revenues, Cr Expenses, and the difference to Accumulated Net Surplus
- * (credit) or Accumulated Net Deficit (debit, listed first).
+ * Dr Revenues, Cr Expenses, and the difference to Fund Balance: a credit for
+ * a surplus, or a debit (listed first) for a deficit.
  */
-export function computeDirectClosingLines(accountBalances: Record<string, number>, accounts: Account[]): ClosingEntryResult {
+export function computeDirectClosingLines(accountBalances: Record<string, number>, accounts: Account[], fundBalanceCode: string = FUND_BALANCE_CODE): ClosingEntryResult {
   const revenueLines: JournalLine[] = [];
   const expenseLines: JournalLine[] = [];
   let totalRevenue = 0;
@@ -83,9 +82,9 @@ export function computeDirectClosingLines(accountBalances: Record<string, number
   });
   const netIncome = totalRevenue - totalExpenses;
   const lines: JournalLine[] = [];
-  if (netIncome < 0) lines.push({ accountCode: ACCUMULATED_NET_DEFICIT_CODE, debit: -netIncome, credit: 0 });
+  if (netIncome < 0) lines.push({ accountCode: fundBalanceCode, debit: -netIncome, credit: 0 });
   lines.push(...revenueLines, ...expenseLines);
-  if (netIncome > 0) lines.push({ accountCode: ACCUMULATED_NET_SURPLUS_CODE, debit: 0, credit: netIncome });
+  if (netIncome > 0) lines.push({ accountCode: fundBalanceCode, debit: 0, credit: netIncome });
   return { lines: revenueLines.length || expenseLines.length ? lines : [], netIncome, totalRevenue, totalExpenses };
 }
 

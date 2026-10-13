@@ -17,7 +17,6 @@ import { buildCashFlowStatement, EQUIPMENT_PURCHASE_LABEL, FURNITURE_PURCHASE_LA
 import { CASH_ACCOUNT_CODES } from '../lib/cashAccounts';
 import { accumulatedNetPosition } from '../lib/fundBalancePresentation';
 import { excludeClosingEntries } from '../lib/closingEntries';
-import { CLOSING_PAGES_ENABLED } from '../lib/featureFlags';
 import { periodForSemester } from '../lib/reportingPeriod';
 import { combineOpeningAndPeriodBalances } from '../lib/reportingPeriodBalances';
 
@@ -91,8 +90,6 @@ export function FinancialStatements(): React.ReactElement {
     [journalEntries, accounts, semesterKey]
   );
   const incompleteActivityFeeRecords = activityFeeRecords.filter(isActivityFeeIncomplete);
-  const activeClose = closedFiscalYears.find(record => record.fiscalYear === settings.fiscalYear);
-  const closingIncomplete = CLOSING_PAGES_ENABLED && !activeClose?.completed;
 
   // Compute Account Balances specifically for the filtered date range —
   // right for Revenue/Expenses (a period's activity), but NOT for Assets,
@@ -168,10 +165,11 @@ export function FinancialStatements(): React.ReactElement {
     [accounts, activitiesExpenseBreakdown]
   );
   const negativeBalanceAccounts = useMemo(
-    () => accounts.filter(account => (cumulativeToEndBalances[account.code] || 0) < -0.005),
+    // A Fund Balance below zero is a deficit, which the closing entry produces on purpose.
+    () => accounts.filter(account => account.type !== 'Fund Balance' && (cumulativeToEndBalances[account.code] || 0) < -0.005),
     [accounts, cumulativeToEndBalances]
   );
-  const isGated = incompleteReviewItems.length > 0 || incompleteActivityFeeRecords.length > 0 || closingIncomplete || negativeBalanceAccounts.length > 0;
+  const isGated = incompleteReviewItems.length > 0 || incompleteActivityFeeRecords.length > 0 || negativeBalanceAccounts.length > 0;
   const positionAssetGroups = useMemo(() => {
     const groups: Array<[string, string[]]> = [
       ['Cash and Cash Equivalents', ['1010', '1015']], ['Receivables', ['1200', '1210', '1300', '1310', '1330', '1360', '1370']], ['Advances and Dues', ['1220', '1230', '1250', '1270', '1320']], ['Inventories', ['1700']], ['Prepaid Expenses and Other Assets', ['1260', '1280', '1285', '1295', '1298']], ['Property and Equipment', ['1500', '1550', '1600', '1650', '1660']],
@@ -537,7 +535,6 @@ export function FinancialStatements(): React.ReactElement {
                   : 'Complete the three required Closing Entries stages for the active fiscal year before generating financial statements.'}
               </p>
               {negativeBalanceAccounts.length > 0 && <div className="mt-4 max-w-md mx-auto space-y-2 text-left">{negativeBalanceAccounts.map(account => <div key={account.code} className="rounded-lg border border-rose-200 bg-rose-50 px-3.5 py-2 text-[11px] font-semibold text-rose-800 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300">This account ({account.code} {account.name}, {formatCurrency(cumulativeToEndBalances[account.code] || 0)}) has a negative balance. Please check your previous transactions, as you may have missed something.</div>)}</div>}
-              {closingIncomplete && incompleteReviewItems.length === 0 && incompleteActivityFeeRecords.length === 0 && negativeBalanceAccounts.length === 0 && <p className="mt-2 text-[10px] font-semibold text-amber-700 dark:text-amber-300">Go to Closing Entries to close Revenue, Expenses, then Income Summary.</p>}
               <div className="mt-6 max-w-md mx-auto text-left space-y-2">
                 {incompleteReviewItems.slice(0, 8).map(item => (
                   <div key={item.entry.id} className="flex justify-between items-center px-3.5 py-2 bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 rounded-lg text-[11px]">

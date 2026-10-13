@@ -7,9 +7,7 @@ import { computeDirectClosingLines, excludeClosingEntries } from './closingEntri
 const account = (code: string, name: string, type: Account['type'], normalBalance: Account['normalBalance']): Account => ({ code, name, type, normalBalance, description: '', isActive: true });
 const accounts: Account[] = [
   account('1010', 'Cash on Hand', 'Assets', 'Debit'),
-  account('3010', 'General Fund Balance', 'Fund Balance', 'Credit'),
-  account('3040', 'Accumulated Net Surplus', 'Fund Balance', 'Credit'),
-  account('3050', 'Accumulated Net Deficit', 'Fund Balance', 'Debit'),
+  account('3010', 'Fund Balance', 'Fund Balance', 'Credit'),
   account('4040', 'Membership Dues', 'Revenue', 'Credit'),
   account('4050', 'Other Income', 'Revenue', 'Credit'),
   account('5130', 'Communication Expense', 'Expenses', 'Debit'),
@@ -47,7 +45,7 @@ describe('closing example from the client (surplus and deficit)', () => {
     return { entries, balances, totals, closing };
   };
 
-  it('revenue 5k vs expenses 4k: revenue debited, expenses credited, 1k credited to the accumulated surplus', () => {
+  it('revenue 5k vs expenses 4k: revenue debited, expenses credited, 1k credited to Fund Balance', () => {
     const { closing, totals } = scenario(4000, 1000, 1000);
     expect(closing.netIncome).toBe(1000);
     expect(closing.lines).toEqual([
@@ -57,23 +55,23 @@ describe('closing example from the client (surplus and deficit)', () => {
       { accountCode: '5150', debit: 0, credit: 1000 },
       { accountCode: '5100', debit: 0, credit: 1000 },
       { accountCode: '5040', debit: 0, credit: 1000 },
-      { accountCode: '3040', debit: 0, credit: 1000 },
+      { accountCode: '3010', debit: 0, credit: 1000 },
     ]);
     expect(accumulatedNetPosition(totals.Revenue - totals.Expenses)).toEqual({ label: 'Accumulated Net Surplus', amount: 1000 });
   });
 
-  it('revenue 4k vs expenses 5k: the 1k excess of expenses is debited to the accumulated deficit', () => {
+  it('revenue 4k vs expenses 5k: the 1k excess of expenses is debited to Fund Balance', () => {
     const { closing, totals } = scenario(3000, 1000, 2000);
     expect(closing.netIncome).toBe(-1000);
-    expect(closing.lines[0]).toEqual({ accountCode: '3050', debit: 1000, credit: 0 });
-    expect(closing.lines.some(line => line.accountCode === '3040')).toBe(false);
+    expect(closing.lines[0]).toEqual({ accountCode: '3010', debit: 1000, credit: 0 });
+    expect(closing.lines.filter(line => line.accountCode === '3010')).toHaveLength(1);
     expect(accumulatedNetPosition(totals.Revenue - totals.Expenses)).toEqual({ label: 'Accumulated Net Deficit', amount: -1000 });
   });
 
   it('equal revenue and expenses leave no surplus or deficit line', () => {
     const { closing } = scenario(2000, 2000, 1000);
     expect(closing.netIncome).toBe(0);
-    expect(closing.lines.some(line => line.accountCode === '3040' || line.accountCode === '3050')).toBe(false);
+    expect(closing.lines.some(line => line.accountCode === '3010')).toBe(false);
   });
 
   it('Financial Position agrees before and after closing, while performance statements ignore the closing entry', () => {

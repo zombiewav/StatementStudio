@@ -208,6 +208,18 @@ login flag. This is still local-browser authentication, not secure multi-device 
   exceed the receivable on the books. A blank Date 2, Date 3, or later collection date inherits
   Date 1; each resolved date is saved on its journal lines for the ledger.
 
+- **Year-end closing (client design, Oct 2026)**: the sidebar has Closing Entries, Post-Closing General
+  Ledger and Post-Closing Trial Balance (switch: `CLOSING_PAGES_ENABLED` in `lib/featureFlags.ts`).
+  Closing Entries builds one entry once Review has nothing open: every Revenue debited, every Expense
+  credited, and the difference to **Fund Balance** (account 3010, renamed from General Fund Balance):
+  credit for a surplus, debit for a deficit, which leaves Fund Balance negative on the Statement of
+  Financial Position (a negative Fund Balance is allowed by the posting check and the statements gate).
+  The General Ledger and Trial Balance ignore closing entries (`excludeClosingEntries`); the post-closing
+  versions include them. The Statement of Activities and Functional Expenses always use the balances
+  before closing. The old Accumulated Net Surplus/Deficit accounts (3040/3050) are retired and migrate
+  onto 3010. Financial Statements are not blocked waiting for the close; before it, the Statement of
+  Financial Position shows revenue less expenses as the accumulated net surplus/deficit.
+
 - **Draft workflow (client design)**: every transaction form only ever offers **Save as Draft**. The
   general Transactions form writes a real draft journal entry to the ledger and re-saving replaces
   that same entry (never a duplicate); Prepaid, Activity Fee and Customer Order drafts store form

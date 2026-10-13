@@ -1,9 +1,22 @@
 import React, { useMemo } from 'react';
 import { CheckCircle2, AlertTriangle, ArrowLeftRight } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
+import { computeAccountBalances } from '../lib/accountTotals';
+import { combineOpeningAndPeriodBalances } from '../lib/reportingPeriodBalances';
+import { excludeClosingEntries } from '../lib/closingEntries';
 
-export function TrialBalance(): React.ReactElement {
-  const { accounts, accountBalances, formatCurrency, settings } = useFinance();
+// 'pre' ignores closing entries (every Revenue and Expense balance is still there).
+// 'post' picks up the ending balances after the closing entries.
+export function TrialBalance({ mode = 'pre' }: { mode?: 'pre' | 'post' } = {}): React.ReactElement {
+  const { accounts, journalEntries, openingBalances, closedFiscalYears, formatCurrency, settings } = useFinance();
+  const accountBalances = useMemo(
+    () => combineOpeningAndPeriodBalances(
+      openingBalances,
+      computeAccountBalances(mode === 'pre' ? excludeClosingEntries(journalEntries, closedFiscalYears) : journalEntries, accounts),
+      accounts,
+    ),
+    [mode, openingBalances, journalEntries, closedFiscalYears, accounts]
+  );
 
   // Compute Trial Balance Rows:
   // For each account, if it has a balance, put it in the Debit column if it's normal Debit, Credit column if normal Credit.
@@ -64,8 +77,10 @@ export function TrialBalance(): React.ReactElement {
     <div className="space-y-6 bg-slate-50 dark:bg-slate-950">
       <div className="w-full">
         <div>
-          <h2 className="font-display text-3xl text-slate-900 dark:text-slate-100">Trial <em className="text-blue-700 dark:text-blue-400">Balance</em></h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">Verify that the sum of all debits equals the sum of all credits in the ledger.</p>
+          <h2 className="font-display text-3xl text-slate-900 dark:text-slate-100">{mode === 'post' ? 'Post-Closing Trial' : 'Trial'} <em className="text-blue-700 dark:text-blue-400">Balance</em></h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">{mode === 'post'
+            ? 'Ending balances from the Post-Closing General Ledger. Revenues and Expenses are zero, and Fund Balance carries the surplus (credit) or deficit (debit).'
+            : 'Verify that the sum of all debits equals the sum of all credits in the ledger. Closing entries do not affect this report.'}</p>
         </div>
       </div>
 
@@ -107,7 +122,7 @@ export function TrialBalance(): React.ReactElement {
         <div className="px-6 py-5 border-b border-gray-50 dark:border-slate-800 text-center">
 
           <h3 className="text-sm font-black uppercase text-gray-900 dark:text-slate-100 tracking-wider">{settings.organizationName}</h3>
-          <h4 className="text-xs font-bold text-gray-500 dark:text-slate-400 mt-1">Trial Balance</h4>
+          <h4 className="text-xs font-bold text-gray-500 dark:text-slate-400 mt-1">{mode === 'post' ? 'Post-Closing Trial Balance' : 'Trial Balance'}</h4>
           <p className="text-[9px] text-gray-400 dark:text-slate-400 mt-0.5">For Fiscal Period Ending {settings.fiscalYear}</p>
         </div>
 

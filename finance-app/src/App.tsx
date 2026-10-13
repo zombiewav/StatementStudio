@@ -80,6 +80,8 @@ function DashboardLayout() {
         return <Settings />;
       case 'closing-entries':
         return !CLOSING_PAGES_ENABLED ? <Dashboard /> : CLOSING_FLOW === 'direct' ? <ClosingEntriesDirect /> : <ClosingEntries />;
+      case 'post-closing-ledger':
+        return CLOSING_PAGES_ENABLED ? <GeneralLedger mode="post" /> : <Dashboard />;
       case 'post-closing-trial-balance':
         return CLOSING_PAGES_ENABLED ? <PostClosingTrialBalance /> : <Dashboard />;
       default:
