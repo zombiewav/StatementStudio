@@ -14,6 +14,7 @@ import { computeAccountBalances, computeTypeTotals, isContraAccount } from '../l
 import { computeTransactionReviewStates } from '../lib/reviewEngine';
 import { isActivityFeeIncomplete } from '../lib/activityFees';
 import { CASH_FLOW_EXPENSE_ROWS, CASH_FLOW_OPERATING_ROWS, computeCashFlowDetails } from '../lib/cashFlow';
+import { accumulatedNetPosition } from '../lib/fundBalancePresentation';
 import { excludeClosingEntries } from '../lib/closingEntries';
 import { CLOSING_PAGES_ENABLED } from '../lib/featureFlags';
 import { periodForSemester } from '../lib/reportingPeriod';
@@ -151,6 +152,8 @@ export function FinancialStatements(): React.ReactElement {
 
   const fNetIncome = filteredTotals.Revenue - filteredTotals.Expenses;
   const unclosedNetIncome = ledgerPeriodTotals.Revenue - ledgerPeriodTotals.Expenses;
+  // A surplus reads as a credit (positive); a deficit as a debit (negative) in Net Assets.
+  const accumulatedNet = accumulatedNetPosition(unclosedNetIncome);
   const fEndingFundBalance = cumulativeToEndTotals['Fund Balance'] + unclosedNetIncome;
   const fTotalLiabilitiesAndFund = cumulativeToEndTotals.Liabilities + fEndingFundBalance;
 
@@ -293,7 +296,7 @@ export function FinancialStatements(): React.ReactElement {
         accounts.filter(a => a.type === 'Fund Balance').forEach(acc => {
           csvContent += `"${acc.name}",${cumulativeToEndBalances[acc.code] || 0}\n`;
         });
-        csvContent += `"Accumulated Net Surplus",${unclosedNetIncome}\n`;
+        csvContent += `"${accumulatedNet.label}",${accumulatedNet.amount}\n`;
         csvContent += `"Total Fund Balance",${fEndingFundBalance}\n\n`;
         csvContent += `"Total Liabilities & Fund Balance",${fTotalLiabilitiesAndFund}\n`;
       } else if (activeTab === 'activities') {
@@ -698,8 +701,8 @@ export function FinancialStatements(): React.ReactElement {
                       );
                     })}
                     <div className="flex justify-between py-1 px-4 rounded-md text-blue-900 dark:text-blue-300 font-bold hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                      <span>Accumulated Net Surplus (Current Period)</span>
-                      <span>{formatCurrency(unclosedNetIncome)}</span>
+                      <span>{accumulatedNet.label} (Current Period)</span>
+                      <span>{formatCurrency(accumulatedNet.amount)}</span>
                     </div>
                   </div>
                   <div className="flex justify-between py-2 border-t border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-slate-100 mt-2 px-2">
