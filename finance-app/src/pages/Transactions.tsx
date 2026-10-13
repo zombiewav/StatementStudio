@@ -901,6 +901,22 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     return buildJournalLines(debitCode, effectiveCreditCode, amount);
   }, [classificationPreview, transactionAmount, amount, date, debitCode, effectiveCreditCode, isMembershipRefundStatus, membershipRefundResolutionResult, isMerchandiseAcquisition, merchandiseAcquisitionResult, isMerchandisePrepayment, merchandisePrepaymentResult, isSupplierReceivableCollection, supplierReceivableOutstanding, isGuidedPurchase, outrightExpenseResult, requiresAccrualCompletion, isPriorMembershipCollection, membershipPostingResult, isMerchandiseSale, merchandiseSaleResult, showDeferPortionQuestion, notYetUsedAmount]);
 
+  // The rule's own debit/credit pair is only the starting point — payment method,
+  // advances, payables and receivables change which accounts really get posted,
+  // so once the preview has lines the read-only fields list the accounts used there.
+  const accountLabel = (account: { code: string; name: string; type: string }) => `${account.code} - ${account.name} (${account.type})`;
+  const accountsOnSide = (side: 'debit' | 'credit', fallback: typeof debitAccount): string[] => {
+    const codes = [...new Set(previewLines.filter(line => line[side] > 0).map(line => line.accountCode))];
+    const labels = codes.flatMap(code => {
+      const account = activeAccounts.find(a => a.code === code);
+      return account ? [accountLabel(account)] : [];
+    });
+    if (labels.length) return labels;
+    return fallback ? [accountLabel(fallback)] : [];
+  };
+  const debitAccountLabels = accountsOnSide('debit', debitAccount);
+  const creditAccountLabels = accountsOnSide('credit', creditAccount);
+
   const projectedImpacts = useMemo(
     () => projectJournalLineImpacts(previewLines, activeAccounts, ledgerBalances),
     [previewLines, activeAccounts, ledgerBalances]
@@ -2297,14 +2313,14 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
             <div>
               <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Debit Account (Increase Assets/Expenses)</label>
               <div className="w-full bg-slate-100 border border-slate-200 text-slate-600 rounded-xl text-xs font-semibold p-2.5 dark:bg-slate-800/60 dark:border-slate-700 dark:text-slate-400">
-                {debitAccount ? `${debitAccount.code} - ${debitAccount.name} (${debitAccount.type})` : 'Select a transaction type first'}
+                {debitAccountLabels.length ? debitAccountLabels.map(label => <div key={label}>{label}</div>) : 'Select a transaction type first'}
               </div>
             </div>
 
             <div>
               <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Credit Account (Increase Liabilities/Revenue)</label>
               <div className="w-full bg-slate-100 border border-slate-200 text-slate-600 rounded-xl text-xs font-semibold p-2.5 dark:bg-slate-800/60 dark:border-slate-700 dark:text-slate-400">
-                {creditAccount ? `${creditAccount.code} - ${creditAccount.name} (${creditAccount.type})` : 'Select a transaction type first'}
+                {creditAccountLabels.length ? creditAccountLabels.map(label => <div key={label}>{label}</div>) : 'Select a transaction type first'}
               </div>
             </div>
 
