@@ -183,6 +183,21 @@ describe('resuming a saved draft', () => {
     expect(finance.draftTransactions).toHaveLength(1);
   });
 
+  it('posts a partly paid expense draft and leaves the unpaid part as an expense payable', () => {
+    start(() => undefined, true);
+    saveDraft('Purchase of Meals consumed by participants, speakers and organizers', 'expense-transactions',
+      [{ accountCode: '5080', debit: 1000, credit: 0 }, { accountCode: '1010', debit: 0, credit: 400 }, { accountCode: '2010', debit: 0, credit: 600 }], {},
+      { amount: 1000, date: '2026-10-12', expenseEvent: 'no', notYetUsedAmount: '0', outrightPaymentMethod: 'organization-funds', outrightOrganizationPayments: [{ id: 'o1', date: '', amount: '400' }] });
+    expect(alerts()).toEqual([]);
+    expect(posted).toHaveLength(1);
+    expect(finance.draftTransactions).toHaveLength(0);
+    const meals = finance.journalEntries.filter(entry => entry.description.startsWith('Purchase of Meals'));
+    expect(meals).toHaveLength(1);
+    expect(meals[0].isDraft).toBeFalsy();
+    expect(finance.accountBalances['2010']).toBe(600);
+    expect(finance.accountBalances['1010']).toBe(50000 - 400);
+  });
+
   it('posts an organization-paid purchase whose draft already used all the available cash', () => {
     start(() => {
       finance.addJournalEntry('2026-10-05', 'Spend down', PROJECT, [{ accountCode: '5030', debit: 49500, credit: 0 }, { accountCode: '1010', debit: 0, credit: 49500 }]);

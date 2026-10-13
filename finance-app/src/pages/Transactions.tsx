@@ -844,7 +844,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       return { posting: null, error: error instanceof Error ? error.message : 'The expense payments are invalid.' };
     }
   }, [isGuidedPurchase, amount, debitCode, outrightPaymentMethod, date, outrightOrganizationPayments, outrightOfficerPayments, outrightAdvancePayments, selectedOfficerAdvanceBalance, cashAvailable, guidedPayableAccountCode]);
-  const requiresExpenseDraftReview = isOutrightExpense && (outrightExpenseResult.posting?.dueToSupplier || 0) > 0;
   const guidedPurchaseKind = isPpeAcquisition ? 'asset' : 'expense';
   const guidedCautions = guidedPaymentCautions({
     method: outrightPaymentMethod, amount,
@@ -1038,11 +1037,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     setErrorMessage('');
     setSuccessMessage('');
     setLastPostedEntry(null);
-
-    if (!savingDraft && requiresExpenseDraftReview) {
-      setErrorMessage('Save this as a draft so its balanced journal entry is recorded in the ledger. Complete the remaining payment in Review before final posting.');
-      return;
-    }
 
     if (!classificationPreview) {
       setErrorMessage('Please select a transaction type from the list so its accounts can be determined automatically.');
