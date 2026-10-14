@@ -3,7 +3,7 @@ import { FolderKanban, Plus, Pencil, Check, X } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 
 export function ProjectsPage(): React.ReactElement {
-  const { projects, addProject, updateProject, journalEntries, accounts, formatCurrency } = useFinance();
+  const { projects, addProject, updateProject, operatingJournalEntries: journalEntries, accounts, formatCurrency } = useFinance();
   const [showAddForm, setShowAddForm] = useState(false);
 
   // Inline Budget Editing State

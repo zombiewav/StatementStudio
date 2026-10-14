@@ -5,7 +5,7 @@ import { reportingPeriodBounds } from '../lib/reportingPeriod';
 import { AccountHistoryLine, buildAccountPeriodHistory, buildAccountTransactionHistory } from '../lib/transactionHistory';
 import { counterpartyBalances } from '../lib/counterpartyBalances';
 import { computeAccountBalances } from '../lib/accountTotals';
-import { combineOpeningAndPeriodBalances } from '../lib/reportingPeriodBalances';
+import { appliesOpeningBalance, combineOpeningAndPeriodBalances, withCarriedFundBalance } from '../lib/reportingPeriodBalances';
 import { excludeClosingEntries } from '../lib/closingEntries';
 
 // 'pre' is the original ledger: closing entries do not touch it. 'post' is a copy that
@@ -35,12 +35,13 @@ export function GeneralLedger({ mode = 'pre' }: { mode?: 'pre' | 'post' } = {}):
     : null;
   const ledgerData = useMemo(() => {
     const data: Record<string, { beginningBalance: number; lines: AccountHistoryLine[] }> = {};
+    const carried = withCarriedFundBalance(openingBalances, accounts);
 
     accounts.forEach(acc => {
       const history = reportingBounds
         ? buildAccountPeriodHistory(acc, journalEntries, reportingBounds.startDate, reportingBounds.endDate)
         : { beginningBalance: 0, lines: buildAccountTransactionHistory(acc, journalEntries) };
-      const opening = (acc.type === 'Assets' || acc.type === 'Liabilities') ? (openingBalances[acc.code] || 0) : 0;
+      const opening = appliesOpeningBalance(acc) ? (carried[acc.code] || 0) : 0;
       data[acc.code] = {
         beginningBalance: history.beginningBalance + opening,
         lines: history.lines.map(line => ({ ...line, runningBalance: line.runningBalance + opening })),

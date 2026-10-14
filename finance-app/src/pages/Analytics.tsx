@@ -17,7 +17,7 @@ import { useFinance } from '../context/FinanceContext';
 const COLORS = ['#c9a96a', '#8b6a2e', '#e79a7e', '#8fcba4', '#7d818b', '#565963'];
 
 export function Analytics(): React.ReactElement {
-  const { journalEntries, accounts, projects, formatCurrency } = useFinance();
+  const { operatingJournalEntries: journalEntries, accounts, projects, formatCurrency } = useFinance();
 
   // 1. Expense Breakdown (Pie Chart)
   const expenseBreakdownData = useMemo(() => {

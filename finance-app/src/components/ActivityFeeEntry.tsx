@@ -323,7 +323,7 @@ export function ActivityFeeEntry({ defaultOpen = false, draftToResume = null, on
               </div>
             </> : <DatedAmountRows label="Collections received for the future event" rows={collections} onChange={setCollections} currencySymbol={settings.currencySymbol} defaultDate="" minDate={periodBounds?.startDate} maxDate={periodBounds?.endDate} addLabel="Add collection" allowEmptyAmounts />}
           </div>
-          {excessCollection > 0 && <p className="sm:col-span-2 rounded-lg bg-amber-100 p-2 text-[10px] font-bold text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">Caution: Collections exceed the required activity fees by {formatCurrency(excessCollection)}. The excess will be recorded as Refund Liability - Activity Fees.</p>}
+          {excessCollection > 0 && eventOccursThisPeriod === 'yes' && <p className="sm:col-span-2 rounded-lg bg-amber-100 p-2 text-[10px] font-bold text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">Caution: Collections exceed the required activity fees by {formatCurrency(excessCollection)}. The excess will be recorded as Refund Liability - Activity Fees.</p>}
           {showUnearnedBalanceWarning && <p className="sm:col-span-2 rounded-lg bg-rose-100 p-2 text-[10px] font-bold text-rose-700">Previous-period collections cannot exceed the {formatCurrency(unearnedActivityFeesBalance)} currently on the books as Unearned Activity Fees.</p>}
           {preview && preview.postings.length > 0 && (
             <div className="sm:col-span-2 space-y-2.5 rounded-xl border border-indigo-200 bg-white/70 p-3 dark:border-indigo-500/30 dark:bg-slate-900/40">

@@ -31,7 +31,7 @@ export function Dashboard(): React.ReactElement {
   const { theme } = useTheme();
   const {
     accounts,
-    journalEntries,
+    operatingJournalEntries: journalEntries,
     auditLogs,
     totals,
     netIncome,

@@ -4,8 +4,6 @@ import { useFinance } from '../context/FinanceContext';
 import { JournalEntry } from '../types';
 import { ReceiptAttachments } from '../components/ReceiptAttachments';
 import { CustomerOrderFollowUp, CUSTOMER_ORDER_DRAFT } from '../components/CustomerOrderEntry';
-import { ActivityFeeReview } from '../components/ActivityFeeReview';
-import { isActivityFeeIncomplete } from '../lib/activityFees';
 import {
   computePendingObligations,
   isJournalEntryEditLocked,
@@ -208,7 +206,7 @@ interface ReviewProps {
 }
 
 export function Review({ onContinueDraft, onPostDraft, notice, onNoticeShown }: ReviewProps): React.ReactElement {
-  const { journalEntries, accounts, settings, closedFiscalYears, activityFeeRecords, draftTransactions, deleteDraftTransaction, deleteJournalEntry, reverseJournalEntry, addJournalEntry, updateJournalEntry, formatCurrency } = useFinance();
+  const { journalEntries, accounts, settings, closedFiscalYears, draftTransactions, deleteDraftTransaction, deleteJournalEntry, reverseJournalEntry, addJournalEntry, updateJournalEntry, formatCurrency } = useFinance();
   const semesterKey = `${settings.reportingYear}::${settings.semester}`;
   // A saved draft is listed under Draft Transactions until it is posted, so it
   // is kept out of Transaction Review (where it would offer a second Edit and a
@@ -316,7 +314,7 @@ export function Review({ onContinueDraft, onPostDraft, notice, onNoticeShown }: 
   const visibleStates = statusFilter === 'all'
     ? reviewStates
     : reviewStates.filter(state => state.status === statusFilter);
-  const incompleteCount = reviewStates.filter(state => state.status === 'incomplete').length + activityFeeRecords.filter(isActivityFeeIncomplete).length;
+  const incompleteCount = reviewStates.filter(state => state.status === 'incomplete').length;
 
   return (
     <div className="space-y-6 bg-slate-50 dark:bg-slate-950">
@@ -400,8 +398,6 @@ export function Review({ onContinueDraft, onPostDraft, notice, onNoticeShown }: 
           </div>
         </section>
       )}
-
-      <ActivityFeeReview />
 
       <section className="space-y-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

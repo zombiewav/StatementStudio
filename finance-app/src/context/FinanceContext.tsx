@@ -24,7 +24,8 @@ import { deleteSemesterRecords, precedingSemester } from '../lib/semesterDeletio
 import { validateBackupPayload } from '../lib/backupValidation';
 import { computeAccountBalances, computeTypeTotals } from '../lib/accountTotals';
 import { combineOpeningAndPeriodBalances, carryForwardOpeningBalances, OpeningBalances } from '../lib/reportingPeriodBalances';
-import { computeClosingStageLines, computeDirectClosingLines, findFiscalCloseBlockers } from '../lib/closingEntries';
+import { computeClosingStageLines, excludeClosingEntries, findFiscalCloseBlockers, planClosingSync } from '../lib/closingEntries';
+import { CLOSING_FLOW, CLOSING_PAGES_ENABLED } from '../lib/featureFlags';
 import { linkReceiptIdsToEntry } from '../lib/receiptAttachments';
 import { getEffectiveClassificationRules, validateCustomTransactionRule } from '../lib/customTransactionRules';
 import { ActivityFeeFollowUp, ActivityFeeSchedule, buildActivityFeeFollowUp, buildActivityFeeReceivableCollections, buildInitialActivityFeeSchedule, buildScheduledActivityFeeRecognition } from '../lib/activityFees';
@@ -862,6 +863,8 @@ interface FinanceContextType {
   resolveWorkspaceConflict: (choice: 'local' | 'remote') => Promise<void>;
   accounts: Account[];
   journalEntries: JournalEntry[];
+  // Everything except the automatic closing entry: what Revenue/Expense views and posting checks should read.
+  operatingJournalEntries: JournalEntry[];
   projects: Project[];
   auditLogs: AuditLog[];
   settings: AppSettings;
@@ -883,7 +886,6 @@ interface FinanceContextType {
   reverseJournalEntry: (id: string) => void;
   deleteJournalEntry: (id: string) => boolean;
   postClosingStage: (fiscalYear: string, closingDate: string, stage: 'revenue' | 'expense' | 'income-summary') => void;
-  postDirectClosing: (fiscalYear: string, closingDate: string) => void;
   attachReceiptsToEntry: (entryId: string, receipts: ReceiptAttachmentDraft[]) => void;
   addCustomClassificationRule: (description: string, debitAccountCode: string, creditAccountCode: string) => void;
   updateCustomClassificationRule: (id: string, updated: Partial<Pick<CustomClassificationRule, 'description' | 'debitAccountCode' | 'creditAccountCode' | 'isActive'>>) => void;
@@ -1156,7 +1158,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     if (linkBlock) throw new Error(linkBlock);
     // Draft entries already sit in the ledger and in the cash shown on the
     // form, so they count toward the balance a new posting is validated against.
-    const activeEntries = postingEntries.filter(entry => entry.id !== replaced?.id);
+    const activeEntries = excludeClosingEntries(postingEntries, closedFiscalYears).filter(entry => entry.id !== replaced?.id);
     const nextBalances = computeAccountBalances([...activeEntries, { id: 'pending-validation', reference: 'PENDING', date, description, project, lines } as JournalEntry], accounts);
     Object.entries(openingBalances).forEach(([code, balance]) => { nextBalances[code] = (nextBalances[code] || 0) + balance; });
     const changedCodes = new Set(lines.map(line => line.accountCode));
@@ -1524,20 +1526,33 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     logAudit('Closing Entries', `${label} posted for ${fiscalYear} via ${entry.reference}.`);
   };
 
-  // Client's direct-closing design: a single entry closes Revenues and
-  // Expenses into Fund Balance (credit for a surplus, debit for a deficit); no Income Summary step.
-  const postDirectClosing = (fiscalYear: string, closingDate: string) => {
-    const current = closedFiscalYears.find(record => record.fiscalYear === fiscalYear);
-    if (current?.completed) throw new Error(`${fiscalYear} has already been closed.`);
-    if (findFiscalCloseBlockers(journalEntries, accounts).length > 0) throw new Error('Complete all Review items before posting closing entries.');
-    const balances = computeAccountBalances(journalEntries.filter(entry => !entry.isDraft && entry.date <= closingDate), accounts);
-    const { lines, netIncome } = computeDirectClosingLines(balances, accounts);
-    if (!lines.length) throw new Error('No Revenue or Expense balances remain to close.');
-    const entry = addJournalEntry(closingDate, `Closing Entries — ${fiscalYear}`, GENERAL_FUND_PROJECT, lines);
-    const record: ClosingRecord = { id: current?.id || `closing-${Date.now()}`, fiscalYear, closingDate, netIncome, journalEntryId: entry.id, closedAt: new Date().toISOString(), completed: true };
-    setClosedFiscalYears(previous => current ? previous.map(item => item.fiscalYear === fiscalYear ? record : item) : [...previous, record]);
-    logAudit('Closing Entries', `Closed Revenues and Expenses to Fund Balance (${netIncome < 0 ? 'deficit' : 'surplus'}) for ${fiscalYear} via ${entry.reference}.`);
-  };
+  // Client's direct-closing design: once Review has nothing open, one entry closes every Revenue and
+  // Expense of the whole semester into Fund Balance. It is posted automatically, dated the last day of
+  // the semester, and kept in step (or withdrawn) if the books change afterwards.
+  useEffect(() => {
+    if (!CLOSING_PAGES_ENABLED || CLOSING_FLOW !== 'direct') return;
+    if (workspaceStatus !== 'ready' || !settings.semester || !settings.reportingYear || !settings.fiscalYear) return;
+    const action = planClosingSync(journalEntries, accounts, closedFiscalYears, settings.fiscalYear);
+    if (action.type === 'none') return;
+    const fiscalYear = settings.fiscalYear;
+    const closingDate = reportingPeriodBounds(settings.semester as '1st Semester' | '2nd Semester', settings.reportingYear).endDate;
+    if (action.type === 'remove') {
+      setJournalEntries(previous => previous.filter(entry => entry.id !== action.entryId));
+      setClosedFiscalYears(previous => previous.filter(record => record.fiscalYear !== fiscalYear));
+      logAudit('Closing Entries', `Withdrew the closing entry for ${fiscalYear} because the books changed.`);
+      return;
+    }
+    if (action.type === 'update') {
+      setJournalEntries(previous => previous.map(entry => entry.id === action.entryId ? { ...entry, date: closingDate, lines: action.lines } : entry));
+      setClosedFiscalYears(previous => previous.map(record => record.fiscalYear === fiscalYear ? { ...record, closingDate, netIncome: action.netIncome } : record));
+      logAudit('Closing Entries', `Updated the closing entry for ${fiscalYear} to match the books.`);
+      return;
+    }
+    const entry = addJournalEntry(closingDate, `Closing Entries — ${fiscalYear}`, GENERAL_FUND_PROJECT, action.lines);
+    const record: ClosingRecord = { id: `closing-${Date.now()}`, fiscalYear, closingDate, netIncome: action.netIncome, journalEntryId: entry.id, closedAt: new Date().toISOString(), completed: true, automatic: true };
+    setClosedFiscalYears(previous => [...previous.filter(item => item.fiscalYear !== fiscalYear), record]);
+    logAudit('Closing Entries', `Closed Revenues and Expenses to Fund Balance (${action.netIncome < 0 ? 'deficit' : 'surplus'}) for ${fiscalYear} via ${entry.reference}.`);
+  }, [workspaceStatus, settings.semester, settings.reportingYear, settings.fiscalYear, journalEntries, accounts, closedFiscalYears]);
 
   const addAccount = (account: Account) => {
     if (accounts.some(a => a.code === account.code)) {
@@ -1831,9 +1846,10 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   };
 
   // Computations
+  const operatingJournalEntries = useMemo(() => excludeClosingEntries(journalEntries, closedFiscalYears), [journalEntries, closedFiscalYears]);
   const accountBalances = useMemo(
-    () => combineOpeningAndPeriodBalances(openingBalances, computeAccountBalances(journalEntries, accounts), accounts),
-    [openingBalances, journalEntries, accounts]
+    () => combineOpeningAndPeriodBalances(openingBalances, computeAccountBalances(operatingJournalEntries, accounts), accounts),
+    [openingBalances, operatingJournalEntries, accounts]
   );
 
   const totals = useMemo(
@@ -1862,6 +1878,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       ...workspaceSync,
       accounts,
       journalEntries,
+      operatingJournalEntries,
       projects,
       auditLogs,
       settings,
@@ -1883,7 +1900,6 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       reverseJournalEntry,
       deleteJournalEntry,
       postClosingStage,
-      postDirectClosing,
       attachReceiptsToEntry,
       addCustomClassificationRule,
       updateCustomClassificationRule,

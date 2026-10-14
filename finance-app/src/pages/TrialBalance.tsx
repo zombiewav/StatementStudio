@@ -5,6 +5,9 @@ import { computeAccountBalances } from '../lib/accountTotals';
 import { combineOpeningAndPeriodBalances } from '../lib/reportingPeriodBalances';
 import { excludeClosingEntries } from '../lib/closingEntries';
 
+// Client's order: Assets, then Liabilities, Fund Balance, Revenue and last Expenses (each by account code).
+const TYPE_ORDER = ['Assets', 'Liabilities', 'Fund Balance', 'Revenue', 'Expenses'];
+
 // 'pre' ignores closing entries (every Revenue and Expense balance is still there).
 // 'post' picks up the ending balances after the closing entries.
 export function TrialBalance({ mode = 'pre' }: { mode?: 'pre' | 'post' } = {}): React.ReactElement {
@@ -57,7 +60,8 @@ export function TrialBalance({ mode = 'pre' }: { mode?: 'pre' | 'post' } = {}): 
         debit,
         credit
       };
-    }).filter(row => row.debit !== 0 || row.credit !== 0);
+    }).filter(row => row.debit !== 0 || row.credit !== 0)
+      .sort((left, right) => (TYPE_ORDER.indexOf(left.type) - TYPE_ORDER.indexOf(right.type)) || left.code.localeCompare(right.code));
   }, [accounts, accountBalances]);
 
   const { totalDebits, totalCredits } = useMemo(() => {

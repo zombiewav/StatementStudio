@@ -13,7 +13,6 @@ import type { Account } from '../types';
 import { computeActivitiesExpenseBreakdown } from '../lib/activitiesBreakdown';
 import { computeAccountBalances, computeTypeTotals, isContraAccount } from '../lib/accountTotals';
 import { computeTransactionReviewStates } from '../lib/reviewEngine';
-import { isActivityFeeIncomplete } from '../lib/activityFees';
 import { buildCashFlowStatement, EQUIPMENT_PURCHASE_LABEL, FURNITURE_PURCHASE_LABEL } from '../lib/cashFlowStatement';
 import { CASH_ACCOUNT_CODES } from '../lib/cashAccounts';
 import { accumulatedNetPosition } from '../lib/fundBalancePresentation';
@@ -37,7 +36,6 @@ export function FinancialStatements(): React.ReactElement {
   const { 
     accounts, 
     journalEntries, 
-    activityFeeRecords,
     closedFiscalYears,
     formatCurrency, 
     settings,
@@ -101,7 +99,6 @@ export function FinancialStatements(): React.ReactElement {
     () => computeTransactionReviewStates(journalEntries.filter(entry => !entry.isDraft), accounts, semesterKey).filter(item => item.status === 'incomplete' && item.blocksStatements !== false),
     [journalEntries, accounts, semesterKey]
   );
-  const incompleteActivityFeeRecords = activityFeeRecords.filter(isActivityFeeIncomplete);
 
   // Compute Account Balances specifically for the filtered date range —
   // right for Revenue/Expenses (a period's activity), but NOT for Assets,
@@ -150,8 +147,8 @@ export function FinancialStatements(): React.ReactElement {
   // end — so it needs its own cumulative snapshot.
   const beginningFundBalance = useMemo(() => {
     const priorEntries = journalEntries.filter(je => !je.isDraft && je.date < startDate);
-    return computeTypeTotals(computeAccountBalances(priorEntries, accounts), accounts)['Fund Balance'];
-  }, [journalEntries, startDate, accounts]);
+    return computeTypeTotals(combineOpeningAndPeriodBalances(openingBalances, computeAccountBalances(priorEntries, accounts), accounts), accounts)['Fund Balance'];
+  }, [journalEntries, startDate, accounts, openingBalances]);
 
   const fNetIncome = filteredTotals.Revenue - filteredTotals.Expenses;
   const unclosedNetIncome = ledgerPeriodTotals.Revenue - ledgerPeriodTotals.Expenses;
@@ -181,7 +178,7 @@ export function FinancialStatements(): React.ReactElement {
     () => accounts.filter(account => account.type !== 'Fund Balance' && (cumulativeToEndBalances[account.code] || 0) < -0.005),
     [accounts, cumulativeToEndBalances]
   );
-  const isGated = incompleteReviewItems.length > 0 || incompleteActivityFeeRecords.length > 0 || negativeBalanceAccounts.length > 0;
+  const isGated = incompleteReviewItems.length > 0 || negativeBalanceAccounts.length > 0;
   const positionAssetGroups = useMemo(() => {
     const groups: Array<[string, string[]]> = [
       ['Cash and Cash Equivalents', ['1010', '1015']], ['Receivables', ['1200', '1210', '1300', '1310', '1330', '1360', '1370']], ['Advances and Dues', ['1220', '1230', '1250', '1270', '1320']], ['Inventories', ['1700']], ['Prepaid Expenses and Other Assets', ['1260', '1280', '1285', '1295', '1298']], ['Property and Equipment', ['1500', '1550', '1600', '1650', '1660']],
@@ -558,8 +555,8 @@ export function FinancialStatements(): React.ReactElement {
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 max-w-md mx-auto">
                 {negativeBalanceAccounts.length > 0
                   ? `${negativeBalanceAccounts.length} account${negativeBalanceAccounts.length === 1 ? '' : 's'} have a negative balance. Correct the previous transactions before generating financial statements.`
-                  : incompleteReviewItems.length + incompleteActivityFeeRecords.length > 0
-                  ? `${incompleteReviewItems.length + incompleteActivityFeeRecords.length} item${incompleteReviewItems.length + incompleteActivityFeeRecords.length === 1 ? '' : 's'} in REVIEW still need an answer before the books are final. Resolve them in Review, then come back here.`
+                  : incompleteReviewItems.length > 0
+                  ? `${incompleteReviewItems.length} item${incompleteReviewItems.length === 1 ? '' : 's'} in REVIEW still need an answer before the books are final. Resolve them in Review, then come back here.`
                   : 'Complete the three required Closing Entries stages for the active fiscal year before generating financial statements.'}
               </p>
               {negativeBalanceAccounts.length > 0 && <div className="mt-4 max-w-md mx-auto space-y-2 text-left">{negativeBalanceAccounts.map(account => <div key={account.code} className="rounded-lg border border-rose-200 bg-rose-50 px-3.5 py-2 text-[11px] font-semibold text-rose-800 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300">This account ({account.code} {account.name}, {formatCurrency(cumulativeToEndBalances[account.code] || 0)}) has a negative balance. Please check your previous transactions, as you may have missed something.</div>)}</div>}
@@ -570,9 +567,8 @@ export function FinancialStatements(): React.ReactElement {
                     <span className="text-rose-600 dark:text-rose-400 font-bold whitespace-nowrap">Incomplete</span>
                   </div>
                 ))}
-                {incompleteActivityFeeRecords.slice(0, Math.max(0, 8 - incompleteReviewItems.length)).map(record => <div key={record.id} className="flex justify-between items-center px-3.5 py-2 bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 rounded-lg text-[11px]"><span className="font-semibold text-rose-900 dark:text-rose-300 truncate pr-3">Activity Fees: {record.eventName}</span><span className="text-rose-600 dark:text-rose-400 font-bold whitespace-nowrap">Incomplete</span></div>)}
-                {incompleteReviewItems.length + incompleteActivityFeeRecords.length > 8 && (
-                  <p className="text-[10px] text-slate-400 text-center pt-1">+{incompleteReviewItems.length + incompleteActivityFeeRecords.length - 8} more in Review</p>
+                {incompleteReviewItems.length > 8 && (
+                  <p className="text-[10px] text-slate-400 text-center pt-1">+{incompleteReviewItems.length - 8} more in Review</p>
                 )}
               </div>
             </div>

@@ -7,6 +7,7 @@
 // every entry to date, so posting this closing entry is the only action
 // required for next period to pick up where this one left off.
 import { Account, ClosingRecord, JournalEntry, JournalLine } from '../types';
+import { computeAccountBalances } from './accountTotals';
 import { computeTransactionReviewStates, TransactionReviewState } from './reviewEngine';
 
 export interface ClosingEntryResult {
@@ -103,6 +104,40 @@ export function excludeClosingEntries(
 
 export function findFiscalCloseBlockers(entries: JournalEntry[], accounts: Account[]): TransactionReviewState[] {
   return computeTransactionReviewStates(entries, accounts).filter(state => state.status === 'incomplete' && state.blocksStatements !== false);
+}
+
+export type ClosingSyncAction =
+  | { type: 'none' }
+  | { type: 'post'; lines: JournalLine[]; netIncome: number }
+  | { type: 'update'; entryId: string; lines: JournalLine[]; netIncome: number }
+  | { type: 'remove'; entryId: string };
+
+const sameLines = (left: JournalLine[], right: JournalLine[]): boolean => left.length === right.length &&
+  left.every((line, index) => line.accountCode === right[index].accountCode &&
+    Math.abs(line.debit - right[index].debit) < 0.005 && Math.abs(line.credit - right[index].credit) < 0.005);
+
+/**
+ * The closing entry is automatic: it exists only while Review has nothing open and it always
+ * covers every Revenue and Expense balance of the whole period (not just up to today's date).
+ * Returns what has to happen to bring the books in line with that.
+ */
+export function planClosingSync(
+  entries: JournalEntry[],
+  accounts: Account[],
+  closedFiscalYears: ClosingRecord[],
+  fiscalYear: string,
+): ClosingSyncAction {
+  const record = closedFiscalYears.find(item => item.fiscalYear === fiscalYear);
+  const existing = record ? entries.find(entry => entry.id === record.journalEntryId) : undefined;
+  const drop: ClosingSyncAction = existing ? { type: 'remove', entryId: existing.id } : { type: 'none' };
+  if (findFiscalCloseBlockers(entries, accounts).length > 0) return drop;
+  const operating = excludeClosingEntries(entries, closedFiscalYears).filter(entry => !entry.isDraft);
+  const { lines, netIncome } = computeDirectClosingLines(computeAccountBalances(operating, accounts), accounts);
+  if (!lines.length) return drop;
+  if (!existing) return { type: 'post', lines, netIncome };
+  return sameLines(existing.lines, lines) && Math.abs((record?.netIncome ?? 0) - netIncome) < 0.005
+    ? { type: 'none' }
+    : { type: 'update', entryId: existing.id, lines, netIncome };
 }
 
 export function computeClosingEntryLines(

@@ -219,6 +219,8 @@ export interface ClosingRecord {
   expenseClosingEntryId?: string;
   incomeSummaryClosingEntryId?: string;
   completed?: boolean;
+  // Posted and kept in step by the system once Review is complete; it never locks the period's entries.
+  automatic?: boolean;
 }
 
 export type ActivityFeeStatus =

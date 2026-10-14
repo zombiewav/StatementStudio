@@ -157,7 +157,7 @@ login flag. This is still local-browser authentication, not secure multi-device 
   entry; each post-event collection separately debits Cash and credits the receivable. A future-
   period event may be saved without a known total, remains incomplete in Review, and is recognized
   there once its total and event date are known. Ledger and Transaction History rows show the
-  specific event name. Incomplete activity-fee records block Financial Statements and closing.
+  specific event name. The Review tab no longer has an Activity Fee History panel (client, Oct 2026) and activity-fee records no longer block Financial Statements or closing.
   The Activity Fees category also has a separate **Collection of Activity Fees Receivable** dropdown
   choice. It selects an event with an outstanding receivable and accepts one Date/Collection pair
   per submission, posting Dr Cash / Cr Activity Fees Receivable; the same follow-up remains available
@@ -212,7 +212,12 @@ login flag. This is still local-browser authentication, not secure multi-device 
 
 - **Year-end closing (client design, Oct 2026)**: the sidebar has Closing Entries, Post-Closing General
   Ledger and Post-Closing Trial Balance (switch: `CLOSING_PAGES_ENABLED` in `lib/featureFlags.ts`).
-  Closing Entries builds one entry once Review has nothing open: every Revenue debited, every Expense
+  Closing Entries is **automatic** (no Post button): a FinanceContext effect (`planClosingSync`) posts one entry once
+  Review has nothing open, dated the semester's last day and covering every Revenue/Expense of the whole semester
+  (not up to today). It is updated in place when the books change and withdrawn while Review has open items; it
+  never locks the period's entries (`ClosingRecord.automatic`). Day-to-day views (`accountBalances`, Dashboard,
+  Analytics, Programs, posting checks) read `operatingJournalEntries`, which leaves the closing entry out.
+  The entry: every Revenue debited, every Expense
   credited, and the difference to **Fund Balance** (account 3010, renamed from General Fund Balance):
   credit for a surplus, debit for a deficit, which leaves Fund Balance negative on the Statement of
   Financial Position (a negative Fund Balance is allowed by the posting check and the statements gate).
@@ -302,3 +307,10 @@ wanted:
 - `src/components/Navbar.tsx` — the fiscal-year selector is a custom dropdown rather than a native
   `<select>`, so its popup reliably follows the light/dark theme instead of inheriting a white or
   blank-looking operating-system menu.
+
+- **Opening balances (second semester onward)**: only permanent accounts carry forward: Assets, Liabilities and
+  Fund Balance (`reportingPeriodBalances.ts`). Opening Fund Balance is whatever balances the opening Statement of
+  Financial Position (`withCarriedFundBalance`), so a surplus not yet closed, or a semester created before this
+  rule, still opens balanced. Revenue and Expenses always start at zero. The Trial Balance lists accounts
+  Assets, Liabilities, Fund Balance, Revenue, Expenses.
+

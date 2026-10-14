@@ -170,6 +170,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     classificationRules,
     isRuleAvailable,
     accountBalances,
+    operatingJournalEntries,
     openingBalances,
     formatCurrency,
     settings,
@@ -669,8 +670,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     ? draftTransactions.find(draft => draft.id === editingDraftId)?.journalEntryId
     : undefined;
   const { entries: ledgerEntries, balances: ledgerBalances } = useMemo(
-    () => ledgerWithoutDraftEntry(journalEntries, resumedDraftEntryId, accounts, openingBalances, accountBalances),
-    [journalEntries, resumedDraftEntryId, accounts, openingBalances, accountBalances]
+    () => ledgerWithoutDraftEntry(operatingJournalEntries, resumedDraftEntryId, accounts, openingBalances, accountBalances),
+    [operatingJournalEntries, resumedDraftEntryId, accounts, openingBalances, accountBalances]
   );
   const advancesOutstanding = ledgerBalances['1250'] || 0;
   const cashAvailable = Math.max(0, ledgerBalances['1010'] || 0);

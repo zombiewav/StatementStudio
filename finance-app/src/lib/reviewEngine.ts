@@ -66,7 +66,7 @@ export function isJournalEntryEditLocked(entry: JournalEntry, closings: ClosingR
     entry.transactionDetails?.reviewFinalized || entry.description.startsWith('Closing Entries')) return true;
   return closings.some(record =>
     [record.journalEntryId, record.revenueClosingEntryId, record.expenseClosingEntryId, record.incomeSummaryClosingEntryId].includes(entry.id) ||
-    (record.completed !== false && entry.date <= record.closingDate)
+    (!record.automatic && record.completed !== false && entry.date <= record.closingDate)
   );
 }
 
