@@ -59,15 +59,28 @@ export function isDateWithinReportingPeriod(date: string, semester: Semester, re
   return date >= startDate && date <= endDate;
 }
 
+/** The semester that today's date falls in (Aug-Dec = 1st, Jan-May = 2nd); June and July look ahead to the next 1st semester. */
+export function currentSemester(today: string = localDateString()): { semester: Semester; reportingYear: number } {
+  const year = Number(today.slice(0, 4));
+  const month = Number(today.slice(5, 7));
+  return month >= 6 ? { semester: '1st Semester', reportingYear: year } : { semester: '2nd Semester', reportingYear: year - 1 };
+}
+
 /**
- * Temporary client rule: a new semester can only be added once it has started, so only one
- * set of statements can be built at a time. Saved semesters can always be opened.
+ * Temporary client rule: only the semester for today's date can be added, so only one set of
+ * statements can be built at a time. Saved semesters can always be opened.
  * Returns an error message, or '' when the semester may be added or opened.
  */
 export function newSemesterBlock(semester: Semester, reportingYear: number, alreadySaved: boolean, today: string = localDateString()): string {
   if (alreadySaved) return '';
-  const { startDate } = reportingPeriodBounds(semester, reportingYear);
-  if (startDate <= today) return '';
-  const previousEnd = semester === '2nd Semester' ? `${reportingYear}-12-31` : `${reportingYear}-05-31`;
-  return `The ${semester} of SY ${reportingYear}-${reportingYear + 1} can be added after ${previousEnd}. Finish the current semester first.`;
+  const current = currentSemester(today);
+  if (semester === current.semester && reportingYear === current.reportingYear) return '';
+  const base = `Only the current semester (${current.semester} of SY ${current.reportingYear}-${current.reportingYear + 1}) can be added for now.`;
+  const next = current.semester === '1st Semester'
+    ? { semester: '2nd Semester', reportingYear: current.reportingYear }
+    : { semester: '1st Semester', reportingYear: current.reportingYear + 1 };
+  if (semester === next.semester && reportingYear === next.reportingYear) {
+    return `${base} The ${semester} can be added after ${reportingPeriodBounds(current.semester, current.reportingYear).endDate}.`;
+  }
+  return base;
 }

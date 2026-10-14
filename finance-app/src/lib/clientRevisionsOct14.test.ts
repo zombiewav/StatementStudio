@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { sortPrepaidItems, PREPAID_ASSET_ITEMS } from './prepaidAssets';
 import { netCashLabel } from './cashFlowStatement';
-import { newSemesterBlock } from './reportingPeriod';
+import { currentSemester, newSemesterBlock } from './reportingPeriod';
 import { DEFAULT_RULES, migrateRetiredAccountLines, migrateRetiredOpeningBalances, restoreSavedAccounts } from '../context/FinanceContext';
 
 describe('Prepaid item dropdown order', () => {
@@ -24,17 +24,25 @@ describe('Net cash labels', () => {
 });
 
 describe('Temporary semester restriction', () => {
-  it('blocks a semester that has not started and allows it once its start date has passed', () => {
+  it('allows only the semester for the current date', () => {
+    expect(newSemesterBlock('1st Semester', 2026, false, '2026-10-14')).toBe('');
     expect(newSemesterBlock('2nd Semester', 2026, false, '2026-10-14')).toContain('after 2026-12-31');
     expect(newSemesterBlock('2nd Semester', 2026, false, '2026-12-31')).toContain('after 2026-12-31');
     expect(newSemesterBlock('2nd Semester', 2026, false, '2027-01-01')).toBe('');
-    expect(newSemesterBlock('1st Semester', 2027, false, '2027-05-31')).toContain('after 2027-05-31');
-    expect(newSemesterBlock('1st Semester', 2026, false, '2026-10-14')).toBe('');
+    expect(newSemesterBlock('1st Semester', 2026, false, '2027-01-01')).toContain('Only the current semester');
+    expect(newSemesterBlock('1st Semester', 2027, false, '2027-05-31')).toContain('Only the current semester');
+    expect(newSemesterBlock('1st Semester', 2027, false, '2027-08-01')).toBe('');
   });
 
-  it('always lets a saved semester be opened, and past semesters be added', () => {
+  it('blocks past semesters and ones further ahead, but always lets a saved semester be opened', () => {
+    expect(newSemesterBlock('1st Semester', 2021, false, '2026-10-14')).toContain('SY 2026-2027');
+    expect(newSemesterBlock('1st Semester', 2027, false, '2026-10-14')).toBe('Only the current semester (1st Semester of SY 2026-2027) can be added for now.');
     expect(newSemesterBlock('2nd Semester', 2030, true, '2026-10-14')).toBe('');
-    expect(newSemesterBlock('1st Semester', 2021, false, '2026-10-14')).toBe('');
+  });
+
+  it('looks ahead to the next 1st semester during June and July', () => {
+    expect(currentSemester('2027-06-15')).toEqual({ semester: '1st Semester', reportingYear: 2027 });
+    expect(currentSemester('2027-02-01')).toEqual({ semester: '2nd Semester', reportingYear: 2026 });
   });
 });
 
