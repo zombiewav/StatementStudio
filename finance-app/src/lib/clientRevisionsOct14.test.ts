@@ -24,20 +24,21 @@ describe('Net cash labels', () => {
 });
 
 describe('Temporary semester restriction', () => {
-  it('allows only the semester for the current date', () => {
+  it('blocks only the semester right after the current one', () => {
     expect(newSemesterBlock('1st Semester', 2026, false, '2026-10-14')).toBe('');
     expect(newSemesterBlock('2nd Semester', 2026, false, '2026-10-14')).toContain('after 2026-12-31');
     expect(newSemesterBlock('2nd Semester', 2026, false, '2026-12-31')).toContain('after 2026-12-31');
     expect(newSemesterBlock('2nd Semester', 2026, false, '2027-01-01')).toBe('');
-    expect(newSemesterBlock('1st Semester', 2026, false, '2027-01-01')).toContain('Only the current semester');
-    expect(newSemesterBlock('1st Semester', 2027, false, '2027-05-31')).toContain('Only the current semester');
+    expect(newSemesterBlock('1st Semester', 2027, false, '2027-05-31')).toContain('after 2027-05-31');
     expect(newSemesterBlock('1st Semester', 2027, false, '2027-08-01')).toBe('');
   });
 
-  it('blocks past semesters and ones further ahead, but always lets a saved semester be opened', () => {
-    expect(newSemesterBlock('1st Semester', 2021, false, '2026-10-14')).toContain('SY 2026-2027');
-    expect(newSemesterBlock('1st Semester', 2027, false, '2026-10-14')).toBe('Only the current semester (1st Semester of SY 2026-2027) can be added for now.');
-    expect(newSemesterBlock('2nd Semester', 2030, true, '2026-10-14')).toBe('');
+  it('allows next school year onwards and earlier years, and always lets a saved semester be opened', () => {
+    expect(newSemesterBlock('1st Semester', 2027, false, '2026-10-14')).toBe('');
+    expect(newSemesterBlock('2nd Semester', 2027, false, '2026-10-14')).toBe('');
+    expect(newSemesterBlock('1st Semester', 2030, false, '2026-10-14')).toBe('');
+    expect(newSemesterBlock('1st Semester', 2021, false, '2026-10-14')).toBe('');
+    expect(newSemesterBlock('2nd Semester', 2026, true, '2026-10-14')).toBe('');
   });
 
   it('looks ahead to the next 1st semester during June and July', () => {

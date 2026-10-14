@@ -321,4 +321,4 @@ wanted:
   5030 (electricity/water), Equipment & Tools 1500 (computer, monitor, server, hardware, equipment) and 1514-1516,
   the expense-item accounts 5330-5360, Prepaid Expenses 1260, Permanently Restricted Fund Balance 3030 and the
   restricted contribution revenues 4030/4035/4036. Not added: Due to Customers, Due to Suppliers. New semesters
-  cannot be added before they start (`RESTRICT_FUTURE_SEMESTERS`, `newSemesterBlock`).
+  cannot be added before they start (`RESTRICT_FUTURE_SEMESTERS`, `newSemesterBlock`): only the semester right after the current one is blocked until the current one ends; later school years can be added so carry-forward can be tested.

@@ -67,20 +67,17 @@ export function currentSemester(today: string = localDateString()): { semester: 
 }
 
 /**
- * Temporary client rule: only the semester for today's date can be added, so only one set of
- * statements can be built at a time. Saved semesters can always be opened.
+ * Temporary client rule: the semester right after the current one cannot be added until the
+ * current one ends, so only one set of statements is built at a time. Later school years (and
+ * any saved semester) stay available so carry-forward can be tested.
  * Returns an error message, or '' when the semester may be added or opened.
  */
 export function newSemesterBlock(semester: Semester, reportingYear: number, alreadySaved: boolean, today: string = localDateString()): string {
   if (alreadySaved) return '';
   const current = currentSemester(today);
-  if (semester === current.semester && reportingYear === current.reportingYear) return '';
-  const base = `Only the current semester (${current.semester} of SY ${current.reportingYear}-${current.reportingYear + 1}) can be added for now.`;
   const next = current.semester === '1st Semester'
     ? { semester: '2nd Semester', reportingYear: current.reportingYear }
     : { semester: '1st Semester', reportingYear: current.reportingYear + 1 };
-  if (semester === next.semester && reportingYear === next.reportingYear) {
-    return `${base} The ${semester} can be added after ${reportingPeriodBounds(current.semester, current.reportingYear).endDate}.`;
-  }
-  return base;
+  if (semester !== next.semester || reportingYear !== next.reportingYear) return '';
+  return `The ${semester} of SY ${reportingYear}-${reportingYear + 1} cannot be added yet. It can be added after ${reportingPeriodBounds(current.semester, current.reportingYear).endDate}.`;
 }
