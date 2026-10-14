@@ -13,7 +13,7 @@ import type { Account } from '../types';
 import { computeActivitiesExpenseBreakdown } from '../lib/activitiesBreakdown';
 import { computeAccountBalances, computeTypeTotals, isContraAccount } from '../lib/accountTotals';
 import { computeTransactionReviewStates } from '../lib/reviewEngine';
-import { buildCashFlowStatement, EQUIPMENT_PURCHASE_LABEL, FURNITURE_PURCHASE_LABEL } from '../lib/cashFlowStatement';
+import { buildCashFlowStatement, EQUIPMENT_PURCHASE_LABEL, FURNITURE_PURCHASE_LABEL, netCashLabel } from '../lib/cashFlowStatement';
 import { CASH_ACCOUNT_CODES } from '../lib/cashAccounts';
 import { accumulatedNetPosition } from '../lib/fundBalancePresentation';
 import { excludeClosingEntries } from '../lib/closingEntries';
@@ -181,7 +181,7 @@ export function FinancialStatements(): React.ReactElement {
   const isGated = incompleteReviewItems.length > 0 || negativeBalanceAccounts.length > 0;
   const positionAssetGroups = useMemo(() => {
     const groups: Array<[string, string[]]> = [
-      ['Cash and Cash Equivalents', ['1010', '1015']], ['Receivables', ['1200', '1210', '1300', '1310', '1330', '1360', '1370']], ['Advances and Dues', ['1220', '1230', '1250', '1270', '1320']], ['Inventories', ['1700']], ['Prepaid Expenses and Other Assets', ['1260', '1280', '1285', '1295', '1298']], ['Property and Equipment', ['1500', '1550', '1600', '1650', '1660']],
+      ['Cash and Cash Equivalents', ['1010', '1015']], ['Receivables', ['1200', '1300', '1310', '1330', '1360', '1370']], ['Advances and Dues', ['1250', '1270', '1320']], ['Inventories', ['1700']], ['Prepaid Expenses and Other Assets', ['1260', '1280', '1285', '1295', '1298']], ['Property and Equipment', ['1500', '1550', '1660']],
     ];
     const assigned = new Set(groups.flatMap(([, codes]) => codes));
     // Accounts with a zero balance are left off the statement, and a heading with no accounts left goes with them.
@@ -191,7 +191,7 @@ export function FinancialStatements(): React.ReactElement {
   }, [accounts, cumulativeToEndBalances]);
   const positionLiabilityGroups = useMemo(() => {
     const groups: Array<[string, string[]]> = [
-      ['Dues and Payables', ['2010', '2020', '2030', '2040', '2050', '2061', '2062', '2063', '2064', '2070', '2080']], ['Unearned Revenues', ['2110', '2140']], ['Refund Liabilities', ['2120', '2130', '2150']], ['Loans and Accrued Liabilities', ['2200', '2300']],
+      ['Dues and Payables', ['2010', '2020', '2030', '2040', '2050', '2061', '2062', '2063', '2064', '2070', '2080']], ['Unearned Revenues', ['2110', '2140']], ['Refund Liabilities', ['2120', '2130', '2150']],
     ];
     const assigned = new Set(groups.flatMap(([, codes]) => codes));
     const visible = (list: Account[]) => list.filter(account => hasBalance(cumulativeToEndBalances[account.code]));
@@ -337,11 +337,11 @@ export function FinancialStatements(): React.ReactElement {
         cashFlowDetails.receipts.forEach(line => { csvContent += `"${line.label}",${line.amount}\n`; });
         csvContent += "Payments for:\n";
         cashFlowDetails.payments.forEach(line => { csvContent += `"${line.label}",${-line.amount}\n`; });
-        csvContent += `"Net cash provided by operating activities",${cashFlowDetails.netOperating}\n\n`;
+        csvContent += `"${netCashLabel('operating', cashFlowDetails.netOperating)}",${cashFlowDetails.netOperating}\n\n`;
         csvContent += "Cash Flows from Investing Activities:\n";
         csvContent += `"${EQUIPMENT_PURCHASE_LABEL}",${-cashFlowDetails.equipmentPurchases}\n`;
         csvContent += `"${FURNITURE_PURCHASE_LABEL}",${-cashFlowDetails.furniturePurchases}\n`;
-        csvContent += `"Net cash provided by investing activities",${cashFlowDetails.netInvesting}\n\n`;
+        csvContent += `"${netCashLabel('investing', cashFlowDetails.netInvesting)}",${cashFlowDetails.netInvesting}\n\n`;
         csvContent += `"Net increase (decrease) in cash and cash equivalents",${cashFlowDetails.netChange}\n`;
         csvContent += `"Cash and cash equivalents at beginning of year",${cashFlowDetails.beginningCash}\n`;
         csvContent += `"Cash and cash equivalents at end of year",${cashFlowDetails.endingCash}\n`;
@@ -826,7 +826,7 @@ export function FinancialStatements(): React.ReactElement {
                     ))}
                   </div>
                   <div className="flex justify-between py-1.5 border-t border-slate-200 dark:border-slate-700 font-semibold text-slate-900 dark:text-slate-100 mt-2 px-4">
-                    <span>Net cash provided by operating activities</span>
+                    <span>{netCashLabel('operating', cashFlowDetails.netOperating)}</span>
                     <span className="font-bold">{cashFlowDetails.netOperating < 0 ? formatOutflow(cashFlowDetails.netOperating) : formatCurrency(cashFlowDetails.netOperating)}</span>
                   </div>
                 </div>
@@ -845,7 +845,7 @@ export function FinancialStatements(): React.ReactElement {
                     </div>
                   </div>
                   <div className="flex justify-between py-1.5 border-t border-slate-200 dark:border-slate-700 font-semibold text-slate-900 dark:text-slate-100 mt-2 px-4">
-                    <span>Net cash provided by investing activities</span>
+                    <span>{netCashLabel('investing', cashFlowDetails.netInvesting)}</span>
                     <span className="font-bold">{cashFlowDetails.netInvesting < 0 ? formatOutflow(cashFlowDetails.netInvesting) : formatCurrency(cashFlowDetails.netInvesting)}</span>
                   </div>
                 </div>

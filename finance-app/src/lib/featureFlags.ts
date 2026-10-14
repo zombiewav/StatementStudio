@@ -11,3 +11,7 @@ export const CLOSING_PAGES_ENABLED = true;
 //  'income-summary' — original 3-step flow through Income Summary (3000).
 // Revert the client's design by changing this to 'income-summary'.
 export const CLOSING_FLOW: 'direct' | 'income-summary' = 'direct';
+
+// Client (Oct 2026): temporarily stop new semesters from being added before they start, so
+// only one set of Financial Statements can be produced at a time. Set to false to lift it.
+export const RESTRICT_FUTURE_SEMESTERS = true;

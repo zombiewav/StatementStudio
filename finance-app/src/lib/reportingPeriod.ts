@@ -58,3 +58,16 @@ export function isDateWithinReportingPeriod(date: string, semester: Semester, re
   const { startDate, endDate } = reportingPeriodBounds(semester, reportingYear);
   return date >= startDate && date <= endDate;
 }
+
+/**
+ * Temporary client rule: a new semester can only be added once it has started, so only one
+ * set of statements can be built at a time. Saved semesters can always be opened.
+ * Returns an error message, or '' when the semester may be added or opened.
+ */
+export function newSemesterBlock(semester: Semester, reportingYear: number, alreadySaved: boolean, today: string = localDateString()): string {
+  if (alreadySaved) return '';
+  const { startDate } = reportingPeriodBounds(semester, reportingYear);
+  if (startDate <= today) return '';
+  const previousEnd = semester === '2nd Semester' ? `${reportingYear}-12-31` : `${reportingYear}-05-31`;
+  return `The ${semester} of SY ${reportingYear}-${reportingYear + 1} can be added after ${previousEnd}. Finish the current semester first.`;
+}

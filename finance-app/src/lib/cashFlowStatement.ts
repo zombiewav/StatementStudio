@@ -16,6 +16,10 @@ import { isCashAccountCode } from './cashAccounts';
 //     entry and its reversal inside the period cancel out.
 //  6. Group, total, add beginning cash and check ending cash against the ledger.
 
+/** "Net cash provided by ..." for a positive (or zero) total, "Net cash used by ..." for a negative one. */
+export const netCashLabel = (activity: 'operating' | 'investing', amount: number): string =>
+  `Net cash ${amount < -0.005 ? 'used' : 'provided'} by ${activity} activities`;
+
 export const EQUIPMENT_PURCHASE_LABEL = 'Purchase of equipment';
 export const FURNITURE_PURCHASE_LABEL = 'Purchase of furniture and fixture';
 

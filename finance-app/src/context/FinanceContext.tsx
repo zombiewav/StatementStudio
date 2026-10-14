@@ -42,7 +42,18 @@ import { isDateWithinReportingPeriod, reportingPeriodBounds } from '../lib/repor
 const GENERAL_FUND_PROJECT = 'General Fund Operations';
 const GENERAL_FUND_BALANCE_CODE = '3010';
 const INCOME_SUMMARY_ACCOUNT_CODE = '3000';
-const RETIRED_ACCOUNT_CODES = new Set(['1290', '1340', '1345', '1710', '1720', '2060', '3040', '3050']);
+// Retired account -> the account its old postings and opening balances move to.
+// 2060 (Due to Suppliers) is handled separately because its target depends on the entry.
+const RETIRED_REPLACEMENTS: Record<string, string> = {
+  '1710': '1285', '1720': '1285', '1290': '1260', '1340': '1270', '1345': '1270',
+  '1210': '1370', '1220': '1370', '1230': '1370', '4060': '4050', '5170': '5290',
+  '3040': '3010', '3050': '3010',
+  // Client's FORMAT FS list (Oct 2026): accounts that are not on it move to the closest listed one.
+  '3020': '3010', '4080': '4090', '5270': '5080', '5280': '5140', '5310': '5300', '1600': '1500', '2300': '2010',
+  '5040': '5290', '5010': '5200', '5060': '5300', '5190': '5120', '5220': '5100', '5110': '5290',
+  '4010': '4050', '4020': '4050', '2200': '2080', '1350': '1370', '1650': '1651',
+};
+const RETIRED_ACCOUNT_CODES = new Set([...Object.keys(RETIRED_REPLACEMENTS), '2060']);
 // Professional Fee Expense once shared code 5300 with Event Expense, which made
 // both rows show the same balance. Event Expense is the only 5300 account.
 const isRetiredAccountRow = (account: Account) =>
@@ -53,13 +64,13 @@ const isRetiredAccountRow = (account: Account) =>
 // that an older workspace never had.
 export function restoreSavedAccounts(saved: Account[]): Account[] {
   const active = saved.filter(account => !isRetiredAccountRow(account)).map(account => {
-    const current = INITIAL_ACCOUNTS.find(defaultAccount => defaultAccount.code === account.code && ['1270', '1360', '2010', '2020', '2140', '2150', '3010', '5080', '5180', '5200'].includes(account.code));
+    const current = INITIAL_ACCOUNTS.find(defaultAccount => defaultAccount.code === account.code && ['1200', '1270', '1360', '2010', '2020', '2140', '2150', '3010', '5080', '5180', '5200', '1504', '1653', '1660', '2030', '2040', '2061', '2062', '2063', '2064', '4055', '5095', '5120', '5320'].includes(account.code));
     return current ? { ...account, name: current.name, description: current.description } : account;
   });
   return [...active, ...INITIAL_ACCOUNTS.filter(a => BACKFILLED_DEFAULT_ACCOUNT_CODES.has(a.code) && !active.some(existing => existing.code === a.code))];
 }
 const BACKFILLED_DEFAULT_ACCOUNT_CODES = new Set([
-  '1210', '1220', '1230', '1270', '1280', '1285', '1295', '1298', '1330', '1360', '1370',
+  '1270', '1280', '1285', '1295', '1298', '1330', '1360', '1370',
   '5020', '5120', '5180', '5290', '5330', '5340', '5350', '5360',
   '1501', '1502', '1503', '1504', '1505', '1506', '1507', '1508', '1509', '1510', '1511', '1512', '1513', '1514', '1515', '1516',
   '1651', '1652', '1653', '2020', '2030', '2040', '2061', '2062', '2063', '2064', '2070', '2080', '2140', '2150', '4100', '4110', '5300',
@@ -79,12 +90,7 @@ export function migrateRetiredAccountLines(entries: JournalEntry[]): JournalEntr
     return {
       ...entry,
       lines: entry.lines.map(line => {
-        const replacement = line.accountCode === '1710' || line.accountCode === '1720' ? '1285'
-          : line.accountCode === '1290' ? '1260'
-            : line.accountCode === '1340' || line.accountCode === '1345' ? '1270'
-              : line.accountCode === '2060' ? retiredPayableCode
-                : line.accountCode === '3040' || line.accountCode === '3050' ? '3010'
-                : null;
+        const replacement = line.accountCode === '2060' ? retiredPayableCode : RETIRED_REPLACEMENTS[line.accountCode] || null;
         return replacement ? { ...line, accountCode: replacement } : line;
       }),
     };
@@ -98,13 +104,8 @@ export function migrateRetiredOpeningBalances(balances: OpeningBalances): Openin
     if (migrated[from]) migrated[to] = (migrated[to] || 0) + migrated[from];
     delete migrated[from];
   };
-  move('1710', '1285');
-  move('1720', '1285');
-  move('1290', '1260');
-  move('1340', '1270');
-  move('1345', '1270');
   move('2060', '2010');
-  move('3040', '3010');
+  Object.entries(RETIRED_REPLACEMENTS).forEach(([from, to]) => { if (from !== '3050') move(from, to); });
   // Accumulated Net Deficit was debit-normal, so it reduces Fund Balance.
   if (Object.prototype.hasOwnProperty.call(migrated, '3050')) {
     if (migrated['3050']) migrated['3010'] = (migrated['3010'] || 0) - migrated['3050'];
@@ -191,10 +192,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
   // and 1015 belong to).
   { code: '1010', name: 'Cash on Hand', type: 'Assets', normalBalance: 'Debit', description: 'Physical cash held directly by the organization (petty cash, cash box)', isActive: true },
   { code: '1015', name: 'Cash in Bank', type: 'Assets', normalBalance: 'Debit', description: 'Funds held in bank accounts, GCash, Maya, and other e-wallets', isActive: true },
-  { code: '1200', name: 'Accounts Receivable', type: 'Assets', normalBalance: 'Debit', description: 'Amounts earned or billed but not yet collected from customers, sponsors, or partners', isActive: true },
-  { code: '1210', name: 'Rent Receivable', type: 'Assets', normalBalance: 'Debit', description: 'Rent income earned but not yet collected', isActive: true },
-  { code: '1220', name: 'Advances to Members', type: 'Assets', normalBalance: 'Debit', description: 'Advances issued to members and pending settlement', isActive: true },
-  { code: '1230', name: 'Advances to Others', type: 'Assets', normalBalance: 'Debit', description: 'Advances issued to parties other than officers or members and pending settlement', isActive: true },
+  { code: '1200', name: 'Accounts Receivable - Merchandise', type: 'Assets', normalBalance: 'Debit', description: 'Amounts earned or billed but not yet collected from customers, sponsors, or partners', isActive: true },
   { code: '1250', name: 'Advances to Officers', type: 'Assets', normalBalance: 'Debit', description: 'Cash advances given to officers for organization expenses, pending liquidation', isActive: true },
   // The matching principle, generalized: whenever a transaction's own
   // classification rule allows it (mayDeferPortion — see DEFAULT_RULES),
@@ -211,7 +209,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
   { code: '1501', name: 'Laptop', type: 'Assets', normalBalance: 'Debit', description: 'Laptop computers owned and used by the organization', isActive: true },
   { code: '1502', name: 'Projector', type: 'Assets', normalBalance: 'Debit', description: 'Projectors owned and used by the organization', isActive: true },
   { code: '1503', name: 'Printer', type: 'Assets', normalBalance: 'Debit', description: 'Printers owned and used by the organization', isActive: true },
-  { code: '1504', name: 'Uninterrupted Power System', type: 'Assets', normalBalance: 'Debit', description: 'Uninterrupted power systems owned and used by the organization', isActive: true },
+  { code: '1504', name: 'Uninterrupted Power System (UPS)', type: 'Assets', normalBalance: 'Debit', description: 'Uninterrupted power systems owned and used by the organization', isActive: true },
   { code: '1505', name: 'Cash Box', type: 'Assets', normalBalance: 'Debit', description: 'Cash boxes owned and used by the organization', isActive: true },
   { code: '1506', name: 'HDMI', type: 'Assets', normalBalance: 'Debit', description: 'HDMI equipment owned and used by the organization', isActive: true },
   { code: '1507', name: 'WIFI Box', type: 'Assets', normalBalance: 'Debit', description: 'Wi-Fi equipment owned and used by the organization', isActive: true },
@@ -231,12 +229,10 @@ export const INITIAL_ACCOUNTS: Account[] = [
   // Fixtures), matching the working paper's own rows 20 and 28 exactly,
   // rather than one shared generic pair.
   { code: '1550', name: 'Accumulated Depreciation - Equipment', type: 'Assets', normalBalance: 'Credit', description: 'Cumulative depreciation charged against Equipment & Tools to date', isActive: true },
-  { code: '1600', name: 'Property & Facilities', type: 'Assets', normalBalance: 'Debit', description: 'Real estate and facilities owned/held by the organization', isActive: true },
-  { code: '1650', name: 'Furniture & Fixtures', type: 'Assets', normalBalance: 'Debit', description: 'Desks, chairs, cabinets, and other furnishings owned by the organization', isActive: true },
   { code: '1651', name: 'Cabinet', type: 'Assets', normalBalance: 'Debit', description: 'Cabinets owned and used by the organization', isActive: true },
   { code: '1652', name: 'Chairs', type: 'Assets', normalBalance: 'Debit', description: 'Chairs owned and used by the organization', isActive: true },
-  { code: '1653', name: 'Tables and Desks', type: 'Assets', normalBalance: 'Debit', description: 'Tables and desks owned and used by the organization', isActive: true },
-  { code: '1660', name: 'Accumulated Depreciation - Furniture & Fixtures', type: 'Assets', normalBalance: 'Credit', description: 'Cumulative depreciation charged against Furniture & Fixtures to date', isActive: true },
+  { code: '1653', name: 'Table/Desk', type: 'Assets', normalBalance: 'Debit', description: 'Tables and desks owned and used by the organization', isActive: true },
+  { code: '1660', name: 'Accumulated Depreciation - Furniture and Fixtures', type: 'Assets', normalBalance: 'Credit', description: 'Cumulative depreciation charged against Furniture & Fixtures to date', isActive: true },
   { code: '1700', name: 'Inventory - Merchandise', type: 'Assets', normalBalance: 'Debit', description: 'Goods purchased for resale (organization merchandise, apparel, etc.)', isActive: true },
   // These two exist so a treasurer can post to them via "Advanced: Override
   // Accounts Manually" on the Transactions form, but deliberately carry no
@@ -250,7 +246,6 @@ export const INITIAL_ACCOUNTS: Account[] = [
   { code: '1310', name: 'Activity Fees Receivable', type: 'Assets', normalBalance: 'Debit', description: 'Activity or event fees earned but not yet collected from participants', isActive: true },
   { code: '1320', name: 'Due from Officers', type: 'Assets', normalBalance: 'Debit', description: 'Organization collections still held by an accountable officer and not yet remitted', isActive: true },
   { code: '1330', name: 'Receivable from Custodian', type: 'Assets', normalBalance: 'Debit', description: 'Amounts entrusted to or recoverable from an organization custodian', isActive: true },
-  { code: '1350', name: 'Loans to Other Organization', type: 'Assets', normalBalance: 'Debit', description: 'Running balance of loans receivable from other organizations', isActive: true },
   { code: '1360', name: 'Accounts Receivable - Suppliers', type: 'Assets', normalBalance: 'Debit', description: 'Payments made to suppliers in excess of the related merchandise, service, or asset cost', isActive: true },
   { code: '1370', name: 'Due from Other Organizations', type: 'Assets', normalBalance: 'Debit', description: 'Amounts recoverable from other organizations', isActive: true },
 
@@ -261,34 +256,29 @@ export const INITIAL_ACCOUNTS: Account[] = [
   // REVIEW settlement mechanism, which asks a different question for each.
   { code: '2010', name: 'Accounts Payable - Expense', type: 'Liabilities', normalBalance: 'Credit', description: 'Outstanding expense payables tracked separately for each supplier or payee', isActive: true },
   { code: '2020', name: 'Accounts Payable - Merchandise', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid cost of merchandise acquired for resale', isActive: true },
-  { code: '2030', name: 'Accounts Payable-PPE', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid purchases of property, plant, and equipment', isActive: true },
-  { code: '2040', name: 'Accounts Payable-Furniture & Fixture', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid purchases of furniture and fixtures', isActive: true },
-  { code: '2061', name: 'Accounts Payable-Awards and Prizes', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid awards and prizes acquired for later distribution', isActive: true },
-  { code: '2062', name: 'Accounts Payable-Supplies and Materials', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid supplies and materials acquired for later use', isActive: true },
-  { code: '2063', name: 'Accounts Payable-Prepaid Rent', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid rental rights acquired before the related rental period', isActive: true },
-  { code: '2064', name: 'Accounts Payable-Clothing/Uniform', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid clothing and uniforms acquired before issue or use', isActive: true },
+  { code: '2030', name: 'Accounts Payable - PPE', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid purchases of property, plant, and equipment', isActive: true },
+  { code: '2040', name: 'Accounts Payable - Furniture and Fixtures', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid purchases of furniture and fixtures', isActive: true },
+  { code: '2061', name: 'Accounts Payable - Awards and Prizes', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid awards and prizes acquired for later distribution', isActive: true },
+  { code: '2062', name: 'Accounts Payable - Supplies and Materials', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid supplies and materials acquired for later use', isActive: true },
+  { code: '2063', name: 'Accounts Payable - Prepaid Rent', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid rental rights acquired before the related rental period', isActive: true },
+  { code: '2064', name: 'Accounts Payable - Clothing/Uniform', type: 'Liabilities', normalBalance: 'Credit', description: 'Unpaid clothing and uniforms acquired before issue or use', isActive: true },
   { code: '2070', name: 'Due to Members', type: 'Liabilities', normalBalance: 'Credit', description: 'Amounts owed to members', isActive: true },
   { code: '2080', name: 'Due to Others', type: 'Liabilities', normalBalance: 'Credit', description: 'Amounts owed to parties other than officers, members, or suppliers', isActive: true },
   { code: '2050', name: 'Due to Officers', type: 'Liabilities', normalBalance: 'Credit', description: 'Amounts owed to officers who paid organization expenses out of their own money, pending reimbursement', isActive: true },
   { code: '2110', name: 'Unearned Activity Fees', type: 'Liabilities', normalBalance: 'Credit', description: 'Activity or event fees collected before the event date', isActive: true },
   { code: '2120', name: 'Refund Liability - Activity Fees', type: 'Liabilities', normalBalance: 'Credit', description: 'Activity fee collections received in excess of the required amount and still refundable', isActive: true },
   { code: '2130', name: 'Refund Liability - Membership Fees', type: 'Liabilities', normalBalance: 'Credit', description: 'Membership fee collections received in excess of the required amount and still refundable', isActive: true },
-  { code: '2200', name: 'Loans & Financial Obligations', type: 'Liabilities', normalBalance: 'Credit', description: 'Loans and other financial obligations payable within a year', isActive: true },
   { code: '2140', name: 'Unearned Merchandise Revenue', type: 'Liabilities', normalBalance: 'Credit', description: 'Buyer downpayments received for pre-ordered merchandise, held until the merchandise is sold', isActive: true },
   { code: '2150', name: 'Refund Liability - Merchandise', type: 'Liabilities', normalBalance: 'Credit', description: 'Buyer collections for merchandise in excess of the sales and still refundable', isActive: true },
-  { code: '2300', name: 'Accrued Liabilities', type: 'Liabilities', normalBalance: 'Credit', description: 'Accrued unpaid expenses such as taxes or interest', isActive: true },
   
   // Fund Balance / Equity (Normal: Credit)
   { code: '3000', name: 'Income Summary', type: 'Fund Balance', normalBalance: 'Credit', description: 'Temporary year-end clearing account used only by Closing Entries', isActive: true },
   { code: '3010', name: 'Fund Balance', type: 'Fund Balance', normalBalance: 'Credit', description: 'Accumulated fund balance; year-end Closing Entries post the surplus (credit) or deficit (debit) here', isActive: true },
-  { code: '3020', name: 'Restricted Fund Balance', type: 'Fund Balance', normalBalance: 'Credit', description: 'Donor-restricted capital or specific reserves', isActive: true },
   { code: '3030', name: 'Permanently Restricted Fund Balance', type: 'Fund Balance', normalBalance: 'Credit', description: 'Donor-restricted funds that must be maintained permanently', isActive: true },
   { code: '3040', name: 'Accumulated Net Surplus', type: 'Fund Balance', normalBalance: 'Credit', description: 'Surplus carried forward by year-end Closing Entries', isActive: true },
   { code: '3050', name: 'Accumulated Net Deficit', type: 'Fund Balance', normalBalance: 'Debit', description: 'Deficit carried forward by year-end Closing Entries; deducted from Fund Balance', isActive: true },
   
   // Revenue (Normal: Credit)
-  { code: '4010', name: 'Organization Income', type: 'Revenue', normalBalance: 'Credit', description: 'Income earned through the organization’s programs and services', isActive: true },
-  { code: '4020', name: 'Government Grants', type: 'Revenue', normalBalance: 'Credit', description: 'State and federal funding allocations', isActive: true },
   // Renamed to match the working paper's own account name exactly — it's
   // the "No" / same-period-"Yes" outcome of the donor-restriction question
   // (see the donation/restriction branching logic in Transactions.tsx).
@@ -306,59 +296,47 @@ export const INITIAL_ACCOUNTS: Account[] = [
   // Split out from Other Income per the client's revised note sheet: renting
   // out projector/extension wire/other equipment, and printing services, now
   // get their own line instead of being lumped into Miscellaneous Income.
-  { code: '4055', name: 'Rental Revenues', type: 'Revenue', normalBalance: 'Credit', description: 'Income from renting out equipment (projector, extension wire, etc.) and from printing services', isActive: true },
-  { code: '4060', name: 'Interest Income', type: 'Revenue', normalBalance: 'Credit', description: 'Interest earned on bank deposits or investments', isActive: true },
+  { code: '4055', name: 'Rent Revenue', type: 'Revenue', normalBalance: 'Credit', description: 'Income from renting out equipment (projector, extension wire, etc.) and from printing services', isActive: true },
   { code: '4070', name: 'Merchandise Sales', type: 'Revenue', normalBalance: 'Credit', description: 'Revenue from selling organization merchandise or apparel', isActive: true },
-  { code: '4080', name: 'Ticket Sales', type: 'Revenue', normalBalance: 'Credit', description: 'Revenue from ticket sales to events', isActive: true },
   { code: '4090', name: 'Activity Fees Revenue', type: 'Revenue', normalBalance: 'Credit', description: 'Activity or event fees recognized when the event occurs or when cancelled fees are non-refundable', isActive: true },
   { code: '4100', name: 'Donations', type: 'Revenue', normalBalance: 'Credit', description: 'Cash donations received without an outstanding donor restriction', isActive: true },
   { code: '4110', name: 'Sponsorships', type: 'Revenue', normalBalance: 'Credit', description: 'Cash sponsorships received without an outstanding donor restriction', isActive: true },
 
   // Expenses (Normal: Debit)
-  { code: '5010', name: 'Salaries & Wages', type: 'Expenses', normalBalance: 'Debit', description: 'Staff payroll, social security, and benefits', isActive: true },
   { code: '5020', name: 'Rent Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Monthly lease cost for office spaces', isActive: true },
   { code: '5030', name: 'Utilities Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Electricity, water, gas, and internet fees', isActive: true },
-  { code: '5040', name: 'Office Supplies', type: 'Expenses', normalBalance: 'Debit', description: 'Stationary, postage, and administrative sundries', isActive: true },
   { code: '5050', name: 'Transportation Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Transportation fares and allowances for events and organization activities', isActive: true },
   // Added to support the Training Expense and Maintenance Expense
   // classification categories used by the rule-based engine below. These are
   // additive entries only — they plug into the existing generic balance,
   // totals, and statement calculations without any logic changes.
-  { code: '5060', name: 'Training & Seminar Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Costs for staff training, seminars, workshops, and certifications', isActive: true },
   { code: '5070', name: 'Repairs and Maintenance Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Costs for repairing and maintaining equipment and facilities', isActive: true },
   // Added to support the "meal(s)" classification rule below, the concrete
   // example (working paper Sheet2, "Payment for Meals") that demonstrates
   // the purpose question (Question A) — see purposeOptions on that rule.
   { code: '5080', name: 'Food and Meals Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Meals and refreshments for meetings, events, participants, speakers, and organizers', isActive: true },
   { code: '5090', name: 'Depreciation Expense - Equipment', type: 'Expenses', normalBalance: 'Debit', description: 'Periodic depreciation charged against Equipment & Tools', isActive: true },
-  { code: '5095', name: 'Depreciation Expense - Furniture & Fixtures', type: 'Expenses', normalBalance: 'Debit', description: 'Periodic depreciation charged against Furniture & Fixtures', isActive: true },
+  { code: '5095', name: 'Depreciation Expense - Furniture and Fixtures', type: 'Expenses', normalBalance: 'Debit', description: 'Periodic depreciation charged against Furniture & Fixtures', isActive: true },
   { code: '5100', name: 'Bank Charges', type: 'Expenses', normalBalance: 'Debit', description: 'Bank fees, service charges, and transaction fees', isActive: true },
-  { code: '5110', name: 'General Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Miscellaneous operating expenses not covered by another category', isActive: true },
-  { code: '5120', name: 'Award and Prizes Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Awards, prizes, and incentives given out during events and competitions', isActive: true },
+  { code: '5120', name: 'Awards and Prizes Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Awards, prizes, and incentives given out during events and competitions', isActive: true },
   { code: '5130', name: 'Communication Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Phone, mobile load, and other communication costs', isActive: true },
   { code: '5140', name: 'Printing Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Printing, photocopying, and reproduction costs', isActive: true },
   { code: '5150', name: 'Delivery Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Freight, shipping, and delivery costs', isActive: true },
   { code: '5160', name: 'Event Supplies Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Supplies consumed specifically for an event or program', isActive: true },
-  { code: '5170', name: 'Loss from Spoilage', type: 'Expenses', normalBalance: 'Debit', description: 'Donated food or supplies that expired, spoiled, or became unusable', isActive: true },
   { code: '5180', name: 'Clothing/Uniform Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Uniforms and organization apparel for members and officers', isActive: true },
-  { code: '5190', name: 'Tokens & Recognition Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Tokens, certificates, and recognition items for volunteers and participants', isActive: true },
   { code: '5200', name: 'Honorarium Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Honoraria paid to guest speakers and resource persons', isActive: true },
   { code: '5210', name: 'Membership Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Dues and fees the organization itself pays to join another association or federation', isActive: true },
-  { code: '5220', name: 'Service Charge', type: 'Expenses', normalBalance: 'Debit', description: 'Third-party service charges (distinct from Bank Charges)', isActive: true },
   { code: '5230', name: 'Donations and Contributions Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Donations and contributions given by the organization', isActive: true },
   { code: '5240', name: 'Cost of Sales - Merchandise', type: 'Expenses', normalBalance: 'Debit', description: 'Cost carried in inventory for merchandise that has been sold', isActive: true },
   { code: '5250', name: 'Promotional and Advertising Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Tarpaulins, banners, brochures, and other promotional materials', isActive: true },
   { code: '5260', name: 'Recording and Production Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Recording sessions, station IDs, and production fees', isActive: true },
-  { code: '5270', name: 'Food Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Food costs that are distinct from meals and refreshments', isActive: true },
-  { code: '5280', name: 'Printing Supplies Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Paper, ink, and other supplies consumed for printing work', isActive: true },
   { code: '5290', name: 'Supplies and Materials Expense', type: 'Expenses', normalBalance: 'Debit', description: 'General supplies and materials consumed outside a specific event', isActive: true },
   { code: '5300', name: 'Event Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Event and program expenses recorded under one account when per-event expense breakdowns are unavailable', isActive: true },
-  { code: '5310', name: 'Logistics and Venue Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Venue, logistics, and event coordination costs', isActive: true },
   { code: '5330', name: 'Cleaning Supplies Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Cleaning supplies bought and used right away', isActive: true },
   { code: '5340', name: 'Registration Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Registration fees for seminars, conferences, and competitions', isActive: true },
   { code: '5350', name: 'Permits and Licenses Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Permit fees and licenses', isActive: true },
   { code: '5360', name: 'Medical Supplies Expense', type: 'Expenses', normalBalance: 'Debit', description: 'First aid kits and medical supplies bought and used right away', isActive: true },
-  { code: '5320', name: 'Assistance Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Financial or in-kind assistance provided by the organization', isActive: true },
+  { code: '5320', name: 'Assistance', type: 'Expenses', normalBalance: 'Debit', description: 'Financial or in-kind assistance provided by the organization', isActive: true },
 ];
 
 // Sample Projects — fabricated demo programs and budgets, opt-in only via
@@ -410,7 +388,7 @@ const INITIAL_JOURNALS: JournalEntry[] = [
     project: 'General Fund Operations',
     lines: [
       { accountCode: '1010', debit: 50000, credit: 0 },
-      { accountCode: '2200', debit: 0, credit: 50000 }
+      { accountCode: '2080', debit: 0, credit: 50000 }
     ]
   },
   {
@@ -432,7 +410,7 @@ const INITIAL_JOURNALS: JournalEntry[] = [
     project: 'Leadership Development Program',
     lines: [
       { accountCode: '1200', debit: 35000, credit: 0 },
-      { accountCode: '4010', debit: 0, credit: 35000 }
+      { accountCode: '4050', debit: 0, credit: 35000 }
     ]
   },
   {
@@ -454,7 +432,7 @@ const INITIAL_JOURNALS: JournalEntry[] = [
     project: 'Fundraising Program 2026',
     lines: [
       { accountCode: '1010', debit: 40000, credit: 0 },
-      { accountCode: '4020', debit: 0, credit: 40000 }
+      { accountCode: '4050', debit: 0, credit: 40000 }
     ]
   },
   {
@@ -475,7 +453,7 @@ const INITIAL_JOURNALS: JournalEntry[] = [
     description: 'Q1 Staff Salaries Payment',
     project: 'General Fund Operations',
     lines: [
-      { accountCode: '5010', debit: 18000, credit: 0 },
+      { accountCode: '5200', debit: 18000, credit: 0 },
       { accountCode: '1010', debit: 0, credit: 18000 }
     ]
   },
@@ -530,8 +508,8 @@ export const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   { keyword: 'power bill', debitAccountCode: '5030', creditAccountCode: '1010', description: 'Power Bill Payment' },
   { keyword: 'water bill', debitAccountCode: '5030', creditAccountCode: '1010', description: 'Water Bill Payment' },
   { keyword: 'water', debitAccountCode: '5030', creditAccountCode: '1010', description: 'Water Utility Bill' },
-  { keyword: 'internet', debitAccountCode: '5030', creditAccountCode: '1010', description: 'Office Internet Fees' },
-  { keyword: 'wifi', debitAccountCode: '5030', creditAccountCode: '1010', description: 'Wifi / Internet Subscription' },
+  { keyword: 'internet', debitAccountCode: '5130', creditAccountCode: '1010', description: 'Office Internet Fees' },
+  { keyword: 'wifi', debitAccountCode: '5130', creditAccountCode: '1010', description: 'Wifi / Internet Subscription' },
   { keyword: 'utility', debitAccountCode: '5030', creditAccountCode: '1010', description: 'Utility Payments' },
 
   // --- Rental Revenues & Printing Services (checked very early) ------------------
@@ -552,15 +530,15 @@ export const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   { keyword: 'rental income', debitAccountCode: '1010', creditAccountCode: '4055', description: 'Other Rental Income Received' },
 
   // --- Office Supplies ------------------------------------------------------
-  { keyword: 'bond paper', debitAccountCode: '5040', creditAccountCode: '1010', description: 'Office Supplies Purchase' },
-  { keyword: 'printer ink', debitAccountCode: '5040', creditAccountCode: '1010', description: 'Printer Ink and Toner Purchase' },
-  { keyword: 'ink', debitAccountCode: '5040', creditAccountCode: '1010', description: 'Printer Ink Supplies' },
-  { keyword: 'folder', debitAccountCode: '5040', creditAccountCode: '1010', description: 'Document Folders and Filing Supplies' },
-  { keyword: 'ballpen', debitAccountCode: '5040', creditAccountCode: '1010', description: 'Ballpen and Writing Supplies' },
+  { keyword: 'bond paper', debitAccountCode: '5290', creditAccountCode: '1010', description: 'Office Supplies Purchase' },
+  { keyword: 'printer ink', debitAccountCode: '5290', creditAccountCode: '1010', description: 'Printer Ink and Toner Purchase' },
+  { keyword: 'ink', debitAccountCode: '5290', creditAccountCode: '1010', description: 'Printer Ink Supplies' },
+  { keyword: 'folder', debitAccountCode: '5290', creditAccountCode: '1010', description: 'Document Folders and Filing Supplies' },
+  { keyword: 'ballpen', debitAccountCode: '5290', creditAccountCode: '1010', description: 'Ballpen and Writing Supplies' },
   // Bare 'pen' moved to the very end of this array — see the comment there.
-  { keyword: 'notebook', debitAccountCode: '5040', creditAccountCode: '1010', description: 'Notebooks and Writing Pads' },
-  { keyword: 'paper', debitAccountCode: '5040', creditAccountCode: '1010', description: 'Printer Paper and Ink' },
-  { keyword: 'office supplies', debitAccountCode: '5040', creditAccountCode: '1010', description: 'Office Administrative Supplies' },
+  { keyword: 'notebook', debitAccountCode: '5290', creditAccountCode: '1010', description: 'Notebooks and Writing Pads' },
+  { keyword: 'paper', debitAccountCode: '5290', creditAccountCode: '1010', description: 'Printer Paper and Ink' },
+  { keyword: 'office supplies', debitAccountCode: '5290', creditAccountCode: '1010', description: 'Office Administrative Supplies' },
 
   // --- Depreciation (non-cash adjusting entry) --------------------------------
   // Checked before the Equipment Expense section below: a plausible entry
@@ -620,14 +598,14 @@ export const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   { keyword: 'purchase of cabinet', debitAccountCode: '1651', creditAccountCode: '1010', description: 'Purchase of Cabinet' },
   { keyword: 'purchase chairs', debitAccountCode: '1652', creditAccountCode: '1010', description: 'Purchase Chairs' },
   { keyword: 'purchase of tables/desks', debitAccountCode: '1653', creditAccountCode: '1010', description: 'Purchase of Tables/Desks' },
-  { keyword: 'laptop', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Developer Laptop Purchase' },
+  { keyword: 'laptop', debitAccountCode: '1501', creditAccountCode: '1010', description: 'Developer Laptop Purchase' },
   { keyword: 'computer', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Hardware Equipment Purchase' },
   { keyword: 'monitor', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Computer Monitor Purchase' },
-  { keyword: 'printer', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Printer Equipment Purchase' },
+  { keyword: 'printer', debitAccountCode: '1503', creditAccountCode: '1010', description: 'Printer Equipment Purchase' },
   { keyword: 'equipment', debitAccountCode: '1500', creditAccountCode: '1010', description: 'General Equipment Purchase' },
   { keyword: 'hardware', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Computer Hardware' },
   { keyword: 'server', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Hosting Server Equipment' },
-  { keyword: 'furniture', debitAccountCode: '1650', creditAccountCode: '1010', description: 'Furniture & Fixtures Purchase' },
+  { keyword: 'furniture', debitAccountCode: '1651', creditAccountCode: '1010', description: 'Furniture & Fixtures Purchase' },
   { keyword: 'receivable from custodian', debitAccountCode: '1330', creditAccountCode: '1010', description: 'Receivable from Custodian' },
 
   // --- Inventory (goods for resale) ---------------------------------------------
@@ -643,9 +621,9 @@ export const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   // --- Inter-organization loans (working paper row 20) ---------------------------
   // Checked before bare 'loan' below (money the org itself borrows) — this
   // is the opposite direction, money the org lends OUT to another org.
-  { keyword: 'loan to other organization', debitAccountCode: '1350', creditAccountCode: '1010', description: 'Loans to Other Organization' },
-  { keyword: 'loans to other organization', debitAccountCode: '1350', creditAccountCode: '1010', description: 'Loans to Other Organization' },
-  { keyword: 'collection of loan receivable from other organizations', debitAccountCode: '1010', creditAccountCode: '1350', description: 'Collection of Loan Receivable from Other Organizations' },
+  { keyword: 'loan to other organization', debitAccountCode: '1370', creditAccountCode: '1010', description: 'Loans to Other Organization' },
+  { keyword: 'loans to other organization', debitAccountCode: '1370', creditAccountCode: '1010', description: 'Loans to Other Organization' },
+  { keyword: 'collection of loan receivable from other organizations', debitAccountCode: '1010', creditAccountCode: '1370', description: 'Collection of Loan Receivable from Other Organizations' },
   { keyword: 'payment of previous-period expense payables', debitAccountCode: '2010', creditAccountCode: '1010', description: 'Payment of Previous-Period/Semester Expense Payables' },
 
   // --- Cash advance given to an officer (client note sheet, row 19) --------------
@@ -661,10 +639,10 @@ export const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   { keyword: 'reimbursement to officer', debitAccountCode: '2050', creditAccountCode: '1010', description: 'Reimbursement to Officer' },
 
   // --- Training Expense -------------------------------------------------------
-  { keyword: 'seminar', debitAccountCode: '5060', creditAccountCode: '1010', description: 'Seminar / Conference Attendance Fee' },
-  { keyword: 'workshop', debitAccountCode: '5060', creditAccountCode: '1010', description: 'Workshop Training Fee' },
-  { keyword: 'training', debitAccountCode: '5060', creditAccountCode: '1010', description: 'Staff Training Expense' },
-  { keyword: 'certification', debitAccountCode: '5060', creditAccountCode: '1010', description: 'Professional Certification Fee' },
+  { keyword: 'seminar', debitAccountCode: '5300', creditAccountCode: '1010', description: 'Seminar / Conference Attendance Fee' },
+  { keyword: 'workshop', debitAccountCode: '5300', creditAccountCode: '1010', description: 'Workshop Training Fee' },
+  { keyword: 'training', debitAccountCode: '5300', creditAccountCode: '1010', description: 'Staff Training Expense' },
+  { keyword: 'certification', debitAccountCode: '5300', creditAccountCode: '1010', description: 'Professional Certification Fee' },
 
   // --- Travel Expense ----------------------------------------------------------
   { keyword: 'travel', debitAccountCode: '5050', creditAccountCode: '1010', description: 'Business Travel Reimbursement' },
@@ -754,9 +732,9 @@ export const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   { keyword: 'lease', debitAccountCode: '5020', creditAccountCode: '1010', description: 'Office Space Lease' },
 
   // --- Payroll (Miscellaneous Expense) ------------------------------------------
-  { keyword: 'salary', debitAccountCode: '5010', creditAccountCode: '1010', description: 'Staff Payroll Disbursement' },
-  { keyword: 'wage', debitAccountCode: '5010', creditAccountCode: '1010', description: 'Hourly Wages Pay' },
-  { keyword: 'payroll', debitAccountCode: '5010', creditAccountCode: '1010', description: 'General Staff Payroll' },
+  { keyword: 'salary', debitAccountCode: '5200', creditAccountCode: '1010', description: 'Staff Payroll Disbursement' },
+  { keyword: 'wage', debitAccountCode: '5200', creditAccountCode: '1010', description: 'Hourly Wages Pay' },
+  { keyword: 'payroll', debitAccountCode: '5200', creditAccountCode: '1010', description: 'General Staff Payroll' },
 
   // --- Other Operating Expenses ---------------------------------------------------
   // 'donation expense' and 'service charge' are deliberately placed here,
@@ -767,7 +745,7 @@ export const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   // 'service' rule (same specificity-ordering principle as 'bond paper'
   // before 'paper').
   { keyword: 'bank charge', debitAccountCode: '5100', creditAccountCode: '1010', description: 'Bank Service Charge' },
-  { keyword: 'miscellaneous', debitAccountCode: '5110', creditAccountCode: '1010', description: 'Miscellaneous Operating Expense' },
+  { keyword: 'miscellaneous', debitAccountCode: '5290', creditAccountCode: '1010', description: 'Miscellaneous Operating Expense' },
   // Awards/prizes, printing, event supplies, uniforms, and tokens are
   // exactly the kind of thing the client's flowchart has in mind — bought
   // ahead of an event, not necessarily all handed out/used immediately —
@@ -781,7 +759,7 @@ export const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   { keyword: 'shipping', debitAccountCode: '5150', creditAccountCode: '1010', description: 'Shipping Expense' },
   { keyword: 'supplies', debitAccountCode: '5160', creditAccountCode: '1010', description: 'Event & Operational Supplies', mayDeferPortion: true },
   { keyword: 'uniform', debitAccountCode: '5180', creditAccountCode: '1010', description: 'Uniform Expense', mayDeferPortion: true },
-  { keyword: 'token', debitAccountCode: '5190', creditAccountCode: '1010', description: 'Tokens & Recognition Expense', mayDeferPortion: true },
+  { keyword: 'token', debitAccountCode: '5120', creditAccountCode: '1010', description: 'Tokens & Recognition Expense', mayDeferPortion: true },
   { keyword: 'honorari', debitAccountCode: '5200', creditAccountCode: '1010', description: 'Honoraria Expense' },
   // 'national membership' (matching the paper's own real wording, "Paid
   // national membership fee") rather than bare 'membership fee': the org's
@@ -790,27 +768,27 @@ export const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   // with a revenue-side membership rule, same ordering principle as
   // 'donation expense'/'service charge' above.
   { keyword: 'national membership', debitAccountCode: '5210', creditAccountCode: '1010', description: 'Membership Fee Paid to Another Association' },
-  { keyword: 'service charge', debitAccountCode: '5220', creditAccountCode: '1010', description: 'Service Charge Payment' },
+  { keyword: 'service charge', debitAccountCode: '5100', creditAccountCode: '1010', description: 'Service Charge Payment' },
   // Same collision, same fix, for "Paid for GCash Service Fee" — the
   // working paper's own actual wording. Without this, "service fee" falls
   // through to the bare 'service' revenue keyword below and misclassifies
   // an expense as revenue.
-  { keyword: 'service fee', debitAccountCode: '5220', creditAccountCode: '1010', description: 'Service Fee Payment' },
+  { keyword: 'service fee', debitAccountCode: '5100', creditAccountCode: '1010', description: 'Service Fee Payment' },
   { keyword: 'donation expense', debitAccountCode: '5230', creditAccountCode: '1010', description: 'Donation Given by the Organization' },
 
   // --- Revenue & Funding ---------------------------------------------------------
-  { keyword: 'consulting', debitAccountCode: '1010', creditAccountCode: '4010', description: 'Client Consulting Services' },
-  { keyword: 'service', debitAccountCode: '1010', creditAccountCode: '4010', description: 'Professional Services Rendered' },
-  { keyword: 'billed', debitAccountCode: '1200', creditAccountCode: '4010', description: 'Customer Invoice Billed' },
-  { keyword: 'invoice', debitAccountCode: '1200', creditAccountCode: '4010', description: 'Customer Milestone Invoice' },
-  { keyword: 'grant', debitAccountCode: '1010', creditAccountCode: '4020', description: 'Public Funding Grant Receipt' },
+  { keyword: 'consulting', debitAccountCode: '1010', creditAccountCode: '4050', description: 'Client Consulting Services' },
+  { keyword: 'service', debitAccountCode: '1010', creditAccountCode: '4050', description: 'Professional Services Rendered' },
+  { keyword: 'billed', debitAccountCode: '1200', creditAccountCode: '4050', description: 'Customer Invoice Billed' },
+  { keyword: 'invoice', debitAccountCode: '1200', creditAccountCode: '4050', description: 'Customer Milestone Invoice' },
+  { keyword: 'grant', debitAccountCode: '1010', creditAccountCode: '4050', description: 'Public Funding Grant Receipt' },
   { keyword: 'sponsorships and donations', debitAccountCode: '1010', creditAccountCode: '4100', description: 'Sponsorships and Donations', sponsorshipKind: 'cash' },
   { keyword: 'donation', debitAccountCode: '1010', creditAccountCode: '4100', description: 'Sponsorships and Donations', sponsorshipKind: 'cash' },
   { keyword: 'sponsor', debitAccountCode: '1010', creditAccountCode: '4100', description: 'Sponsorships and Donations', sponsorshipKind: 'cash' },
   // Inter-org loans (above, in the Inventory section) are checked first —
   // this bare 'loan' is money the org itself borrows, the opposite
   // direction.
-  { keyword: 'loan', debitAccountCode: '1010', creditAccountCode: '2200', description: 'Bank Loan Capital Funding' },
+  { keyword: 'loan', debitAccountCode: '1010', creditAccountCode: '2080', description: 'Bank Loan Capital Funding' },
   // Generic ad-hoc "Membership Dues Collected" (and its duplicate,
   // "Membership Fees Collected") used to exist here — both removed per
   // client feedback, since every real membership collection now belongs
@@ -818,7 +796,7 @@ export const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   // school year (accrual, 1st Semester), previous period unpaid dues, or
   // new/additional members (accrual, 2nd Semester).
   { keyword: 'other income', debitAccountCode: '1010', creditAccountCode: '4050', description: 'Other Income Received' },
-  { keyword: 'interest', debitAccountCode: '1010', creditAccountCode: '4060', description: 'Interest Income Received' },
+  { keyword: 'interest', debitAccountCode: '1010', creditAccountCode: '4050', description: 'Interest Income Received' },
   { keyword: 'sale of merchandise', debitAccountCode: '1010', creditAccountCode: '4070', description: 'Sale of Merchandise' },
   { keyword: 'excess merchandise collection', debitAccountCode: '2150', creditAccountCode: '1010', description: 'Excess Merchandise Collection - Status' },
   // Entrance ticket sales groups into Miscellaneous Income with printing-
@@ -827,8 +805,8 @@ export const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   { keyword: 'ticket', debitAccountCode: '1010', creditAccountCode: '4050', description: 'Cash Received from Entrance Ticket Sale' },
 
   // --- Office Supplies purchased on credit (Accounts Payable) --------------------
-  { keyword: 'vendor bill', debitAccountCode: '5040', creditAccountCode: '2010', description: 'Office Supplies Billed by Vendor' },
-  { keyword: 'on account', debitAccountCode: '5040', creditAccountCode: '2010', description: 'Vendor Purchase on Credit' },
+  { keyword: 'vendor bill', debitAccountCode: '5290', creditAccountCode: '2010', description: 'Office Supplies Billed by Vendor' },
+  { keyword: 'on account', debitAccountCode: '5290', creditAccountCode: '2010', description: 'Vendor Purchase on Credit' },
 
   // --- Lowest priority: generic single-word keywords prone to false-positive
   // substring matches inside other, unrelated words. Pre-existing issue found
@@ -840,7 +818,7 @@ export const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   // to dead last means every more specific keyword above (including
   // 'ballpen', which already covers the realistic phrasing) gets first
   // chance, and 'pen' only fires when truly nothing else matched.
-  { keyword: 'pen', debitAccountCode: '5040', creditAccountCode: '1010', description: 'Office Supplies Stationary' },
+  { keyword: 'pen', debitAccountCode: '5290', creditAccountCode: '1010', description: 'Office Supplies Stationary' },
 ];
 
 const INITIAL_LOGS: AuditLog[] = [

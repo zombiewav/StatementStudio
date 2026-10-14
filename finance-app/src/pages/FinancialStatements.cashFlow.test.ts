@@ -28,7 +28,7 @@ describe('Statement of Cash Flows tab', () => {
     act(() => { tab!.props.onClick(); });
     const page = text(renderer.root);
     ['Receipts from:', 'Payments for:', 'Unearned Merchandise Revenue', 'Advances to Suppliers', 'Purchase of equipment', 'Purchase of furniture and fixture',
-      'Net cash provided by operating activities', 'Net cash provided by investing activities', 'Net increase (decrease) in cash and cash equivalents',
+      'Net cash provided by operating activities', 'Net increase (decrease) in cash and cash equivalents',
       'Cash and cash equivalents at beginning of year', 'Cash and cash equivalents at end of year', 'Ending cash agrees with the General Ledger'].forEach(label => expect(page).toContain(label));
     expect(page).not.toContain('Financing Activities');
     expect(page).not.toContain('Less:');
@@ -63,14 +63,14 @@ describe('Statement of Functional Expenses', () => {
       finance.updateSettings({ semester: '1st Semester', reportingYear: 2026 } as never);
       finance.addJournalEntry('2026-10-01', 'Capital', 'General Fund Operations', [{ accountCode: '1010', debit: 5000, credit: 0 }, { accountCode: '4030', debit: 0, credit: 5000 }]);
       finance.addJournalEntry('2026-10-02', 'Event Expense - October Fest', 'General Fund Operations', [{ accountCode: '5300', debit: 700, credit: 0 }, { accountCode: '1010', debit: 0, credit: 700 }], 'October Fest');
-      finance.addJournalEntry('2026-10-03', 'Office supplies', 'General Fund Operations', [{ accountCode: '5040', debit: 200, credit: 0 }, { accountCode: '1010', debit: 0, credit: 200 }]);
+      finance.addJournalEntry('2026-10-03', 'Office supplies', 'General Fund Operations', [{ accountCode: '5290', debit: 200, credit: 0 }, { accountCode: '1010', debit: 0, credit: 200 }]);
     });
     const tab = renderer.root.findAllByType('button').find(button => text(button).trim() === 'Statement of Functional Expenses');
     act(() => { tab!.props.onClick(); });
     const rows = renderer.root.findAllByType('tr').map(row => text(row));
     const labels = rows.map(row => row.trim().split(/\s+/).slice(0, 3).join(' '));
     expect(rows.some(row => row.includes('Event Expense') && row.includes('700'))).toBe(true);
-    expect(rows.some(row => row.includes('Office Supplies') && row.includes('200'))).toBe(true);
+    expect(rows.some(row => row.includes('Supplies and Materials Expense') && row.includes('200'))).toBe(true);
     expect(rows.some(row => row.includes('Bank Charges'))).toBe(false);
     expect(rows.some(row => row.includes('Rent Expense'))).toBe(false);
     expect(labels.length).toBeLessThan(8);
@@ -136,7 +136,7 @@ describe('Zero-balance accounts on the statements', () => {
     act(() => {
       finance.updateSettings({ semester: '1st Semester', reportingYear: 2026 } as never);
       finance.addJournalEntry('2026-10-01', 'Capital', 'General Fund Operations', [{ accountCode: '1010', debit: 5000, credit: 0 }, { accountCode: '4030', debit: 0, credit: 5000 }]);
-      finance.addJournalEntry('2026-10-03', 'Office supplies', 'General Fund Operations', [{ accountCode: '5040', debit: 200, credit: 0 }, { accountCode: '1010', debit: 0, credit: 200 }]);
+      finance.addJournalEntry('2026-10-03', 'Office supplies', 'General Fund Operations', [{ accountCode: '5290', debit: 200, credit: 0 }, { accountCode: '1010', debit: 0, credit: 200 }]);
     });
   };
 
@@ -154,7 +154,7 @@ describe('Zero-balance accounts on the statements', () => {
   it('lists only revenue and expense accounts with a balance on the Statement of Activities and keeps the totals', () => {
     seed();
     const page = open('Statement of Activities');
-    expect(page).toContain('Office Supplies');
+    expect(page).toContain('Supplies and Materials Expense');
     expect(page).not.toContain('Bank Charges');
     expect(page).not.toContain('Rent Expense');
     ['Total Revenue & Inflows', 'Total General & Administrative', 'Total Expenses & Outflows'].forEach(label => expect(page).toContain(label));

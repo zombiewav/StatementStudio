@@ -11,6 +11,7 @@ import {
   PREPAID_ASSET_ITEMS,
   PrepaidAssetCategory,
   PrepaidAssetPaymentMethod,
+  sortPrepaidItems,
 } from '../lib/prepaidAssets';
 import { DatedAmountRecord, TransactionDraft } from '../types';
 import { automaticPostingDate as resolveAutomaticPostingDate, isDateWithinReportingPeriod } from '../lib/reportingPeriod';
@@ -102,7 +103,7 @@ export function PrepaidAssetEntry({ draftToResume = null, onDraftResumed, onDraf
   };
 
   const allowedCategories = item ? PREPAID_ASSET_ITEMS[item] || [] : [];
-  const availableItems = Object.keys(PREPAID_ASSET_ITEMS).filter(value => mode !== 'downpayment' || PREPAID_ASSET_ITEMS[value].some(category => category === 'rent' || category === 'uniform'));
+  const availableItems = sortPrepaidItems(Object.keys(PREPAID_ASSET_ITEMS).filter(value => mode !== 'downpayment' || PREPAID_ASSET_ITEMS[value].some(category => category === 'rent' || category === 'uniform')));
   const officerAdvances = useMemo(() => counterpartyBalances(journalEntries, '1250', 'Debit'), [journalEntries]);
   const availableAdvance = officer ? counterpartyBalance(journalEntries, '1250', 'Debit', officer) : 0;
   const availableCash = Math.max(0, accountBalances['1010'] || 0);

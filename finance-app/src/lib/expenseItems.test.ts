@@ -6,8 +6,8 @@ import { EXPENSE_ITEMS, expenseItemByLabel, expenseItemForAccount } from './expe
 const sheet = [
   ['Delivery Fees/ Shipping Fees', 'Delivery Expense'],
   ['Load for Event Hosts', 'Communication Expense'],
-  ['Cash Prizes given to Event Participants', 'Award and Prizes Expense'],
-  ['Load Given as Prize to Event Participants', 'Award and Prizes Expense'],
+  ['Cash Prizes given to Event Participants', 'Awards and Prizes Expense'],
+  ['Load Given as Prize to Event Participants', 'Awards and Prizes Expense'],
   ['Printing/Bookbinding/Photocopying of Accomplishment Reports and Other Documents', 'Printing Expense'],
   ['Mass Offerings/Donations', 'Donations and Contributions Expense'],
   ['Purchase of Meals immediately consumed by participants, speakers and organizers', 'Food and Meals Expense'],

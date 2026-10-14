@@ -4,8 +4,8 @@ import { OBLIGATION_ACCOUNT_CODES } from './reviewEngine';
 
 describe('StatementStudio Part 2 system rules', () => {
   it('provides separate PPE and furniture payable accounts, and limits Review follow-ups to prepaid accounts', () => {
-    expect(INITIAL_ACCOUNTS.find(account => account.code === '2030')?.name).toBe('Accounts Payable-PPE');
-    expect(INITIAL_ACCOUNTS.find(account => account.code === '2040')?.name).toBe('Accounts Payable-Furniture & Fixture');
+    expect(INITIAL_ACCOUNTS.find(account => account.code === '2030')?.name).toBe('Accounts Payable - PPE');
+    expect(INITIAL_ACCOUNTS.find(account => account.code === '2040')?.name).toBe('Accounts Payable - Furniture and Fixtures');
     expect(OBLIGATION_ACCOUNT_CODES).toEqual(['1260', '1280', '1285', '1295', '1298']);
   });
 

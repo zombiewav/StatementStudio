@@ -314,3 +314,11 @@ wanted:
   rule, still opens balanced. Revenue and Expenses always start at zero. The Trial Balance lists accounts
   Assets, Liabilities, Fund Balance, Revenue, Expenses.
 
+
+- **Chart of Accounts follows the client's FORMAT FS list (Oct 2026)**: accounts not on it are retired through
+  `RETIRED_REPLACEMENTS` in FinanceContext.tsx (old postings and opening balances move to the listed account; the
+  automatic transaction rules post to the replacement). Still kept although unlisted, pending the client: Utilities
+  5030 (electricity/water), Equipment & Tools 1500 (computer, monitor, server, hardware, equipment) and 1514-1516,
+  the expense-item accounts 5330-5360, Prepaid Expenses 1260, Permanently Restricted Fund Balance 3030 and the
+  restricted contribution revenues 4030/4035/4036. Not added: Due to Customers, Due to Suppliers. New semesters
+  cannot be added before they start (`RESTRICT_FUTURE_SEMESTERS`, `newSemesterBlock`).

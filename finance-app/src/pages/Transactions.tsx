@@ -310,7 +310,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     const forms = Array.from(draftBannerRef.current?.parentElement?.querySelectorAll('form') ?? []);
     forms.find(form => form.offsetParent !== null)?.requestSubmit();
   };
-  const [selectedExpenseAccountCode, setSelectedExpenseAccountCode] = useState('5010');
+  const [selectedExpenseAccountCode, setSelectedExpenseAccountCode] = useState('5290');
   // Set for exactly one effect pass right after a draft is hydrated, so the
   // classification-match effect below (keyed on txName, which hydration
   // also sets) doesn't immediately wipe the just-restored fields back to
@@ -401,8 +401,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   const isOfficerAdvance = debitCode === '1250';
   const isOfficerReimbursement = debitCode === '2050';
   const isFixedOfficerTransactionType = selectedCategory === 'advances-to-officers' || selectedCategory === 'reimbursements-to-officers';
-  const isLoanToOrganization = debitCode === '1350';
-  const isLoanCollection = effectiveCreditCode === '1350';
+  const isLoanToOrganization = debitCode === '1370';
+  const isLoanCollection = effectiveCreditCode === '1370';
   const isPriorExpensePayablePayment = debitCode === '2010';
   const needsCounterpartyName = !!classificationPreview && ((effectiveCreditCode === '2050' || effectiveCreditCode === '2010' || isOfficerAdvance || isOfficerReimbursement || isLoanToOrganization || isLoanCollection || isPriorExpensePayablePayment) || merchandiseUsesOfficer);
   const counterpartyLabel = merchandiseUsesOfficer
@@ -578,7 +578,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     setEditingDraftId(draftToResume.id);
     setSelectedCategory((draftToResume.category as TransactionCategoryId) || null);
     setTxName(resumedTxName);
-    setSelectedExpenseAccountCode(snapshot.selectedExpenseAccountCode || '5010');
+    setSelectedExpenseAccountCode(snapshot.selectedExpenseAccountCode || '5290');
     setDescription(snapshot.description || '');
     setExpenseEventName(snapshot.expenseEventName || '');
     setExpenseEvent(snapshot.expenseEvent || '');
@@ -629,7 +629,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     const match = resumedExpenseItem
       ? { debitAccountCode: resumedExpenseItem.accountCode, creditAccountCode: '1010', defaultDesc: resumedExpenseItem.label }
       : olderExpenseDraft
-      ? { debitAccountCode: snapshot.selectedExpenseAccountCode || '5010', creditAccountCode: '1010', defaultDesc: 'Outright Expense Payment' }
+      ? { debitAccountCode: snapshot.selectedExpenseAccountCode || '5290', creditAccountCode: '1010', defaultDesc: 'Outright Expense Payment' }
       : snapshot.txName ? suggestTransactionClassification(snapshot.txName) : null;
     if (match) {
       setDebitCode(match.debitAccountCode);
@@ -680,14 +680,14 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   const officerAdvanceBalances = useMemo(() => counterpartyBalances(ledgerEntries, '1250', 'Debit'), [ledgerEntries]);
   const officerAdvanceSummary = useMemo(() => counterpartySummary(ledgerEntries, '1250', 'Debit'), [ledgerEntries]);
   const officerPayableBalances = useMemo(() => counterpartyBalances(ledgerEntries, '2050', 'Credit'), [ledgerEntries]);
-  const organizationLoanBalances = useMemo(() => counterpartyBalances(ledgerEntries, '1350', 'Debit'), [ledgerEntries]);
+  const organizationLoanBalances = useMemo(() => counterpartyBalances(ledgerEntries, '1370', 'Debit'), [ledgerEntries]);
   const supplierPayableBalances = useMemo(() => counterpartyBalances(ledgerEntries, '2010', 'Credit'), [ledgerEntries]);
   const merchandiseOfficerName = isMerchandiseAcquisition ? counterpartyName : outrightOfficer;
   const selectedOfficerAdvanceBalance = counterpartyBalance(ledgerEntries, '1250', 'Debit', merchandiseOfficerName);
   // The accountable officer has no advance to draw from (or none was recorded at all).
   const acquisitionNoAdvanceRecord = acquisitionUsesAdvance && selectedOfficerAdvanceBalance <= 0 && (!!counterpartyName.trim() || officerAdvanceBalances.length === 0);
   const reimbursementBreakdown = useMemo(() => officerBreakdown(ledgerEntries, counterpartyName), [ledgerEntries, counterpartyName]);
-  const selectedOrganizationLoanBalance = counterpartyBalance(ledgerEntries, '1350', 'Debit', counterpartyName);
+  const selectedOrganizationLoanBalance = counterpartyBalance(ledgerEntries, '1370', 'Debit', counterpartyName);
   const selectedSupplierPayableBalance = counterpartyBalance(ledgerEntries, '2010', 'Credit', counterpartyName);
   const visibleCounterpartyBalances = isOfficerAdvance ? officerAdvanceBalances
     : isOfficerReimbursement ? officerPayableBalances

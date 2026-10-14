@@ -27,7 +27,7 @@ function seed(communication: number) {
     finance.updateSettings({ semester: '1st Semester', reportingYear: 2026 } as never);
     finance.addJournalEntry('2026-09-01', 'Fund contribution', PROJECT, [{ accountCode: '1010', debit: 10000, credit: 0 }, { accountCode: '3010', debit: 0, credit: 10000 }]);
     finance.addJournalEntry('2026-10-01', 'Dues', PROJECT, [{ accountCode: '1010', debit: 5000, credit: 0 }, { accountCode: '4040', debit: 0, credit: 4000 }, { accountCode: '4050', debit: 0, credit: 1000 }]);
-    [['5130', communication, '1010'], ['5150', 1000, '1010'], ['5100', 1000, '1010'], ['5040', 1000, '1010']].forEach(([code, amount, paidFrom], index) =>
+    [['5130', communication, '1010'], ['5150', 1000, '1010'], ['5100', 1000, '1010'], ['5290', 1000, '1010']].forEach(([code, amount, paidFrom], index) =>
       finance.addJournalEntry(`2026-10-0${index + 2}`, `Expense ${code}`, PROJECT, [{ accountCode: code as string, debit: amount as number, credit: 0 }, { accountCode: paidFrom as string, debit: 0, credit: amount as number }]));
   });
 }
@@ -40,7 +40,7 @@ describe('closing entries named Fund Balance', () => {
     const lines = closingEntry()!.lines;
     expect(lines.find(line => line.accountCode === '3010')).toEqual({ accountCode: '3010', debit: 0, credit: 1000 });
     expect(lines.filter(line => line.debit > 0).map(line => line.accountCode).sort()).toEqual(['4040', '4050']);
-    expect(lines.filter(line => line.credit > 0 && line.accountCode !== '3010').map(line => line.accountCode).sort()).toEqual(['5040', '5100', '5130', '5150']);
+    expect(lines.filter(line => line.credit > 0 && line.accountCode !== '3010').map(line => line.accountCode).sort()).toEqual(['5100', '5130', '5150', '5290']);
     // Day-to-day balances never see the closing entry; the post-closing reports do.
     expect(finance.accountBalances['4040']).toBe(4000);
   });
@@ -129,7 +129,7 @@ describe('Trial Balance order', () => {
     act(() => {
       finance.updateSettings({ semester: '1st Semester', reportingYear: 2026 } as never);
       finance.addJournalEntry('2026-10-01', 'Dues', PROJECT, [{ accountCode: '1010', debit: 3000, credit: 0 }, { accountCode: '4040', debit: 0, credit: 3000 }]);
-      finance.addJournalEntry('2026-10-02', 'Supplies', PROJECT, [{ accountCode: '5040', debit: 200, credit: 0 }, { accountCode: '2050', debit: 0, credit: 200 }]);
+      finance.addJournalEntry('2026-10-02', 'Supplies', PROJECT, [{ accountCode: '5290', debit: 200, credit: 0 }, { accountCode: '2050', debit: 0, credit: 200 }]);
     });
     act(() => { finance.restoreBackupData({ ...finance.exportBackupData(), accounts: [...finance.accounts].reverse() }); });
     const types = renderer.root.findAllByType('tbody')[0].findAllByType('tr').map(row => row.findAllByType('span')[0]?.children.join(''));
@@ -143,13 +143,13 @@ describe('second semester beginning balances', () => {
     act(() => {
       finance.updateSettings({ semester: '1st Semester', reportingYear: 2026 } as never);
       finance.addJournalEntry('2026-09-01', 'Dues', PROJECT, [{ accountCode: '1010', debit: 3000, credit: 0 }, { accountCode: '4040', debit: 0, credit: 3000 }]);
-      finance.addJournalEntry('2026-09-02', 'Supplies', PROJECT, [{ accountCode: '5040', debit: 500, credit: 0 }, { accountCode: '1010', debit: 0, credit: 500 }]);
+      finance.addJournalEntry('2026-09-02', 'Supplies', PROJECT, [{ accountCode: '5290', debit: 500, credit: 0 }, { accountCode: '1010', debit: 0, credit: 500 }]);
     });
     act(() => { finance.switchReportingPeriod('2026-2027', '2nd Semester', 2026); });
     expect(finance.accountBalances['1010']).toBe(2500);
     expect(finance.accountBalances['3010']).toBe(2500);
     expect(finance.accountBalances['4040'] || 0).toBe(0);
-    expect(finance.accountBalances['5040'] || 0).toBe(0);
+    expect(finance.accountBalances['5290'] || 0).toBe(0);
     expect(finance.journalEntries.some(entry => entry.description.startsWith('Closing Entries'))).toBe(false);
   });
 });

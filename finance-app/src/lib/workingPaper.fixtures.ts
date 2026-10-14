@@ -71,8 +71,8 @@ export const COVERED_ROWS: CoveredRow[] = [
     sheet: 'Sheet1',
     row: 17,
     label: 'Purchase of Flash Drive',
-    // Paper: "Office Supplies Expense" -> our 5040 Office Supplies
-    debitAccountCode: '5040',
+    // Paper: "Office Supplies Expense" -> our 5290 Supplies and Materials Expense
+    debitAccountCode: '5290',
     creditAccountCode: '1010',
     expectedDebitEffect: 'Increase',
     expectedCreditEffect: 'Decrease',

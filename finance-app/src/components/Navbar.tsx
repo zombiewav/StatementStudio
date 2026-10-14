@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router';
 import { supabase } from '../lib/supabase';
 import { useFinance } from '../context/FinanceContext';
 import { useAuth } from '../context/AuthContext';
-import { Semester, SEMESTER_OPTIONS, periodForSemester, parseSchoolYear } from '../lib/reportingPeriod';
+import { Semester, SEMESTER_OPTIONS, periodForSemester, parseSchoolYear, newSemesterBlock } from '../lib/reportingPeriod';
+import { RESTRICT_FUTURE_SEMESTERS } from '../lib/featureFlags';
 import { ThemeToggle } from './ThemeToggle';
 
 interface NavbarProps {
@@ -76,6 +77,10 @@ export function Navbar({ onMenuToggle, searchTerm, setSearchTerm, onSearchSubmit
     if (!fySemester) { setFyError('Select a semester.'); return; }
     try {
       const schoolYear = parseSchoolYear(fyYear);
+      const block = RESTRICT_FUTURE_SEMESTERS
+        ? newSemesterBlock(fySemester, schoolYear.startYear, reportingPeriodWorkspaces.some(workspace => workspace.key === `${schoolYear.label}::${fySemester}`))
+        : '';
+      if (block) { setFyError(block); return; }
       switchReportingPeriod(schoolYear.label, fySemester, schoolYear.startYear);
       setShowFiscalYearDropdown(false);
     } catch (err) {

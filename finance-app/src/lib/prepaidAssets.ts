@@ -36,6 +36,10 @@ export const PREPAID_ASSET_ITEMS: Record<string, PrepaidAssetCategory[]> = {
   Others: ['awards', 'supplies', 'rent', 'uniform'],
 };
 
+/** Item dropdown order: A to Z, with the catch-all "Others" last. */
+export const sortPrepaidItems = (items: string[]): string[] =>
+  [...items].sort((left, right) => (left === 'Others' ? 1 : 0) - (right === 'Others' ? 1 : 0) || left.localeCompare(right, 'en', { sensitivity: 'base' }));
+
 const cents = (value: number) => Math.round(value * 100) / 100;
 const total = (rows: DatedAmountRecord[]) => cents(rows.reduce((sum, row) => sum + Number(row.amount || 0), 0));
 
