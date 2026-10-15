@@ -34,6 +34,7 @@ import { downpaymentAmountChangeBlock, downpaymentLinkBlock } from '../lib/merch
 import { buyerDownpaymentAmountChangeBlock, buyerDownpaymentLinkBlock } from '../lib/buyerDownpayments';
 import { carryForwardCustomerOrders, customerOrderFinalizationIssues, customerOrderReversalBlock } from '../lib/customerOrders';
 import { isDateWithinReportingPeriod, reportingPeriodBounds } from '../lib/reportingPeriod';
+import { negativeBalanceAfterChange, negativeBalanceChangeMessage } from '../lib/negativeBalanceGuard';
 
 // The default catch-all project and the account closing entries post their
 // net income plug to — same constants Transactions.tsx and INITIAL_PROJECTS
@@ -1189,6 +1190,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     }
     const linkBlock = downpaymentAmountChangeBlock(current, journalEntries, entry.lines) || buyerDownpaymentAmountChangeBlock(current, journalEntries, entry.lines);
     if (linkBlock) throw new Error(linkBlock);
+    const negativeAccount = negativeBalanceAfterChange(journalEntries, journalEntries.map(candidate => candidate.id === entry.id ? entry : candidate), accounts, openingBalances, closedFiscalYears);
+    if (negativeAccount) throw new Error(negativeBalanceChangeMessage('This change', negativeAccount));
     setJournalEntries(previous => previous.map(candidate => candidate.id === entry.id ? entry : candidate));
     logAudit('Edit Journal Entry', `Updated posted journal entry ${entry.reference}: ${entry.description}.`);
   };
@@ -1247,6 +1250,9 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       reversalOfEntryId: entry.id,
     };
 
+    const reversalNegative = negativeBalanceAfterChange(journalEntries, [...journalEntries, reversalEntry], accounts, openingBalances, closedFiscalYears);
+    if (reversalNegative) { window.alert(negativeBalanceChangeMessage('Reversing this transaction', reversalNegative)); return; }
+
     setJournalEntries(prev => [
       ...prev.map(e => e.id === id
         ? { ...e, reversedByEntryId: reversalEntry.id }
@@ -1279,6 +1285,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
         .forEach(candidate => { idsToDelete.add(candidate.id); if (candidate.reversedByEntryId) idsToDelete.add(candidate.reversedByEntryId); });
     }
     if (entry.reversedByEntryId) idsToDelete.add(entry.reversedByEntryId);
+    const deleteNegative = negativeBalanceAfterChange(journalEntries, journalEntries.filter(candidate => !idsToDelete.has(candidate.id)), accounts, openingBalances, closedFiscalYears);
+    if (deleteNegative) { window.alert(negativeBalanceChangeMessage('Deleting this transaction', deleteNegative)); return false; }
     setJournalEntries(previous => previous
       .filter(candidate => !idsToDelete.has(candidate.id))
       .map(candidate => candidate.reversedByEntryId === id ? { ...candidate, reversedByEntryId: undefined } : candidate));
@@ -1609,6 +1617,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       : undefined;
     const linkBlock = draftEntry ? downpaymentLinkBlock(draftEntry, journalEntries) || buyerDownpaymentLinkBlock(draftEntry, journalEntries) : undefined;
     if (linkBlock) { window.alert(linkBlock); return false; }
+    const draftNegative = draftEntry ? negativeBalanceAfterChange(journalEntries, journalEntries.filter(entry => entry.id !== draftEntry.id), accounts, openingBalances, closedFiscalYears) : undefined;
+    if (draftNegative) { window.alert(negativeBalanceChangeMessage('Deleting this draft', draftNegative)); return false; }
     setDraftTransactions(prev => {
       const existing = prev.find(d => d.id === id);
       if (existing) logAudit('Discard Draft Transaction', `Discarded draft "${existing.label}".`);

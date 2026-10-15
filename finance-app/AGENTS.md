@@ -239,6 +239,11 @@ login flag. This is still local-browser authentication, not secure multi-device 
   Officers balance; the per-officer table is reference only. Journal lines are *displayed* debits
   first (`orderLinesDebitsFirst`); stored order is unchanged because batch splitting relies on it.
 
+- **No negative balances after the fact**: besides the posting check, deleting a posted entry, deleting a saved draft,
+  reversing an entry and editing an entry are refused when they would push an account below zero because of later
+  postings (e.g. deleting a payable that was already paid). `lib/negativeBalanceGuard.ts`; Fund Balance may go negative;
+  an account already negative is only flagged if the change makes it worse.
+
 ## Known bugs / gaps, not yet fixed (flagged, intentionally left alone)
 
 - **Activities & Programs**: budget is now editable inline (click the Budget Cap figure), but
