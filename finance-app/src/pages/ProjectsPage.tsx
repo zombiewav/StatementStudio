@@ -89,7 +89,7 @@ export function ProjectsPage(): React.ReactElement {
   };
 
   return (
-    <div id="p1" className="space-y-6 bg-slate-50 dark:bg-slate-950">
+    <div id="p1" className="space-y-6">
       {/* Header */}
       <div className="flex justify-between items-center">
 

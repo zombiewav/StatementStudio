@@ -322,7 +322,7 @@ export function Settings(): React.ReactElement {
   };
 
   return (
-    <div className="space-y-6 bg-slate-50 dark:bg-slate-950">
+    <div className="space-y-6">
       {/* Title */}
       <div>
         <h2 className="font-display text-3xl text-slate-900 dark:text-slate-100">Workspace <em className="text-blue-700 dark:text-blue-400">Settings</em></h2>

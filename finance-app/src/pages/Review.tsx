@@ -317,7 +317,7 @@ export function Review({ onContinueDraft, onPostDraft, notice, onNoticeShown }: 
   const incompleteCount = reviewStates.filter(state => state.status === 'incomplete').length;
 
   return (
-    <div className="space-y-6 bg-slate-50 dark:bg-slate-950">
+    <div className="space-y-6">
       <div>
         <h2 className="font-display text-3xl text-slate-900 dark:text-slate-100 flex items-center gap-2">
           <ClipboardCheck className="w-5 h-5 text-blue-700 dark:text-blue-400" /> REVIEW

@@ -81,7 +81,7 @@ export function TrialBalance({ mode = 'pre' }: { mode?: 'pre' | 'post' } = {}): 
   const closingPosted = journalEntries.some(entry => closedFiscalYears.some(record => record.journalEntryId === entry.id));
   if (mode === 'post' && !closingPosted) {
     return (
-      <div className="space-y-6 bg-slate-50 dark:bg-slate-950">
+      <div className="space-y-6">
         <div>
           <h2 className="font-display text-3xl text-slate-900 dark:text-slate-100">Post-Closing Trial <em className="text-blue-700 dark:text-blue-400">Balance</em></h2>
         </div>
@@ -93,7 +93,7 @@ export function TrialBalance({ mode = 'pre' }: { mode?: 'pre' | 'post' } = {}): 
   }
 
   return (
-    <div className="space-y-6 bg-slate-50 dark:bg-slate-950">
+    <div className="space-y-6">
       <div className="w-full">
         <div>
           <h2 className="font-display text-3xl text-slate-900 dark:text-slate-100">{mode === 'post' ? 'Post-Closing Trial' : 'Trial'} <em className="text-blue-700 dark:text-blue-400">Balance</em></h2>

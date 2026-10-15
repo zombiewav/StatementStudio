@@ -89,7 +89,7 @@ export function GeneralLedger({ mode = 'pre' }: { mode?: 'pre' | 'post' } = {}):
   const closingPosted = journalEntries.some(entry => closedFiscalYears.some(record => record.journalEntryId === entry.id));
   if (mode === 'post' && !closingPosted) {
     return (
-      <div className="space-y-6 bg-slate-50 dark:bg-slate-950">
+      <div className="space-y-6">
         <div>
           <h2 className="font-display text-3xl text-slate-900 dark:text-slate-100">Post-Closing General <em className="text-blue-700 dark:text-blue-400">Ledger</em></h2>
         </div>
@@ -101,7 +101,7 @@ export function GeneralLedger({ mode = 'pre' }: { mode?: 'pre' | 'post' } = {}):
   }
 
   return (
-    <div className="space-y-6 bg-slate-50 dark:bg-slate-950">
+    <div className="space-y-6">
       <div>
         <h2 className="font-display text-3xl text-slate-900 dark:text-slate-100">{mode === 'post' ? 'Post-Closing General' : 'General'} <em className="text-blue-700 dark:text-blue-400">Ledger</em></h2>
         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">{mode === 'post'

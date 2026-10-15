@@ -377,7 +377,7 @@ export function FinancialStatements(): React.ReactElement {
     : `(${formatCurrency(Math.abs(amount))})`;
 
   return (
-    <div className="space-y-6 bg-slate-50 dark:bg-slate-950">
+    <div className="space-y-6">
       {/* Page Title & Toolbar */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 print:hidden">
         <div>

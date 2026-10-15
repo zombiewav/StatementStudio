@@ -109,7 +109,7 @@ export function Analytics(): React.ReactElement {
   };
 
 return (
-    <div id="a1" className="space-y-6 bg-slate-50 dark:bg-slate-950">
+    <div id="a1" className="space-y-6">
       {/* Title */}
       <div>
         <h2 id="a2" className="font-display text-3xl text-slate-900 dark:text-slate-100">Financial <em className="text-blue-700 dark:text-blue-400">Analytics</em></h2>

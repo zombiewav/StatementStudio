@@ -71,7 +71,7 @@ export function JournalEntries({ searchTerm: controlledSearchTerm, onSearchTermC
   const entriesById = useMemo(() => new Map(journalEntries.map(e => [e.id, e])), [journalEntries]);
 
   return (
-    <div className="space-y-6 bg-slate-50 dark:bg-slate-950">
+    <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
           <h2 className="font-display text-3xl text-slate-900 dark:text-slate-100">Journal <em className="text-blue-700 dark:text-blue-400">Entries</em></h2>

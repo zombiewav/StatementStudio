@@ -1618,7 +1618,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   };
 
   return (
-    <div className="space-y-6 bg-slate-50 dark:bg-slate-950">
+    <div className="space-y-6">
       <div>
         <h2 className="font-display text-3xl text-slate-900 dark:text-slate-100">Smart Transaction <em className="text-blue-700 dark:text-blue-400">Entry</em></h2>
         <p className="text-xs text-slate-700 dark:text-slate-400 mt-1 font-medium">Auto-classify transaction fields instantly using our rule-based accounting engine.</p>
