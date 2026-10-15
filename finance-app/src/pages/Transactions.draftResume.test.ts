@@ -461,12 +461,52 @@ describe('resuming a saved draft', () => {
     });
     saveDraft('Purchase of Laptop', 'ppe-transactions',
       [{ accountCode: '1501', debit: 500, credit: 0 }, { accountCode: '1010', debit: 0, credit: 500 }], {},
-      { amount: 500, date: '2026-10-12', outrightPaymentMethod: 'organization-funds', outrightOrganizationPayments: [{ id: 'o1', date: '', amount: '500' }] });
+      { amount: 500, ppeQuantity: '1', date: '2026-10-12', outrightPaymentMethod: 'organization-funds', outrightOrganizationPayments: [{ id: 'o1', date: '', amount: '500' }] });
     expect(alerts()).toEqual([]);
     expect(posted).toHaveLength(1);
     expect(finance.draftTransactions).toHaveLength(0);
     expect(finance.accountBalances['1010']).toBe(0);
     expect(finance.accountBalances['1501']).toBe(500);
     expect(finance.journalEntries.filter(entry => entry.description === 'Purchase of Laptop')).toHaveLength(1);
+  });
+});
+
+describe('PPE quantity and depreciation limits', () => {
+  const adaptor = () => finance.addJournalEntry('2026-10-02', 'Purchase of Adaptor', PROJECT, [{ accountCode: '1513', debit: 100, credit: 0 }, { accountCode: '1010', debit: 0, credit: 100 }], undefined, undefined, meta('Purchase of Adaptor', { ppeQuantity: 2 }));
+  const depreciationDraft = (amount: number) => saveDraft('Depreciation of Adaptor', 'depreciation',
+    [{ accountCode: '5090', debit: amount, credit: 0 }, { accountCode: '1550', debit: 0, credit: amount }], {}, { amount, date: '2026-10-12' });
+
+  it('refuses to post a PPE purchase without a quantity', () => {
+    start(() => undefined);
+    saveDraft('Purchase of Laptop', 'ppe-transactions',
+      [{ accountCode: '1501', debit: 500, credit: 0 }, { accountCode: '1010', debit: 0, credit: 500 }], {},
+      { amount: 500, date: '2026-10-12', outrightPaymentMethod: 'organization-funds', outrightOrganizationPayments: [{ id: 'o1', date: '', amount: '500' }] });
+    expect(alerts().join(' ')).toContain('quantity');
+    expect(posted).toHaveLength(0);
+  });
+
+  it('refuses depreciation above the Net Book Value of the item', () => {
+    start(() => { adaptor(); });
+    depreciationDraft(150);
+    expect(alerts().join(' ')).toContain('Net Book Value');
+    expect(posted).toHaveLength(0);
+  });
+
+  it('posts depreciation within the Net Book Value', () => {
+    start(() => { adaptor(); });
+    depreciationDraft(40);
+    expect(alerts()).toEqual([]);
+    expect(posted).toHaveLength(1);
+    expect(finance.accountBalances['1550']).toBe(40);
+  });
+
+  it('refuses depreciation for an item that is fully depreciated', () => {
+    start(() => {
+      adaptor();
+      finance.addJournalEntry('2026-10-03', 'Depreciation of Adaptor', PROJECT, [{ accountCode: '5090', debit: 100, credit: 0 }, { accountCode: '1550', debit: 0, credit: 100 }], undefined, undefined, meta('Depreciation of Adaptor', {}));
+    });
+    depreciationDraft(10);
+    expect(alerts().join(' ')).toContain('still has a balance');
+    expect(posted).toHaveLength(0);
   });
 });

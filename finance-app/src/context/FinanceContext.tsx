@@ -35,6 +35,7 @@ import { buyerDownpaymentAmountChangeBlock, buyerDownpaymentLinkBlock } from '..
 import { carryForwardCustomerOrders, customerOrderFinalizationIssues, customerOrderReversalBlock } from '../lib/customerOrders';
 import { isDateWithinReportingPeriod, reportingPeriodBounds } from '../lib/reportingPeriod';
 import { negativeBalanceAfterChange, negativeBalanceChangeMessage } from '../lib/negativeBalanceGuard';
+import { carryForwardPpeItems } from '../lib/ppeItems';
 
 // The default catch-all project and the account closing entries post their
 // net income plug to — same constants Transactions.tsx and INITIAL_PROJECTS
@@ -1679,7 +1680,10 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       });
     }
 
-    setJournalEntries(migrateRetiredAccountLines(target?.journalEntries || carryForwardCustomerOrders(predecessor ? (predecessor.key === current ? journalEntries : predecessor.journalEntries) : [], reportingPeriodBounds(semester, reportingYear).startDate)));
+    const carriedFrom = predecessor ? (predecessor.key === current ? journalEntries : predecessor.journalEntries) : [];
+    const carriedFromOpening = predecessor ? (predecessor.key === current ? openingBalances : predecessor.openingBalances || {}) : {};
+    const newPeriodStart = reportingPeriodBounds(semester, reportingYear).startDate;
+    setJournalEntries(migrateRetiredAccountLines(target?.journalEntries || [...carryForwardCustomerOrders(carriedFrom, newPeriodStart), ...carryForwardPpeItems(carriedFrom, carriedFromOpening, newPeriodStart)]));
     setProjects(target?.projects || DEFAULT_PROJECTS.map(project => ({ ...project })));
     setClosedFiscalYears(target?.closedFiscalYears || []);
     setReceiptAttachments(target?.receiptAttachments || []);

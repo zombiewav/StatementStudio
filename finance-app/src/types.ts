@@ -110,6 +110,11 @@ export interface TransactionDetails {
   merchandiseAccountsReceivable?: number;
   merchandiseDueFromOfficer?: number;
   supplierReceivableCollectionAmount?: number;
+  /** PPE purchase: units bought. On a carried-forward PPE detail entry: the item's asset account, units held, cost and depreciation to date. */
+  ppeQuantity?: number;
+  ppeItemCode?: string;
+  ppeCarriedCost?: number;
+  ppeCarriedAccumulated?: number;
   receiptAttachmentIds: string[];
 }
 

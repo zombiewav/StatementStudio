@@ -244,6 +244,15 @@ login flag. This is still local-browser authentication, not secure multi-device 
   postings (e.g. deleting a payable that was already paid). `lib/negativeBalanceGuard.ts`; Fund Balance may go negative;
   an account already negative is only flagged if the change makes it worse.
 
+- **PPE quantity and depreciation (client, Oct 15 2026)**: every PPE purchase needs a Quantity (whole number > 0, saved as
+  `ppeQuantity`; the amount field is "Total Amount"; drafts may omit it, posting may not). `lib/ppeItems.ts` works out each
+  item's units, cost and depreciation to date from its "Purchase of X" / "Depreciation of X" entries (older purchases without a
+  quantity count as 1 unit; an opening balance with no carried detail counts as 1 unit). The Depreciation picker lists only
+  items whose Net Book Value is above zero; after choosing one the form shows Available Quantity, Total Amount and the
+  accumulated depreciation, and the amount cannot exceed the Net Book Value. New semesters carry each held item forward as
+  a zero-line "Beginning Balances — PPE detail" entry (`carryForwardPpeItems`). Retirement of PPE and Return of Advances are
+  not built yet: the client's Google Docs for them could not be read.
+
 ## Known bugs / gaps, not yet fixed (flagged, intentionally left alone)
 
 - **Activities & Programs**: budget is now editable inline (click the Budget Cap figure), but
