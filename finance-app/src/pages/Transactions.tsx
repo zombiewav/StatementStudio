@@ -28,7 +28,7 @@ import { InventorySummaryCard } from '../components/InventorySummaryCard';
 import { DatedAmountInputRow, DatedAmountRows, hasDuplicateEnteredDates } from '../components/DatedAmountRows';
 import { ReviewLaterNote } from '../components/ReviewLaterNote';
 import { EXPENSE_ITEMS, expenseItemByLabel, expenseItemForAccount } from '../lib/expenseItems';
-import { advanceCaution, ADVANCE_NO_RECORD_CAUTION, guidedPaymentCautions, MERCHANDISE_EXCESS_CAUTION, MERCHANDISE_PAYMENT_WINDOW_CAUTION, MERCHANDISE_SHORTFALL_CAUTION, MERCHANDISE_TOTAL_COST_REMINDER, OFFICER_REIMBURSEMENT_NOTE, paymentExceedsCaution, paymentShortfallCaution } from '../lib/paymentCautions';
+import { advanceCaution, ADVANCE_NO_RECORD_CAUTION, guidedPaymentCautions, MERCHANDISE_EXCESS_CAUTION, MERCHANDISE_PAYMENT_WINDOW_CAUTION, MERCHANDISE_SALE_SHORTFALL_CAUTION, MERCHANDISE_SHORTFALL_CAUTION, MERCHANDISE_TOTAL_COST_REMINDER, OFFICER_REIMBURSEMENT_NOTE, paymentExceedsCaution, paymentShortfallCaution } from '../lib/paymentCautions';
 import { MerchandisePaymentRows } from '../components/MerchandisePaymentRows';
 import { OfficerAdvanceSummary } from '../components/OfficerAdvanceSummary';
 import { OfficerBreakdownTable } from '../components/OfficerBreakdownTable';
@@ -709,6 +709,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   const supplierPayableBalances = useMemo(() => counterpartyBalances(ledgerEntries, '2010', 'Credit'), [ledgerEntries]);
   const merchandiseOfficerName = isMerchandiseAcquisition ? counterpartyName : outrightOfficer;
   const selectedOfficerAdvanceBalance = counterpartyBalance(ledgerEntries, '1250', 'Debit', merchandiseOfficerName);
+  const saleOfficerAdvanceBalance = counterpartyBalance(ledgerEntries, '1250', 'Debit', merchandiseCollectionOfficer);
   // The accountable officer has no advance to draw from (or none was recorded at all).
   const acquisitionNoAdvanceRecord = acquisitionUsesAdvance && selectedOfficerAdvanceBalance <= 0 && (!!counterpartyName.trim() || officerAdvanceBalances.length === 0);
   const reimbursementBreakdown = useMemo(() => officerBreakdown(ledgerEntries, counterpartyName), [ledgerEntries, counterpartyName]);
@@ -2372,8 +2373,11 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                   <>
                     <div>
                       <label className="block text-[10px] font-bold text-indigo-900 dark:text-indigo-200">Accountable officer</label>
-                      <input type="text" value={merchandiseCollectionOfficer} onChange={event => setMerchandiseCollectionOfficer(event.target.value)} placeholder="Officer who collected the payments" className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required />
+                      <input type="text" list="sale-collecting-officers" value={merchandiseCollectionOfficer} onChange={event => setMerchandiseCollectionOfficer(event.target.value)} placeholder="Officer who collected the payments" className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required />
+                      <datalist id="sale-collecting-officers">{officerAdvanceSummary.map(record => <option key={record.name} value={record.name} />)}</datalist>
+                      {merchandiseCollectionOfficer.trim() && saleOfficerAdvanceBalance > 0 && <p className="mt-1 text-[10px] font-semibold text-indigo-700 dark:text-indigo-300">Available advance balance: {formatCurrency(saleOfficerAdvanceBalance)}</p>}
                     </div>
+                    <OfficerAdvanceSummary rows={officerAdvanceSummary} formatCurrency={formatCurrency} />
                     <DatedAmountRows label="How much was remitted to the organization?" rows={merchandiseRemittances} onChange={setMerchandiseRemittances} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={merchandiseCollectionTotal} addLabel="Add remittance" />
                   </>
                 )}
@@ -2384,6 +2388,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                     {merchandiseCollectionMethod === 'officer-to-remit' && <div className="rounded-lg bg-white/80 p-3 text-[10px] dark:bg-slate-900/60"><span className="font-bold text-slate-500">Still held by officer</span><p className="mt-1 font-black text-amber-700 dark:text-amber-300">{formatCurrency(merchandiseSaleResult.posting.dueFromOfficer)}</p></div>}
                   </div>
                 )}
+                {merchandiseCollectionMethod !== 'not-yet-collected' && (merchandiseSaleResult.posting?.accountsReceivable || 0) > 0 && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[10px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">{MERCHANDISE_SALE_SHORTFALL_CAUTION}</p>}
                 {merchandiseSaleResult.error && <p className="text-[10px] font-bold text-rose-700 dark:text-rose-300">{merchandiseSaleResult.error}</p>}
               </div>
             )}

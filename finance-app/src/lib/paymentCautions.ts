@@ -27,6 +27,8 @@ export const advanceCaution = (kind: GuidedPurchaseKind, issue: AdvanceIssue): s
 // a receivable from the supplier).
 export const MERCHANDISE_PAYMENT_WINDOW_CAUTION = 'Caution: Record only payments made on or after the date the merchandise was received and is already on hand. Exclude downpayments made before receipt.';
 export const MERCHANDISE_SHORTFALL_CAUTION = '⚠️ Caution: The total amount paid is less than the Total Cost of the Batch. The unpaid portion will be recorded as a payable. If the remaining amount is paid later within the current reporting period, you may update this transaction in the Review section.';
+// Sale of Merchandise: the same note, worded for collections measured against the Total Sales.
+export const MERCHANDISE_SALE_SHORTFALL_CAUTION = '⚠️ Caution: The total amount collected is less than the Total Sales. The uncollected portion will be recorded as a receivable. If the remaining amount is collected later within the current reporting period, you may update this transaction in the Review section.';
 export const MERCHANDISE_TOTAL_COST_REMINDER = 'Enter the total amount spent to purchase and prepare the merchandise for sale. Include not only the purchase price but also other direct costs, such as design fees and labor costs for making the merchandise.';
 export const MERCHANDISE_EXCESS_CAUTION = '⚠️ Caution: Total Payment exceeded Total Cost of this Batch, excess payments will go to Receivable from Supplier';
 

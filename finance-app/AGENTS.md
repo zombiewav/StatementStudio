@@ -262,6 +262,11 @@ login flag. This is still local-browser authentication, not secure multi-device 
   disappears at zero. **Return of Advances** (own tab, `ReturnOfAdvancesEntry`): shows the per-officer advance table, limits the
   amount to that officer's remaining advance, posts Dr Cash / Cr Advances to Officers. Both tabs post directly (like Payables), no draft.
 
+- **Sale of Merchandise / Prepaid cautions (client, Oct 15 2026)**: the officer who collected the payments is picked from the
+  Advances to Officers names (datalist, new names still allowed) with the per-officer advance table and the selected officer's
+  balance shown. The payment shortfall Caution also appears on Sale of Merchandise (collected < Total Sales, worded as a receivable;
+  `MERCHANDISE_SALE_SHORTFALL_CAUTION`) and on Prepaid Expenses and Other Assets purchases (paid < Purchase Price of Asset).
+
 ## Known bugs / gaps, not yet fixed (flagged, intentionally left alone)
 
 - **Activities & Programs**: budget is now editable inline (click the Budget Cap figure), but

@@ -193,6 +193,49 @@ describe('resuming a saved draft', () => {
     });
   });
 
+  describe('Sale of Merchandise collected by an officer', () => {
+    let batchId = '';
+    const seed = () => {
+      batchId = finance.addJournalEntry('2026-10-05', 'Acquisition of Merchandise - Pins - Batch 1', PROJECT,
+        [{ accountCode: '1700', debit: 1000, credit: 0 }, { accountCode: '1010', debit: 0, credit: 1000 }], undefined, undefined,
+        meta('Acquisition of Merchandise for Sale - Goods Received and On Hand', { merchandiseItem: 'Pins', merchandiseBatch: 'Batch 1' })).id;
+      finance.addJournalEntry('2026-10-06', 'Advance to Alpha', PROJECT, [{ accountCode: '1250', debit: 800, credit: 0 }, { accountCode: '1010', debit: 0, credit: 800 }], undefined, undefined,
+        meta('Cash Advance to Officer', { counterpartyName: 'Alpha' }));
+    };
+    const saleDraft = (collected: string, method = 'officer-to-remit') => saveDraft('Sale of Merchandise', 'merchandise',
+      [{ accountCode: '1320', debit: collected ? Number(collected) : 0, credit: 0 }, { accountCode: '1200', debit: 1000 - Number(collected || 0), credit: 0 }, { accountCode: '4070', debit: 0, credit: 1000 }, { accountCode: '5240', debit: 600, credit: 0 }, { accountCode: '1700', debit: 0, credit: 600 }], {},
+      { amount: 1000, date: '2026-10-12', merchandiseSaleItem: 'Pins', merchandiseSaleBatchId: batchId, merchandiseCost: '600', merchandiseTotalSales: '1000',
+        merchandiseCollectionMethod: method, merchandiseCollectionOfficer: 'Alpha', merchandiseCollections: collected ? [{ id: 'c1', date: '2026-10-12', amount: collected }] : [] });
+    const page = () => text(renderer.root).replace(/\s+/g, ' ');
+
+    it('links the accountable officer to the Advances to Officers balances', () => {
+      start(seed, false);
+      saleDraft('400');
+      expect(page()).toContain('Summary of Advances per Accountable Officer');
+      expect(page()).toContain('Available advance balance: ₱800.00');
+      expect(renderer.root.findAllByType('option').some(option => option.props.value === 'Alpha')).toBe(true);
+      expect(renderer.root.findAllByType('input').find(input => input.props.list === 'sale-collecting-officers')).toBeDefined();
+    });
+
+    it('warns when less than the Total Sales has been collected, and not when everything is', () => {
+      start(seed, false);
+      saleDraft('400');
+      expect(page()).toContain('The total amount collected is less than the Total Sales. The uncollected portion will be recorded as a receivable.');
+    });
+
+    it('shows no shortfall caution when the sale is fully collected or not yet collected', () => {
+      start(seed, false);
+      saleDraft('1000');
+      expect(page()).not.toContain('The total amount collected is less than the Total Sales');
+    });
+
+    it('shows no shortfall caution while nothing has been collected yet', () => {
+      start(seed, false);
+      saleDraft('', 'not-yet-collected');
+      expect(page()).not.toContain('The total amount collected is less than the Total Sales');
+    });
+  });
+
   describe('sale of merchandise applying buyer downpayments', () => {
     let batchId = '';
     const seedBatchAndDownpayment = () => {

@@ -16,6 +16,7 @@ import {
 import { DatedAmountRecord, TransactionDraft } from '../types';
 import { automaticPostingDate as resolveAutomaticPostingDate, isDateWithinReportingPeriod } from '../lib/reportingPeriod';
 import { splitBalancedJournalLinesByDate } from '../lib/outrightExpense';
+import { paymentShortfallCaution } from '../lib/paymentCautions';
 import { FinancialPreviewPanels } from './FinancialPreviewPanels';
 
 type Mode = 'purchase' | 'consumption' | 'downpayment';
@@ -265,6 +266,7 @@ export function PrepaidAssetEntry({ draftToResume = null, onDraftResumed, onDraf
         {showOfficer && <PaymentRows label="Officer personal payments" rows={officerPayments} setRows={setOfficerPayments} defaultDate={date} />}
         {showAdvance && <PaymentRows label="Payments through officer advance" rows={advancePayments} setRows={setAdvancePayments} defaultDate={date} />}
         {(category === 'rent' || category === 'uniform') && <label className="text-[10px] font-bold uppercase text-slate-600 sm:col-span-2">Previously recorded downpayment<select value={selectedDownpaymentId} onChange={event => setSelectedDownpaymentId(event.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white p-2.5 text-xs dark:border-slate-700 dark:bg-slate-800"><option value="">None</option>{matchingDownpayments.map(record => <option key={record.id} value={record.id}>{record.reference} — {record.item} — {formatCurrency(record.remaining)}</option>)}</select></label>}
+        {paymentMethod !== 'not-yet-paid' && money(amount) > 0 && totalPaid < money(amount) && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[10px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200 sm:col-span-2">{paymentShortfallCaution('asset')}</p>}
         <div className="rounded-lg bg-slate-50 p-3 text-[10px] font-semibold text-slate-600 dark:bg-slate-800 sm:col-span-2">Total payments and applied downpayment: {formatCurrency(totalPaid)}{money(amount) > totalPaid && <span className="ml-2 text-amber-700">Unpaid balance: {formatCurrency(money(amount) - totalPaid)} will be recorded in {config ? `${config.payableCode} - ${accounts.find(account => account.code === config.payableCode)?.name || 'the related payable account'}` : 'the related payable account'} and can be settled later under Payables.</span>}{totalPaid > money(amount) && <span className="ml-2 text-blue-700">Excess payment: {formatCurrency(totalPaid - money(amount))} will be recorded as Accounts Receivable - Suppliers.</span>}</div>
       </>}
     </div>}</div>
