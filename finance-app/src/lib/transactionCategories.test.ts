@@ -61,6 +61,11 @@ describe('transaction categories', () => {
     expect(TRANSACTION_CATEGORIES.find(category => category.id === 'payables')?.label).toBe('Payables');
   });
 
+  it('has separate tabs for Retirement of PPE and Return of Advances', () => {
+    expect(TRANSACTION_CATEGORIES.find(category => category.id === 'retirement-of-ppe')?.label).toBe('Retirement of PPE');
+    expect(TRANSACTION_CATEGORIES.find(category => category.id === 'return-of-advances')?.label).toBe('Return of Advances');
+  });
+
   it('gives advances and reimbursements to officers their own transaction categories', () => {
     expect(TRANSACTION_CATEGORIES.find(category => category.id === 'advances-to-officers')?.label).toBe('Advances to Officers');
     expect(TRANSACTION_CATEGORIES.find(category => category.id === 'reimbursements-to-officers')?.label).toBe('Reimbursement to Officers');

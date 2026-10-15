@@ -250,8 +250,13 @@ login flag. This is still local-browser authentication, not secure multi-device 
   quantity count as 1 unit; an opening balance with no carried detail counts as 1 unit). The Depreciation picker lists only
   items whose Net Book Value is above zero; after choosing one the form shows Available Quantity, Total Amount and the
   accumulated depreciation, and the amount cannot exceed the Net Book Value. New semesters carry each held item forward as
-  a zero-line "Beginning Balances — PPE detail" entry (`carryForwardPpeItems`). Retirement of PPE and Return of Advances are
-  not built yet: the client's Google Docs for them could not be read.
+  a zero-line "Beginning Balances — PPE detail" entry (`carryForwardPpeItems`).
+  **Retirement of PPE** (own tab, `RetirementOfPpeEntry`): item list = items with quantity left; quantity to dispose takes
+  its per-unit share of cost and accumulated depreciation; NBV > 0 posts Dr Accumulated Depreciation / Dr Loss on Disposal of PPE
+  (5370, new expense account) / Cr asset with a confirm step, NBV = 0 posts without a loss (confirm step), accumulated depreciation
+  above cost is refused (`planPpeRetirement`). **Return of Advances** (own tab, `ReturnOfAdvancesEntry`): shows the per-officer
+  advance table, limits the amount to that officer's remaining advance, posts Dr Cash / Cr Advances to Officers. Both post directly
+  (like Payables), no draft.
 
 ## Known bugs / gaps, not yet fixed (flagged, intentionally left alone)
 

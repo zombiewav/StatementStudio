@@ -120,3 +120,10 @@ describe('Chart of Accounts: accounts that are not on the client FORMAT FS list'
     expect(name('5095')).toBe('Depreciation Expense - Furniture and Fixtures');
   });
 });
+
+describe('Loss on Disposal of PPE account', () => {
+  it('is added to a saved Chart of Accounts as an expense', () => {
+    const restored = restoreSavedAccounts([{ code: '1010', name: 'Cash on Hand', type: 'Assets', normalBalance: 'Debit', description: '', isActive: true } as never]);
+    expect(restored.find(account => account.code === '5370')).toMatchObject({ name: 'Loss on Disposal of PPE', type: 'Expenses', normalBalance: 'Debit' });
+  });
+});

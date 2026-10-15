@@ -115,6 +115,10 @@ export interface TransactionDetails {
   ppeItemCode?: string;
   ppeCarriedCost?: number;
   ppeCarriedAccumulated?: number;
+  /** Retirement of PPE: the units, original cost and accumulated depreciation taken off the item (ppeItemCode). */
+  ppeRetiredQuantity?: number;
+  ppeRetiredCost?: number;
+  ppeRetiredAccumulated?: number;
   receiptAttachmentIds: string[];
 }
 

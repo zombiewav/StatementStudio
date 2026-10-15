@@ -75,7 +75,7 @@ const BACKFILLED_DEFAULT_ACCOUNT_CODES = new Set([
   '1270', '1280', '1285', '1295', '1298', '1330', '1360', '1370',
   '5020', '5120', '5180', '5290', '5330', '5340', '5350', '5360',
   '1501', '1502', '1503', '1504', '1505', '1506', '1507', '1508', '1509', '1510', '1511', '1512', '1513', '1514', '1515', '1516',
-  '1651', '1652', '1653', '2020', '2030', '2040', '2061', '2062', '2063', '2064', '2070', '2080', '2140', '2150', '4100', '4110', '5300',
+  '1651', '1652', '1653', '2020', '2030', '2040', '2061', '2062', '2063', '2064', '2070', '2080', '2140', '2150', '4100', '4110', '5300', '5370',
 ]);
 
 // Retired accounts are removed from the COA, while historical journals and
@@ -339,6 +339,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
   { code: '5350', name: 'Permits and Licenses Expense', type: 'Expenses', normalBalance: 'Debit', description: 'Permit fees and licenses', isActive: true },
   { code: '5360', name: 'Medical Supplies Expense', type: 'Expenses', normalBalance: 'Debit', description: 'First aid kits and medical supplies bought and used right away', isActive: true },
   { code: '5320', name: 'Assistance', type: 'Expenses', normalBalance: 'Debit', description: 'Financial or in-kind assistance provided by the organization', isActive: true },
+  { code: '5370', name: 'Loss on Disposal of PPE', type: 'Expenses', normalBalance: 'Debit', description: 'Remaining book value written off when equipment or furniture and fixtures are permanently retired or disposed of', isActive: true },
 ];
 
 // Sample Projects — fabricated demo programs and budgets, opt-in only via

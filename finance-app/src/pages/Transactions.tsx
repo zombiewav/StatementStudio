@@ -35,6 +35,8 @@ import { OfficerBreakdownTable } from '../components/OfficerBreakdownTable';
 import { officerBreakdown } from '../lib/officerBreakdown';
 import { PrepaidAssetEntry } from '../components/PrepaidAssetEntry';
 import { PayablesEntry } from '../components/PayablesEntry';
+import { RetirementOfPpeEntry } from '../components/RetirementOfPpeEntry';
+import { ReturnOfAdvancesEntry } from '../components/ReturnOfAdvancesEntry';
 import { isDepreciationPickerTypeVisible, isRetiredAssetPickerType, isRetiredMerchandisePickerType, categorizeTransactionRule, TRANSACTION_CATEGORIES, TransactionCategoryId } from '../lib/transactionCategories';
 import { merchandiseSaleCostError } from '../lib/transactionHistory';
 import {
@@ -1671,6 +1673,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                     : LayoutGrid;
             const selected = selectedCategory === category.id;
             const optionCount = category.id === 'activity-fees' || category.id === 'prepaid-assets' || category.id === 'payables'
+              || category.id === 'retirement-of-ppe' || category.id === 'return-of-advances'
               || category.id === 'advances-to-officers' || category.id === 'reimbursements-to-officers'
               ? null
               : category.id === 'expense-transactions' ? EXPENSE_ITEMS.length
@@ -1713,10 +1716,12 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       {selectedCategory === 'activity-fees' && <ActivityFeeEntry defaultOpen draftToResume={draftToResume} onDraftResumed={onDraftResumed} onDraftSaved={onDraftSaved} autoPostDraft={autoPostDraft} onDraftPosted={onDraftPosted} />}
       {selectedCategory === 'prepaid-assets' && <PrepaidAssetEntry draftToResume={draftToResume} onDraftResumed={onDraftResumed} onDraftSaved={onDraftSaved} autoPostDraft={autoPostDraft} onDraftPosted={onDraftPosted} />}
       {selectedCategory === 'payables' && <PayablesEntry />}
+      {selectedCategory === 'retirement-of-ppe' && <RetirementOfPpeEntry />}
+      {selectedCategory === 'return-of-advances' && <ReturnOfAdvancesEntry />}
 
       {selectedCategory === 'merchandise' && <InventorySummaryCard compact />}
 
-      {selectedCategory && selectedCategory !== 'activity-fees' && selectedCategory !== 'prepaid-assets' && selectedCategory !== 'payables' && (
+      {selectedCategory && selectedCategory !== 'activity-fees' && selectedCategory !== 'prepaid-assets' && selectedCategory !== 'payables' && selectedCategory !== 'retirement-of-ppe' && selectedCategory !== 'return-of-advances' && (
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
         {/* Left Column: Entry Form */}
         <form onSubmit={event => { event.preventDefault(); handleSaveDraft(); }} className="xl:col-span-7 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm p-6 sm:p-8 space-y-5">

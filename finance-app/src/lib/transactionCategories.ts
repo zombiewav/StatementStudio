@@ -8,9 +8,11 @@ export type TransactionCategoryId =
   | 'event-program-expenses'
   | 'depreciation'
   | 'ppe-transactions'
+  | 'retirement-of-ppe'
   | 'prepaid-assets'
   | 'payables'
   | 'advances-to-officers'
+  | 'return-of-advances'
   | 'reimbursements-to-officers'
   | 'other';
 
@@ -28,9 +30,11 @@ export const TRANSACTION_CATEGORIES: TransactionCategory[] = [
   { id: 'event-program-expenses', label: 'Event/Program Expenses', description: 'Record event and program expenses under the Event Expense account.' },
   { id: 'depreciation', label: 'Depreciation', description: 'Non-cash depreciation of equipment and furniture.' },
   { id: 'ppe-transactions', label: 'PPE Transactions', description: 'Property, plant, equipment, and furniture purchases.' },
+  { id: 'retirement-of-ppe', label: 'Retirement of PPE', description: 'Permanently retire or dispose of equipment or furniture and fixtures no longer used.' },
   { id: 'prepaid-assets', label: 'Prepaid Expenses and Other Assets', description: 'Record assets acquired in advance, whether paid or unpaid, that will be used or consumed later.' },
   { id: 'payables', label: 'Payables', description: 'Pay payable balances carried forward from the previous reporting period.' },
   { id: 'advances-to-officers', label: 'Advances to Officers', description: 'Cash advances released to accountable officers.' },
+  { id: 'return-of-advances', label: 'Return of Advances', description: 'Cash an accountable officer returns from an advance.' },
   { id: 'reimbursements-to-officers', label: 'Reimbursement to Officers', description: 'Payments of amounts currently due to accountable officers.' },
   { id: 'other', label: 'Miscellaneous Transactions', description: 'Other income, sponsorships, loans, and adjustments.' },
 ];
