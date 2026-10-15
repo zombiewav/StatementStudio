@@ -26,7 +26,7 @@ export interface PayablePaymentInput {
   officerAmount?: number;
   advanceAmount?: number;
   paymentDate?: string;
-  outstandingBalance: number;
+  remainingOpeningBalance: number;
   availableCash: number;
   availableAdvance: number;
 }
@@ -38,11 +38,11 @@ export function buildPriorPeriodPayablePayment(input: PayablePaymentInput): { li
   const officerAmount = input.paymentMethod === 'officer-personal' || input.paymentMethod === 'combination' ? cents(input.officerAmount || 0) : 0;
   const advanceAmount = input.paymentMethod === 'officer-advance' || input.paymentMethod === 'combination' ? cents(input.advanceAmount || 0) : 0;
   const total = cents(organizationAmount + officerAmount + advanceAmount);
-  const remaining = cents(input.outstandingBalance);
+  const remaining = cents(input.remainingOpeningBalance);
   const postingDate = input.paymentDate || input.transactionDate;
 
   if (total <= 0) throw new Error('Enter a payment amount greater than zero.');
-  if (total > remaining) throw new Error('Payment cannot exceed the outstanding balance of the selected payable account.');
+  if (total > remaining) throw new Error('Payment cannot exceed the remaining beginning balance of the selected payable account.');
   if (organizationAmount > cents(input.availableCash)) throw new Error('Organization payment cannot exceed the available cash balance.');
   if (advanceAmount > cents(input.availableAdvance)) throw new Error('Payment through an officer advance cannot exceed that officer’s available advance balance.');
 
@@ -53,7 +53,9 @@ export function buildPriorPeriodPayablePayment(input: PayablePaymentInput): { li
   return { lines, total };
 }
 
-/** What is still owed on a payable account: its live credit balance (beginning balance plus this period's payables, less payments). */
-export function outstandingPayableBalance(accountBalances: Record<string, number>, accountCode: string): number {
-  return Math.max(0, cents(accountBalances[accountCode] || 0));
+export function remainingPriorPeriodPayable(openingBalance: number, accountCode: string, entries: { transactionDetails?: { priorPeriodPayableAccountCode?: string; priorPeriodPayablePaymentAmount?: number } }[]): number {
+  const paid = entries.reduce((sum, entry) => entry.transactionDetails?.priorPeriodPayableAccountCode === accountCode
+    ? sum + Number(entry.transactionDetails.priorPeriodPayablePaymentAmount || 0)
+    : sum, 0);
+  return Math.max(0, cents(Number(openingBalance || 0) - paid));
 }
