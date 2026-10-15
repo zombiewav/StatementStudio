@@ -28,19 +28,13 @@ function getInitialTheme(): ThemeMode {
 }
 
 export function applyTheme(theme: ThemeMode): void {
-  // Cross-fade colors for 240ms so switching theme never flashes (motion recipe R16).
+  // Switch every color in a single frame. Letting each element transition on its own made
+  // parts of the page lag behind the rest, so transitions are paused while the class flips.
   const root = document.documentElement;
-  if (root.dataset.themeApplied) {
-    root.classList.add('theme-fade');
-    window.setTimeout(() => root.classList.remove('theme-fade'), 260);
-  }
-  root.dataset.themeApplied = '1';
-  if (theme === 'dark') {
-    document.documentElement.classList.add('dark');
-    return;
-  }
-
-  document.documentElement.classList.remove('dark');
+  root.classList.add('theme-switching');
+  root.classList.toggle('dark', theme === 'dark');
+  void root.offsetWidth; // flush styles while transitions are off
+  window.setTimeout(() => root.classList.remove('theme-switching'), 50);
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }): React.ReactElement {
