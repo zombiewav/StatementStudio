@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useFinance } from '../context/FinanceContext';
+import { FinancialPreviewPanels } from './FinancialPreviewPanels';
 import { buildPpeReferences, describePpeReference, planPpeRetirement, PPE_ITEMS, ppeRetirementWarning, RETIREMENT_TYPE } from '../lib/ppeItems';
 import { automaticPostingDate, isDateWithinReportingPeriod } from '../lib/reportingPeriod';
 
@@ -7,7 +8,7 @@ const GENERAL_FUND = 'General Fund Operations';
 const inputClass = 'mt-1.5 w-full rounded-lg border border-slate-200 bg-white p-2.5 text-xs dark:border-slate-700 dark:bg-slate-800';
 
 export function RetirementOfPpeEntry(): React.ReactElement {
-  const { accounts, journalEntries, openingBalances, addJournalEntry, formatCurrency, settings } = useFinance();
+  const { accounts, journalEntries, openingBalances, addJournalEntry, accountBalances, formatCurrency, settings } = useFinance();
   const [itemCode, setItemCode] = useState('');
   const [referenceChoice, setReferenceChoice] = useState('');
   const [quantity, setQuantity] = useState('');
@@ -53,7 +54,8 @@ export function RetirementOfPpeEntry(): React.ReactElement {
   return <form onSubmit={submit} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-5">
     <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Retirement of PPE</h3>
     <p className="mt-1 text-[10px] font-medium text-slate-500">Use this transaction when your organization permanently retires or disposes of equipment or furniture and fixtures that it no longer uses.</p>
-    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+    <div className="mt-4 grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(300px,0.75fr)]">
+    <div className="grid content-start gap-3 sm:grid-cols-2">
       <label className="text-[10px] font-bold uppercase text-slate-600 sm:col-span-2">Item
         <select value={itemCode} onChange={event => { setItemCode(event.target.value); setReferenceChoice(''); setConfirming(false); }} className={inputClass}>
           <option value="">{itemsWithStock.length ? 'Select an item…' : 'No PPE item has a remaining quantity'}</option>
@@ -86,6 +88,8 @@ export function RetirementOfPpeEntry(): React.ReactElement {
         <div className="rounded-lg bg-indigo-50 p-3 text-[10px] dark:bg-indigo-500/10"><span className="font-bold text-slate-500">Net Book Value</span><p className="mt-1 text-xs font-black">{formatCurrency(plan.netBookValue)}</p></div>
       </div>}
       {plan?.error && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-[10px] font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300 sm:col-span-2">{plan.error}</p>}
+    </div>
+    <div className="h-fit"><FinancialPreviewPanels lines={plan && !plan.error ? plan.lines : []} fallbackDate={postingDate} accounts={accounts} accountBalances={accountBalances} formatCurrency={formatCurrency} /></div>
     </div>
     {confirming && warning && <div role="alertdialog" className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-[11px] font-semibold text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
       <p>{warning}</p>
