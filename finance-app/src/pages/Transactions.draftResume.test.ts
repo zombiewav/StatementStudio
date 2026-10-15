@@ -510,3 +510,65 @@ describe('PPE quantity and depreciation limits', () => {
     expect(posted).toHaveLength(0);
   });
 });
+
+describe('PPE Item References from the Transactions form', () => {
+  const chairs = (quantity: number, unitCost: number) => {
+    const total = quantity * unitCost;
+    saveDraft('Purchase Chairs', 'ppe-transactions', [{ accountCode: '1652', debit: total, credit: 0 }, { accountCode: '1010', debit: 0, credit: total }], {},
+      { amount: total, ppeQuantity: String(quantity), ppeUnitCost: String(unitCost), date: '2026-10-12', outrightPaymentMethod: 'organization-funds', outrightOrganizationPayments: [{ id: 'o1', date: '', amount: String(total) }] });
+  };
+  const chairEntries = () => finance.journalEntries.filter(entry => entry.transactionType === 'Purchase Chairs' && !entry.isDraft);
+
+  it('saves quantity and amount per unit, joins a matching reference and starts a new one for a different unit cost', () => {
+    start(() => undefined);
+    chairs(2, 250);
+    chairs(1, 250);
+    chairs(1, 300);
+    expect(alerts()).toEqual([]);
+    const [first, second, third] = chairEntries();
+    expect(first.transactionDetails).toMatchObject({ ppeQuantity: 2, ppeUnitCost: 250 });
+    expect(first.lines.find(line => line.accountCode === '1652')?.debit).toBe(500);
+    expect(second.transactionDetails?.ppeReferenceId).toBe(first.transactionDetails?.ppeReferenceId);
+    expect(third.transactionDetails?.ppeReferenceId).not.toBe(first.transactionDetails?.ppeReferenceId);
+    expect(third.transactionDetails).toMatchObject({ ppeQuantity: 1, ppeUnitCost: 300 });
+  });
+
+  it('refuses a PPE purchase without an amount per unit', () => {
+    start(() => undefined);
+    saveDraft('Purchase Chairs', 'ppe-transactions', [{ accountCode: '1652', debit: 250, credit: 0 }, { accountCode: '1010', debit: 0, credit: 250 }], {},
+      { amount: 250, ppeQuantity: '1', ppeUnitCost: '0', date: '2026-10-12', outrightPaymentMethod: 'organization-funds', outrightOrganizationPayments: [{ id: 'o1', date: '', amount: '250' }] });
+    expect(alerts().join(' ')).toContain('amount per unit');
+    expect(chairEntries()).toHaveLength(0);
+  });
+
+  const twoReferences = () => {
+    finance.addJournalEntry('2026-10-02', 'Purchase Chairs', PROJECT, [{ accountCode: '1652', debit: 500, credit: 0 }, { accountCode: '1010', debit: 0, credit: 500 }], undefined, undefined, meta('Purchase Chairs', { ppeQuantity: 2, ppeUnitCost: 250, ppeReferenceId: 'r1' }));
+    finance.addJournalEntry('2026-10-03', 'Purchase Chairs', PROJECT, [{ accountCode: '1652', debit: 300, credit: 0 }, { accountCode: '1010', debit: 0, credit: 300 }], undefined, undefined, meta('Purchase Chairs', { ppeQuantity: 1, ppeUnitCost: 300, ppeReferenceId: 'r2' }));
+  };
+  const chairDepreciation = (amount: number, formState: Record<string, unknown> = {}) => saveDraft('Depreciation of Chairs', 'depreciation',
+    [{ accountCode: '5095', debit: amount, credit: 0 }, { accountCode: '1660', debit: 0, credit: amount }], {}, { amount, date: '2026-10-12', ...formState });
+
+  it('asks which purchase to depreciate when an item has several', () => {
+    start(() => { twoReferences(); });
+    chairDepreciation(50);
+    expect(alerts().join(' ')).toContain('Select which purchase');
+    expect(posted).toHaveLength(0);
+  });
+
+  it('depreciates only the chosen reference and caps the amount at its Net Book Value', () => {
+    start(() => { twoReferences(); });
+    chairDepreciation(400, { ppeReferenceId: 'r2' });
+    expect(alerts().join(' ')).toContain('Net Book Value');
+    expect(posted).toHaveLength(0);
+  });
+
+  it('records depreciation against the chosen reference', () => {
+    start(() => { twoReferences(); });
+    chairDepreciation(50, { ppeReferenceId: 'r2' });
+    expect(alerts()).toEqual([]);
+    expect(posted).toHaveLength(1);
+    const entry = finance.journalEntries.find(item => item.transactionType === 'Depreciation of Chairs' && !item.isDraft)!;
+    expect(entry.transactionDetails).toMatchObject({ ppeReferenceId: 'r2', ppeItemCode: '1652' });
+    expect(entry.lines.map(line => line.accountCode).sort()).toEqual(['1660', '5095']);
+  });
+});

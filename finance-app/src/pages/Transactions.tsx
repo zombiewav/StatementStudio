@@ -63,7 +63,7 @@ import {
 import { buildOutrightExpensePosting, selectExpensePaymentRows, splitBalancedJournalLinesByDate, OutrightExpensePaymentMethod } from '../lib/outrightExpense';
 import { counterpartyBalance, counterpartyBalances, counterpartySummary } from '../lib/counterpartyBalances';
 import { ledgerWithoutDraftEntry } from '../lib/draftLedger';
-import { buildPpeItemBalances } from '../lib/ppeItems';
+import { buildPpeReferences, findMatchingPpeReference, newPpeReferenceId, ppeItemForPurchase } from '../lib/ppeItems';
 import { creditCodesForPaymentMethod } from '../lib/paymentCreditAccounts';
 import { aggregateAvailableBuyerDownpayments, BUYER_DOWNPAYMENT_TITLE, buildBuyerDownpaymentPosting } from '../lib/buyerDownpayments';
 import { automaticPostingDate, isDateWithinReportingPeriod, periodForSemester, reportingPeriodBounds } from '../lib/reportingPeriod';
@@ -120,6 +120,8 @@ interface TransactionFormSnapshot {
   merchandiseOtherTitle: string;
   merchandiseQuantity: string;
   ppeQuantity?: string;
+  ppeUnitCost?: string;
+  ppeReferenceId?: string;
   merchandiseBatch: string;
   merchandisePrepaymentEntryId: string;
   merchandisePaymentMethod: MerchandisePaymentMethod;
@@ -217,6 +219,11 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   const [merchandiseOtherTitle, setMerchandiseOtherTitle] = useState('');
   const [merchandiseQuantity, setMerchandiseQuantity] = useState('');
   const [ppeQuantity, setPpeQuantity] = useState('');
+  const [ppeUnitCost, setPpeUnitCost] = useState('');
+  const [ppeReferenceChoice, setPpeReferenceChoice] = useState('');
+  // A PPE purchase is entered as quantity and amount per unit; the total posted is calculated from them.
+  const changePpeQuantity = (value: string) => { setPpeQuantity(value); setAmount(Math.round((Number(value) || 0) * (Number(ppeUnitCost) || 0) * 100) / 100); };
+  const changePpeUnitCost = (value: string) => { setPpeUnitCost(value); setAmount(Math.round((Number(ppeQuantity) || 0) * (Number(value) || 0) * 100) / 100); };
   const [merchandiseBatch, setMerchandiseBatch] = useState('');
   const [merchandisePrepaymentEntryId, setMerchandisePrepaymentEntryId] = useState('');
   const [merchandisePaymentMethod, setMerchandisePaymentMethod] = useState<MerchandisePaymentMethod>('organization-funds');
@@ -348,8 +355,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   // 'award'/'prize' — share the description "Awards & Prizes Expense",
   // since they're the same category under two different trigger words).
   // Items still held and not fully written down: only these can be depreciated.
-  const ppeBalances = useMemo(() => buildPpeItemBalances(journalEntries, openingBalances), [journalEntries, openingBalances]);
-  const depreciableTypes = useMemo(() => new Set(ppeBalances.filter(balance => balance.netBookValue > 0.005).map(balance => balance.item.depreciationType)), [ppeBalances]);
+  const ppeReferences = useMemo(() => buildPpeReferences(journalEntries, openingBalances), [journalEntries, openingBalances]);
+  const depreciableTypes = useMemo(() => new Set(ppeReferences.filter(reference => reference.netBookValue > 0.005).map(reference => reference.item.depreciationType)), [ppeReferences]);
   const transactionTypeOptions = useMemo(() => {
     if (!selectedCategory || selectedCategory === 'activity-fees') return [];
     if (selectedCategory === 'expense-transactions') {
@@ -474,6 +481,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       setMerchandiseOtherTitle('');
       setMerchandiseQuantity('');
       setPpeQuantity('');
+      setPpeUnitCost('');
+      setPpeReferenceChoice('');
       setMerchandiseBatch('');
       setMerchandisePrepaymentEntryId('');
       setMerchandisePaymentMethod('organization-funds');
@@ -530,6 +539,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       setMerchandiseOtherTitle('');
       setMerchandiseQuantity('');
       setPpeQuantity('');
+      setPpeUnitCost('');
+      setPpeReferenceChoice('');
       setMerchandiseBatch('');
       setMerchandisePrepaymentEntryId('');
       setMerchandisePaymentMethod('organization-funds');
@@ -613,6 +624,9 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     setMerchandiseOtherTitle(snapshot.merchandiseOtherTitle || '');
     setMerchandiseQuantity(snapshot.merchandiseQuantity || '');
     setPpeQuantity(snapshot.ppeQuantity || '');
+    // Drafts saved before the amount per unit existed keep their total: unit cost = total / quantity.
+    setPpeUnitCost(snapshot.ppeUnitCost ?? (Number(snapshot.ppeQuantity) > 0 && Number(snapshot.amount) > 0 ? String(Math.round(Number(snapshot.amount) / Number(snapshot.ppeQuantity) * 100) / 100) : ''));
+    setPpeReferenceChoice(snapshot.ppeReferenceId || '');
     setMerchandiseBatch(snapshot.merchandiseBatch || '');
     setMerchandisePrepaymentEntryId(snapshot.merchandisePrepaymentEntryId || '');
     setMerchandisePaymentMethod(snapshot.merchandisePaymentMethod || 'organization-funds');
@@ -887,7 +901,9 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   }, [isBuyerDownpayment, buyerInitialDownpayment, buyerSubsequentDownpayments]);
 
   const isDepreciationEntry = debitCode === '5090' || debitCode === '5095';
-  const selectedPpe = isDepreciationEntry ? ppeBalances.find(balance => balance.item.depreciationType === txName.trim()) : undefined;
+  // The chosen item's references that can still be depreciated; one is picked automatically when it is the only one.
+  const depreciableReferences = isDepreciationEntry ? ppeReferences.filter(reference => reference.item.depreciationType === txName.trim() && reference.netBookValue > 0.005) : [];
+  const selectedPpe = depreciableReferences.find(reference => reference.referenceId === ppeReferenceChoice) ?? (depreciableReferences.length === 1 ? depreciableReferences[0] : undefined);
   const isEventProgramExpense = selectedCategory === 'event-program-expenses' && debitCode === '5300';
   // Every event line, first line first. The total is what leaves cash.
   const eventExpenseRows = isEventProgramExpense
@@ -1076,6 +1092,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     merchandiseOtherTitle,
     merchandiseQuantity,
     ppeQuantity,
+    ppeUnitCost,
+    ppeReferenceId: ppeReferenceChoice,
     merchandiseBatch,
     merchandisePrepaymentEntryId,
     merchandisePaymentMethod,
@@ -1169,16 +1187,24 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       setErrorMessage('Please enter the merchandise batch or pre-order reference.');
       return;
     }
-    if (isDepreciationEntry && (!selectedPpe || selectedPpe.netBookValue <= 0.005)) {
+    if (isDepreciationEntry && depreciableReferences.length === 0) {
       setErrorMessage('Select an item that still has a balance to depreciate.');
       return;
     }
+    if (isDepreciationEntry && !selectedPpe) {
+      setErrorMessage('Select which purchase of this item the depreciation is for.');
+      return;
+    }
     if (isDepreciationEntry && selectedPpe && transactionAmount > selectedPpe.netBookValue + 0.005) {
-      setErrorMessage(`Depreciation cannot exceed the Net Book Value of ${selectedPpe.item.label} (${formatCurrency(selectedPpe.netBookValue)}).`);
+      setErrorMessage(`Depreciation cannot exceed the Net Book Value of the selected ${selectedPpe.item.label} purchase (${formatCurrency(selectedPpe.netBookValue)}).`);
       return;
     }
     if (isPpeAcquisition && !savingDraft && (!Number.isInteger(Number(ppeQuantity)) || Number(ppeQuantity) <= 0)) {
       setErrorMessage('Please enter the quantity bought: a whole number greater than zero.');
+      return;
+    }
+    if (isPpeAcquisition && !savingDraft && !(Number(ppeUnitCost) > 0)) {
+      setErrorMessage('Please enter the amount per unit: the cost of one unit, greater than zero.');
       return;
     }
     if (isMerchandiseAcquisition && merchandiseQuantity.trim() && (!Number.isInteger(Number(merchandiseQuantity)) || Number(merchandiseQuantity) <= 0)) {
@@ -1386,6 +1412,9 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       const entryEventName = isEventProgramExpense
         ? (postsPerEvent ? multiEventRows[0].eventName : expenseEventName).trim()
         : isOutrightExpense && expenseEvent === 'yes' ? expenseEventName.trim() : undefined;
+      // A new purchase joins the matching Item Reference (same item and amount per unit, no depreciation yet) or starts a new one.
+      const purchasedItem = isPpeAcquisition ? ppeItemForPurchase(txName.trim()) : undefined;
+      const purchaseReferenceId = purchasedItem ? (findMatchingPpeReference(ppeReferences, purchasedItem.code, Number(ppeUnitCost))?.referenceId ?? newPpeReferenceId()) : undefined;
       const posted = runAtomicPosting(() => {
       const firstEntry = addJournalEntry(
         primaryJournalDate,
@@ -1422,6 +1451,9 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
             inventoryCost: isMerchandiseSale ? Number(merchandiseCost) : undefined,
             merchandiseQuantity: isMerchandiseAcquisition && merchandiseQuantity.trim() ? Number(merchandiseQuantity) : undefined,
             ppeQuantity: isPpeAcquisition && Number(ppeQuantity) > 0 ? Number(ppeQuantity) : undefined,
+            ppeUnitCost: isPpeAcquisition && Number(ppeUnitCost) > 0 ? Number(ppeUnitCost) : undefined,
+            ppeReferenceId: isPpeAcquisition ? purchaseReferenceId : isDepreciationEntry ? selectedPpe?.referenceId : undefined,
+            ppeItemCode: isDepreciationEntry ? selectedPpe?.item.code : undefined,
             merchandiseBatch: (isMerchandiseAcquisition || isMerchandisePrepayment || isBuyerDownpayment) ? merchandiseBatch.trim() : undefined,
             merchandiseBuyerDownpayment: isBuyerDownpayment ? true : undefined,
             merchandisePurchaseDate: isMerchandiseAcquisition ? merchandisePurchaseDate : undefined,
@@ -1579,6 +1611,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       setMerchandiseOtherTitle('');
       setMerchandiseQuantity('');
       setPpeQuantity('');
+      setPpeUnitCost('');
+      setPpeReferenceChoice('');
       setMerchandiseBatch('');
       setMerchandisePrepaymentEntryId('');
       setMerchandisePaymentMethod('organization-funds');
@@ -2358,7 +2392,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               <div className="sm:col-span-2 space-y-4 rounded-xl border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-500/20 dark:bg-indigo-500/10">
               <div>
                   <h4 className="text-xs font-black text-violet-700 dark:text-violet-300">{isPpeAcquisition ? 'Property, Plant and Equipment purchase' : 'Outright expense payment'}</h4>
-                  <p className="mt-1 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Record the full {isPpeAcquisition ? 'total amount' : 'expense'} now. Each payment is posted separately; any unpaid balance remains in {activeAccounts.find(account => account.code === guidedPayableAccountCode)?.name || 'the related payable'} for Review.</p>
+                  <p className="mt-1 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Record the full {isPpeAcquisition ? 'purchase cost' : 'expense'} now. Each payment is posted separately; any unpaid balance remains in {activeAccounts.find(account => account.code === guidedPayableAccountCode)?.name || 'the related payable'} for Review.</p>
                 </div>
                 {isOutrightExpense && <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
@@ -2374,8 +2408,12 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                   <input type="date" value={date} onChange={event => setDate(event.target.value)} className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" />
                 </div>}
                 {isOutrightExpense && expenseEvent === 'no' && <p className="text-[10px] font-semibold text-indigo-800 dark:text-indigo-200">This will be classified as General and Administrative Expense.</p>}
-                {isPpeAcquisition && <div><label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Quantity <span className="text-rose-600">*required</span></label><input type="number" min="1" step="1" value={ppeQuantity} onChange={event => setPpeQuantity(event.target.value)} placeholder="Number of units bought" className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-bold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" /></div>}
-                <div><label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">{isPpeAcquisition ? 'Total Amount' : 'Total expense amount'}</label><div className="relative mt-1.5"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-indigo-500">{settings.currencySymbol}</span><input type="number" min="0" step="0.01" value={amount || ''} onChange={event => setAmount(Number(event.target.value))} placeholder="0.00" className="w-full rounded-lg border border-indigo-200 bg-white p-2.5 pl-8 text-xs font-bold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required /></div></div>
+                {isPpeAcquisition && <>
+                  <div><label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Quantity <span className="text-rose-600">*required</span></label><input type="number" min="1" step="1" value={ppeQuantity} onChange={event => changePpeQuantity(event.target.value)} placeholder="Number of units bought" className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-bold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" /></div>
+                  <div><label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Amount per Unit <span className="text-rose-600">*required</span></label><div className="relative mt-1.5"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-indigo-500">{settings.currencySymbol}</span><input type="number" min="0" step="0.01" value={ppeUnitCost} onChange={event => changePpeUnitCost(event.target.value)} placeholder="0.00" className="w-full rounded-lg border border-indigo-200 bg-white p-2.5 pl-8 text-xs font-bold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" /></div><p className="mt-1 text-[10px] font-semibold text-rose-700 dark:text-rose-300">Note: Do not enter the total purchase cost in place of the amount per unit if the quantity is more than 1.</p></div>
+                  <p className="rounded-lg bg-white/80 p-3 text-[10px] font-bold text-indigo-900 dark:bg-slate-900/60 dark:text-indigo-200">Total Purchase Cost (Quantity × Amount per Unit): {formatCurrency(amount)}</p>
+                </>}
+                {!isPpeAcquisition && <div><label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Total expense amount</label><div className="relative mt-1.5"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-indigo-500">{settings.currencySymbol}</span><input type="number" min="0" step="0.01" value={amount || ''} onChange={event => setAmount(Number(event.target.value))} placeholder="0.00" className="w-full rounded-lg border border-indigo-200 bg-white p-2.5 pl-8 text-xs font-bold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required /></div></div>}
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Payment method</label>
                   <select value={outrightPaymentMethod} onChange={event => changeOutrightPaymentMethod(event.target.value as OutrightExpensePaymentMethod)} className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100">
@@ -2401,21 +2439,35 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
             {isDepreciationEntry && <div className="sm:col-span-2 space-y-2">
               <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-[10px] font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">Note: Compute depreciation based on your organization’s depreciation policy and include the depreciation for the entire semester.</p>
               <p className="rounded-lg bg-slate-50 p-3 text-[10px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">Event: General and Administrative (automatic classification)</p>
-              {selectedPpe && <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                <div className="rounded-lg bg-slate-50 p-3 text-[10px] dark:bg-slate-800"><span className="font-bold text-slate-500">Available Quantity</span><p className="mt-1 text-xs font-black text-slate-900 dark:text-slate-100">{selectedPpe.quantity}</p></div>
-                <div className="rounded-lg bg-slate-50 p-3 text-[10px] dark:bg-slate-800"><span className="font-bold text-slate-500">Total Amount</span><p className="mt-1 text-xs font-black text-slate-900 dark:text-slate-100">{formatCurrency(selectedPpe.cost)}</p></div>
-                <div className="rounded-lg bg-slate-50 p-3 text-[10px] dark:bg-slate-800"><span className="font-bold text-slate-500">{accounts.find(account => account.code === selectedPpe.item.accumulatedAccountCode)?.name || 'Accumulated Depreciation'} - Related PPE Account</span><p className="mt-1 text-xs font-black text-slate-900 dark:text-slate-100">{formatCurrency(selectedPpe.accumulatedDepreciation)}</p></div>
+              {depreciableReferences.length > 0 && <div className="space-y-2">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">Select the purchase to depreciate</p>
+                {depreciableReferences.map(reference => {
+                  const chosen = selectedPpe?.referenceId === reference.referenceId;
+                  return <button key={reference.referenceId} type="button" aria-pressed={chosen} onClick={() => setPpeReferenceChoice(reference.referenceId)} className={`grid w-full grid-cols-2 gap-2 rounded-lg border p-3 text-left text-[10px] sm:grid-cols-4 ${chosen ? 'border-blue-700 bg-blue-50 dark:bg-blue-500/10' : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800'}`}>
+                    <span><span className="block font-bold text-slate-500">Available Quantity</span><span className="mt-1 block text-xs font-black text-slate-900 dark:text-slate-100">{reference.quantity}</span></span>
+                    <span><span className="block font-bold text-slate-500">Amount per Unit</span><span className="mt-1 block text-xs font-black text-slate-900 dark:text-slate-100">{formatCurrency(reference.unitCost)}</span></span>
+                    <span><span className="block font-bold text-slate-500">Remaining Original Cost</span><span className="mt-1 block text-xs font-black text-slate-900 dark:text-slate-100">{formatCurrency(reference.cost)}</span></span>
+                    <span><span className="block font-bold text-slate-500">{accounts.find(account => account.code === reference.item.accumulatedAccountCode)?.name || 'Accumulated Depreciation'} ({reference.item.label})</span><span className="mt-1 block text-xs font-black text-slate-900 dark:text-slate-100">{formatCurrency(reference.accumulatedDepreciation)}</span></span>
+                  </button>;
+                })}
               </div>}
-              {selectedPpe && <p className="text-[10px] font-semibold text-slate-600 dark:text-slate-300">Net Book Value: {formatCurrency(selectedPpe.netBookValue)}. The depreciation amount cannot be more than this.</p>}
+              {selectedPpe && <p className="text-[10px] font-semibold text-slate-600 dark:text-slate-300">Net Book Value of the selected purchase: {formatCurrency(selectedPpe.netBookValue)}. The depreciation amount cannot be more than this.</p>}
             </div>}
 
-            {selectedCategory === 'ppe-transactions' && !isGuidedPurchase && <div>
-              <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Quantity <span className="text-rose-600">*required</span></label>
-              <input type="number" min="1" step="1" value={ppeQuantity} onChange={event => setPpeQuantity(event.target.value)} placeholder="Number of units bought" className="w-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-blue-900 focus:ring-blue-900/10 rounded-xl text-xs font-bold p-2.5 outline-none transition-colors dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/20" />
+            {selectedCategory === 'ppe-transactions' && !isGuidedPurchase && <div className="sm:col-span-2 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Quantity <span className="text-rose-600">*required</span></label>
+                <input type="number" min="1" step="1" value={ppeQuantity} onChange={event => changePpeQuantity(event.target.value)} placeholder="Number of units bought" className="w-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-blue-900 focus:ring-blue-900/10 rounded-xl text-xs font-bold p-2.5 outline-none transition-colors dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/20" />
+              </div>
+              <div>
+                <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Amount per Unit <span className="text-rose-600">*required</span></label>
+                <input type="number" min="0" step="0.01" value={ppeUnitCost} onChange={event => changePpeUnitCost(event.target.value)} placeholder="0.00" className="w-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-blue-900 focus:ring-blue-900/10 rounded-xl text-xs font-bold p-2.5 outline-none transition-colors dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/20" />
+              </div>
+              <p className="sm:col-span-2 text-[10px] font-semibold text-rose-700 dark:text-rose-300">Note: Do not enter the total purchase cost in place of the amount per unit if the quantity is more than 1. Total Purchase Cost (Quantity × Amount per Unit): {formatCurrency(amount)}</p>
             </div>}
 
-            {!isGuidedPurchase && !isEventProgramExpense && !isMerchandiseAcquisition && !isMerchandiseSale && !isMerchandisePrepayment && !isBuyerDownpayment && !requiresAccrualCompletion && !isPriorMembershipCollection && !isExcessRefundStatus && <div>
-              <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">{isMerchandisePrepayment ? 'Payment' : isSupplierReceivableCollection ? 'Amount collected' : selectedCategory === 'ppe-transactions' ? 'Total Amount' : 'Amount'}</label>
+            {selectedCategory !== 'ppe-transactions' && !isGuidedPurchase && !isEventProgramExpense && !isMerchandiseAcquisition && !isMerchandiseSale && !isMerchandisePrepayment && !isBuyerDownpayment && !requiresAccrualCompletion && !isPriorMembershipCollection && !isExcessRefundStatus && <div>
+              <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">{isMerchandisePrepayment ? 'Payment' : isSupplierReceivableCollection ? 'Amount collected' : 'Amount'}</label>
               <div className="relative">
                 <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 dark:text-slate-400">{settings.currencySymbol}</span>
                 <input

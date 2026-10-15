@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FinanceProvider, useFinance } from '../context/FinanceContext';
 import { RetirementOfPpeEntry } from './RetirementOfPpeEntry';
 import { ReturnOfAdvancesEntry } from './ReturnOfAdvancesEntry';
-import { buildPpeItemBalances, planPpeRetirement } from '../lib/ppeItems';
+import { buildPpeReferences, planPpeRetirement } from '../lib/ppeItems';
 
 vi.mock('../hooks/useWorkspaceSync', () => ({ useWorkspaceSync: () => ({ workspaceStatus: 'ready' }) }));
 vi.mock('canvas-confetti', () => ({ default: () => undefined }));
@@ -12,6 +12,7 @@ vi.mock('canvas-confetti', () => ({ default: () => undefined }));
 const PROJECT = 'General Fund Operations';
 const meta = (type: string, details: Record<string, unknown> = {}) => ({ transactionType: type, details: { eventRelated: false, receiptAttachmentIds: [], ...details } as never });
 const balance = (quantity: number, cost: number, accumulatedDepreciation: number) => ({
+  referenceId: 'r1', unitCost: Math.round(cost / quantity * 100) / 100,
   item: { code: '1513', label: 'Adaptor', purchaseType: 'Purchase of Adaptor', depreciationType: 'Depreciation of Adaptor', accumulatedAccountCode: '1550' as const, depreciationExpenseCode: '5090' as const },
   quantity, cost, accumulatedDepreciation, netBookValue: cost - accumulatedDepreciation,
 });
@@ -65,8 +66,8 @@ describe('the Retirement of PPE and Return of Advances tabs', () => {
   const click = (label: string) => act(() => { renderer.root.findAllByType('button').find(button => text(button).includes(label))!.props.onClick(); });
 
   const buyAdaptors = () => {
-    finance.addJournalEntry('2026-09-02', 'Purchase of Adaptor', PROJECT, [{ accountCode: '1513', debit: 500, credit: 0 }, { accountCode: '1010', debit: 0, credit: 500 }], undefined, undefined, meta('Purchase of Adaptor', { ppeQuantity: 5 }));
-    finance.addJournalEntry('2026-10-01', 'Depreciation of Adaptor', PROJECT, [{ accountCode: '5090', debit: 100, credit: 0 }, { accountCode: '1550', debit: 0, credit: 100 }], undefined, undefined, meta('Depreciation of Adaptor'));
+    finance.addJournalEntry('2026-09-02', 'Purchase of Adaptor', PROJECT, [{ accountCode: '1513', debit: 500, credit: 0 }, { accountCode: '1010', debit: 0, credit: 500 }], undefined, undefined, meta('Purchase of Adaptor', { ppeQuantity: 5, ppeUnitCost: 100, ppeReferenceId: 'r-adaptor' }));
+    finance.addJournalEntry('2026-10-01', 'Depreciation of Adaptor', PROJECT, [{ accountCode: '5090', debit: 100, credit: 0 }, { accountCode: '1550', debit: 0, credit: 100 }], undefined, undefined, meta('Depreciation of Adaptor', { ppeReferenceId: 'r-adaptor' }));
   };
 
   it('retires part of an item after the user confirms, and the item keeps what is left', () => {
@@ -75,7 +76,7 @@ describe('the Retirement of PPE and Return of Advances tabs', () => {
     change('select', 0, '1513');
     const page = text(renderer.root);
     expect(page).toContain('Available Quantity');
-    expect(page).toMatch(/Accumulated Depreciation - Equipment\s*\(\s*Adaptor\s*\)/);
+    expect(page).toMatch(/Accumulated Depreciation - Equipment\s*\(\s*Adaptor\s+only\s*\)/);
     change('input', 0, '1');
     expect(text(renderer.root)).toContain('Net Book Value');
     submit();
@@ -87,15 +88,36 @@ describe('the Retirement of PPE and Return of Advances tabs', () => {
     expect(finance.accountBalances['1513']).toBe(400);
     expect(finance.accountBalances['1550']).toBe(80);
     expect(finance.accountBalances['5370']).toBe(80);
-    const left = buildPpeItemBalances(finance.journalEntries, finance.openingBalances).find(item => item.item.code === '1513')!;
+    const left = buildPpeReferences(finance.journalEntries, finance.openingBalances).find(reference => reference.item.code === '1513')!;
     expect(left).toMatchObject({ quantity: 4, cost: 400, accumulatedDepreciation: 80, netBookValue: 320 });
+  });
+
+  it('asks which purchase to retire when an item has several, and changes only that one', () => {
+    Page = RetirementOfPpeEntry as never;
+    start(() => {
+      finance.addJournalEntry('2026-09-02', 'Purchase Chairs', PROJECT, [{ accountCode: '1652', debit: 750, credit: 0 }, { accountCode: '1010', debit: 0, credit: 750 }], undefined, undefined, meta('Purchase Chairs', { ppeQuantity: 3, ppeUnitCost: 250, ppeReferenceId: 'r1' }));
+      finance.addJournalEntry('2026-09-03', 'Purchase Chairs', PROJECT, [{ accountCode: '1652', debit: 300, credit: 0 }, { accountCode: '1010', debit: 0, credit: 300 }], undefined, undefined, meta('Purchase Chairs', { ppeQuantity: 1, ppeUnitCost: 300, ppeReferenceId: 'r2' }));
+      finance.addJournalEntry('2026-10-01', 'Depreciation of Chairs', PROJECT, [{ accountCode: '5095', debit: 150, credit: 0 }, { accountCode: '1660', debit: 0, credit: 150 }], undefined, undefined, meta('Depreciation of Chairs', { ppeReferenceId: 'r1' }));
+    });
+    change('select', 0, '1652');
+    expect(text(renderer.root)).not.toContain('Available Quantity');
+    change('select', 1, 'r1');
+    expect(text(renderer.root)).toContain('Remaining Original Cost');
+    change('input', 0, '1');
+    submit();
+    click('Confirm and retire');
+    const retirement = finance.journalEntries.find(entry => entry.transactionType === 'Retirement of PPE')!;
+    expect(retirement.transactionDetails).toMatchObject({ ppeReferenceId: 'r1', ppeRetiredQuantity: 1, ppeRetiredCost: 250, ppeRetiredAccumulated: 50 });
+    const references = buildPpeReferences(finance.journalEntries, finance.openingBalances);
+    expect(references.find(reference => reference.referenceId === 'r1')).toMatchObject({ quantity: 2, cost: 500, accumulatedDepreciation: 100 });
+    expect(references.find(reference => reference.referenceId === 'r2')).toMatchObject({ quantity: 1, cost: 300, accumulatedDepreciation: 0 });
   });
 
   it('does not offer an item that has been fully disposed of', () => {
     Page = RetirementOfPpeEntry as never;
     start(() => {
       buyAdaptors();
-      finance.addJournalEntry('2026-10-02', 'Retirement of PPE - Adaptor', PROJECT, [{ accountCode: '1550', debit: 100, credit: 0 }, { accountCode: '5370', debit: 400, credit: 0 }, { accountCode: '1513', debit: 0, credit: 500 }], undefined, undefined, meta('Retirement of PPE', { ppeItemCode: '1513', ppeRetiredQuantity: 5, ppeRetiredCost: 500, ppeRetiredAccumulated: 100 }));
+      finance.addJournalEntry('2026-10-02', 'Retirement of PPE - Adaptor', PROJECT, [{ accountCode: '1550', debit: 100, credit: 0 }, { accountCode: '5370', debit: 400, credit: 0 }, { accountCode: '1513', debit: 0, credit: 500 }], undefined, undefined, meta('Retirement of PPE', { ppeItemCode: '1513', ppeReferenceId: 'r-adaptor', ppeRetiredQuantity: 5, ppeRetiredCost: 500, ppeRetiredAccumulated: 100 }));
     });
     expect(renderer.root.findAllByType('option').map(option => text(option))).toEqual(['No PPE item has a remaining quantity']);
   });

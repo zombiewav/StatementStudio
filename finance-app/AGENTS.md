@@ -244,19 +244,23 @@ login flag. This is still local-browser authentication, not secure multi-device 
   postings (e.g. deleting a payable that was already paid). `lib/negativeBalanceGuard.ts`; Fund Balance may go negative;
   an account already negative is only flagged if the change makes it worse.
 
-- **PPE quantity and depreciation (client, Oct 15 2026)**: every PPE purchase needs a Quantity (whole number > 0, saved as
-  `ppeQuantity`; the amount field is "Total Amount"; drafts may omit it, posting may not). `lib/ppeItems.ts` works out each
-  item's units, cost and depreciation to date from its "Purchase of X" / "Depreciation of X" entries (older purchases without a
-  quantity count as 1 unit; an opening balance with no carried detail counts as 1 unit). The Depreciation picker lists only
-  items whose Net Book Value is above zero; after choosing one the form shows Available Quantity, Total Amount and the
-  accumulated depreciation, and the amount cannot exceed the Net Book Value. New semesters carry each held item forward as
-  a zero-line "Beginning Balances — PPE detail" entry (`carryForwardPpeItems`).
-  **Retirement of PPE** (own tab, `RetirementOfPpeEntry`): item list = items with quantity left; quantity to dispose takes
-  its per-unit share of cost and accumulated depreciation; NBV > 0 posts Dr Accumulated Depreciation / Dr Loss on Disposal of PPE
-  (5370, new expense account) / Cr asset with a confirm step, NBV = 0 posts without a loss (confirm step), accumulated depreciation
-  above cost is refused (`planPpeRetirement`). **Return of Advances** (own tab, `ReturnOfAdvancesEntry`): shows the per-officer
-  advance table, limits the amount to that officer's remaining advance, posts Dr Cash / Cr Advances to Officers. Both post directly
-  (like Payables), no draft.
+- **PPE Item References (client, Oct 15 2026)**: PPE is tracked per Item Reference = one item at one amount per unit
+  (`lib/ppeItems.ts`, internal only: the ledger and statements keep the official COA accounts). A PPE purchase is entered as
+  Quantity (required, whole number) and Amount per Unit (required); the total posted = quantity x amount per unit. On posting, the
+  purchase joins the existing reference with the same item and unit cost that has no depreciation yet (`findMatchingPpeReference`),
+  otherwise it starts a new one; the choice is stored on the entry as `ppeReferenceId` (+ `ppeQuantity`, `ppeUnitCost`).
+  Purchases saved before this get one reference each (unit cost = cost / quantity); depreciation saved without a reference goes to
+  the item's oldest reference; an opening balance with no carried detail is one single-unit reference. **Depreciation**: the type
+  list shows items that have a reference with Net Book Value > 0; the user then selects which purchase (auto when only one), sees its
+  Available Quantity, Amount per Unit, Remaining Original Cost and its own accumulated depreciation, and the amount cannot exceed that
+  reference's Net Book Value; the entry stores `ppeReferenceId`. New semesters carry every held reference forward as a zero-line
+  "Beginning Balances — PPE detail" entry (`carryForwardPpeItems`).
+  **Retirement of PPE** (own tab, `RetirementOfPpeEntry`): item, then purchase (reference); quantity to dispose takes cost = unit cost x
+  quantity and accumulated depreciation = reference depreciation / available quantity x quantity; NBV > 0 posts Dr Accumulated
+  Depreciation / Dr Loss on Disposal of PPE (5370, new expense account) / Cr asset with a confirm step, NBV = 0 posts without a loss
+  (confirm step), accumulated depreciation above cost is refused (`planPpeRetirement`); only that reference is reduced and it
+  disappears at zero. **Return of Advances** (own tab, `ReturnOfAdvancesEntry`): shows the per-officer advance table, limits the
+  amount to that officer's remaining advance, posts Dr Cash / Cr Advances to Officers. Both tabs post directly (like Payables), no draft.
 
 ## Known bugs / gaps, not yet fixed (flagged, intentionally left alone)
 

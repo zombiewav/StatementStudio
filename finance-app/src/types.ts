@@ -113,6 +113,9 @@ export interface TransactionDetails {
   /** PPE purchase: units bought. On a carried-forward PPE detail entry: the item's asset account, units held, cost and depreciation to date. */
   ppeQuantity?: number;
   ppeItemCode?: string;
+  /** The internal Item Reference (same item at the same amount per unit) a PPE purchase, depreciation or retirement belongs to. */
+  ppeReferenceId?: string;
+  ppeUnitCost?: number;
   ppeCarriedCost?: number;
   ppeCarriedAccumulated?: number;
   /** Retirement of PPE: the units, original cost and accumulated depreciation taken off the item (ppeItemCode). */
