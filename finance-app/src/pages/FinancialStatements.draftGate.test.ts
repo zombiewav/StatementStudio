@@ -24,6 +24,8 @@ describe('Financial Statements need every transaction posted', () => {
   it('always shows the note that all transactions must be posted first', () => {
     start();
     expect(text(renderer.root)).toContain('All transactions must be posted first before the Financial Statements can be generated');
+    expect(text(renderer.root)).not.toMatch(/Export (PDF|Excel)/);
+    expect(text(renderer.root)).toContain('Print Statement');
   });
 
   it('does not generate while a draft is waiting, and generates once it is gone', () => {
@@ -34,7 +36,8 @@ describe('Financial Statements need every transaction posted', () => {
     expect(gated).toContain("Statements aren't ready yet");
     expect(gated).toContain('1 draft transaction still needs to be posted');
     expect(gated).toContain('Sale of Merchandise');
-    expect(renderer.root.findAllByType('button').filter(button => /Print Statement|Export PDF|Export Excel/.test(text(button))).every(button => button.props.disabled)).toBe(true);
+    expect(renderer.root.findAllByType('button').filter(button => /Print Statement/.test(text(button))).every(button => button.props.disabled)).toBe(true);
+    expect(text(renderer.root)).not.toMatch(/Export (PDF|Excel)/);
     act(() => { finance.deleteDraftTransaction('d1'); });
     expect(text(renderer.root)).not.toContain("Statements aren't ready yet");
     expect(text(renderer.root)).toContain('As of');

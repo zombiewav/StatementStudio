@@ -1,11 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { pendingDraftLabels } from '../lib/statementReadiness';
 import {
-  FileSpreadsheet,
   Printer,
-  Download,
   Calendar,
-  CheckCircle,
   Eye,
   ClipboardCheck
 } from 'lucide-react';
@@ -62,8 +59,6 @@ export function FinancialStatements(): React.ReactElement {
     setStartDate(bounds.startDate);
     setEndDate(bounds.endDate);
   }, [settings.semester, settings.reportingYear]);
-  const [isExporting, setIsExporting] = useState(false);
-  const [exportSuccess, setExportSuccess] = useState('');
   const selectedStatementCount = Object.values(selectedStatements).filter(Boolean).length;
 
   const toggleStatement = (statement: ActiveStatementTab) => {
@@ -217,7 +212,7 @@ export function FinancialStatements(): React.ReactElement {
   );
 
 
-  const saveFinalSnapshot = (action: 'Print' | 'Export PDF' | 'Export Excel') => {
+  const saveFinalSnapshot = (action: 'Print') => {
     if (!settings.semester || !settings.reportingYear) return;
     const schoolYear = `${settings.reportingYear}-${settings.reportingYear + 1}`;
     recordFinancialStatementHistory({
@@ -256,119 +251,6 @@ export function FinancialStatements(): React.ReactElement {
     window.print();
   };
 
-  // Actual Export Functions
-  const handleExport = (type: 'Excel' | 'PDF') => {
-    setIsExporting(true);
-    setExportSuccess('');
-
-    if (type === 'PDF') {
-      setTimeout(() => {
-        setIsExporting(false);
-        saveFinalSnapshot('Export PDF');
-        window.print();
-        setExportSuccess('PDF Print dialog opened.');
-        setTimeout(() => setExportSuccess(''), 6000);
-      }, 500);
-      return;
-    }
-
-    // Generate CSV for "Excel" export
-    setTimeout(() => {
-      let csvContent = "Account Name,Balance\n";
-
-      if (activeTab === 'position') {
-        csvContent += "ASSETS\n";
-        positionAssetGroups.flatMap(([, list]) => list).forEach(acc => {
-          const bal = cumulativeToEndBalances[acc.code] || 0;
-          const isContra = isContraAccount(acc);
-          csvContent += `"${isContra ? `Less: ${acc.name}` : acc.name}",${isContra ? -bal : bal}\n`;
-        });
-        csvContent += `"Total Assets",${cumulativeToEndTotals.Assets}\n\n`;
-
-        csvContent += "LIABILITIES\n";
-        positionLiabilityGroups.flatMap(([, list]) => list).forEach(acc => {
-          csvContent += `"${acc.name}",${cumulativeToEndBalances[acc.code] || 0}\n`;
-        });
-        csvContent += `"Total Liabilities",${cumulativeToEndTotals.Liabilities}\n\n`;
-
-        csvContent += "FUND BALANCE\n";
-        positionFundBalanceAccounts.forEach(acc => {
-          csvContent += `"${acc.name}",${cumulativeToEndBalances[acc.code] || 0}\n`;
-        });
-        csvContent += `"${accumulatedNet.label}",${accumulatedNet.amount}\n`;
-        csvContent += `"Total Fund Balance",${fEndingFundBalance}\n\n`;
-        csvContent += `"Total Liabilities & Fund Balance",${fTotalLiabilitiesAndFund}\n`;
-      } else if (activeTab === 'activities') {
-        csvContent += "REVENUES\n";
-        activitiesRevenueAccounts.forEach(acc => {
-          csvContent += `"${acc.name}",${filteredBalances[acc.code] || 0}\n`;
-        });
-        csvContent += `"Total Revenue",${filteredTotals.Revenue}\n\n`;
-        csvContent += "GENERAL & ADMINISTRATIVE EXPENSES\n";
-        activitiesGeneralAdminAccounts.forEach(acc => {
-          csvContent += `"${acc.name}",${activitiesExpenseBreakdown.generalAdminByAccount[acc.code] || 0}\n`;
-        });
-        csvContent += `"Total General & Administrative",${activitiesExpenseBreakdown.generalAdminTotal}\n\n`;
-
-        if (activitiesExpenseBreakdown.eventNames.length > 0) {
-          csvContent += "EVENT-RELATED EXPENSES\n";
-          activitiesExpenseBreakdown.eventNames.forEach(eventName => {
-            const byAccount = activitiesExpenseBreakdown.eventGroups[eventName];
-            csvContent += `"${eventName}"\n`;
-            Object.entries(byAccount).filter(([, amount]) => hasBalance(amount)).forEach(([code, amount]) => {
-              const acc = accounts.find(a => a.code === code);
-              csvContent += `"  ${acc?.name || code}",${amount}\n`;
-            });
-          });
-          csvContent += `"Total Event-Related",${activitiesExpenseBreakdown.eventRelatedTotal}\n\n`;
-        }
-
-        csvContent += `"Total Expenses",${filteredTotals.Expenses}\n\n`;
-        csvContent += `"Net Surplus/(Deficit)",${fNetIncome}\n`;
-      } else if (activeTab === 'functional') {
-        csvContent += 'FUNCTIONAL EXPENSES\n';
-        csvContent += `"Expense Category",${activitiesExpenseBreakdown.eventNames.map(name => `"${name}"`).join(',')},"Total Program Services","General & Administrative","Total Expenses"\n`;
-        functionalExpenseAccounts.forEach(account => {
-          const programAmounts = activitiesExpenseBreakdown.eventNames.map(name => activitiesExpenseBreakdown.eventGroups[name][account.code] || 0);
-          const totalPrograms = programAmounts.reduce((total, amount) => total + amount, 0);
-          const generalAdmin = activitiesExpenseBreakdown.generalAdminByAccount[account.code] || 0;
-          csvContent += `"${account.name}",${programAmounts.join(',')},${totalPrograms},${generalAdmin},${totalPrograms + generalAdmin}\n`;
-        });
-        csvContent += `"Total Expenses",${activitiesExpenseBreakdown.eventNames.map(name => Object.values(activitiesExpenseBreakdown.eventGroups[name]).reduce((total, amount) => total + amount, 0)).join(',')},${activitiesExpenseBreakdown.eventRelatedTotal},${activitiesExpenseBreakdown.generalAdminTotal},${filteredTotals.Expenses}\n`;
-      } else if (activeTab === 'cashflow') {
-        csvContent += "Cash Flows from Operating Activities:\n";
-        csvContent += "Receipts from:\n";
-        cashFlowDetails.receipts.forEach(line => { csvContent += `"${line.label}",${line.amount}\n`; });
-        csvContent += "Payments for:\n";
-        cashFlowDetails.payments.forEach(line => { csvContent += `"${line.label}",${-line.amount}\n`; });
-        csvContent += `"${netCashLabel('operating', cashFlowDetails.netOperating)}",${cashFlowDetails.netOperating}\n\n`;
-        csvContent += "Cash Flows from Investing Activities:\n";
-        csvContent += `"${EQUIPMENT_PURCHASE_LABEL}",${-cashFlowDetails.equipmentPurchases}\n`;
-        csvContent += `"${FURNITURE_PURCHASE_LABEL}",${-cashFlowDetails.furniturePurchases}\n`;
-        csvContent += `"${netCashLabel('investing', cashFlowDetails.netInvesting)}",${cashFlowDetails.netInvesting}\n\n`;
-        csvContent += `"Net increase (decrease) in cash and cash equivalents",${cashFlowDetails.netChange}\n`;
-        csvContent += `"Cash and cash equivalents at beginning of year",${cashFlowDetails.beginningCash}\n`;
-        csvContent += `"Cash and cash equivalents at end of year",${cashFlowDetails.endingCash}\n`;
-      }
-
-      // Trigger download
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.setAttribute("href", url);
-      const filename = `${settings.organizationName.replace(/[^a-z0-9]/gi, '_').toLowerCase()} - ${activeTab}.csv`;
-      link.setAttribute("download", filename);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      saveFinalSnapshot('Export Excel');
-
-      setIsExporting(false);
-      setExportSuccess(`Successfully downloaded ${filename}`);
-      setTimeout(() => setExportSuccess(''), 6000);
-    }, 1000);
-  };
-
   const cashFlowDetails = useMemo(
     () => buildCashFlowStatement(
       journalEntries.filter(entry => !entry.isDraft), accounts, startDate, endDate,
@@ -401,49 +283,8 @@ export function FinancialStatements(): React.ReactElement {
           >
             <Printer className="w-3.5 h-3.5 text-blue-900 dark:text-blue-400" /> Print Statement
           </button>
-
-          {/* Export PDF */}
-          <button
-            onClick={() => handleExport('PDF')}
-            disabled={isExporting || isGated}
-            className="flex items-center gap-2 bg-white dark:bg-slate-900 hover:bg-gray-50 dark:hover:bg-slate-800 text-gray-700 dark:text-slate-200 font-semibold text-xs px-3.5 py-2 rounded-xl border border-gray-100 dark:border-slate-800 shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-            type="button"
-          >
-            <Download className="w-3.5 h-3.5 text-orange-500" /> Export PDF
-          </button>
-
-          {/* Export Excel */}
-          <button
-            onClick={() => handleExport('Excel')}
-            disabled={isExporting || isGated}
-            className="flex items-center gap-2 bg-blue-700 hover:bg-blue-800 dark:bg-blue-600 dark:hover:bg-blue-500 text-white font-semibold text-xs px-3.5 py-2 rounded-xl shadow-md shadow-blue-900/10 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-            type="button"
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5 text-blue-100" /> Export Excel
-          </button>
         </div>
       </div>
-
-      {/* Export Loader Overlay */}
-      {isExporting && (
-        <div className="fixed inset-0 bg-slate-900/10 backdrop-blur-xs flex items-center justify-center z-50 print:hidden">
-          <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-gray-100 dark:border-slate-800 shadow-xl flex items-center gap-3">
-            <svg className="animate-spin h-5 w-5 text-blue-900 dark:text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-            </svg>
-            <span className="text-xs font-bold text-gray-700 dark:text-slate-200">Compiling financial statements...</span>
-          </div>
-        </div>
-      )}
-
-      {/* Export Toast Alert */}
-      {exportSuccess && (
-        <div className="p-3.5 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 text-emerald-800 dark:text-emerald-300 text-xs font-bold rounded-xl flex items-center gap-2 max-w-xl animate-bounce print:hidden">
-          <CheckCircle className="w-4.5 h-4.5 text-emerald-500 dark:text-emerald-400 shrink-0" />
-          <span>{exportSuccess}</span>
-        </div>
-      )}
 
       {/* Filter Row */}
       <div className="bg-white dark:bg-slate-900 p-4.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row gap-4 items-center justify-between print:hidden">
