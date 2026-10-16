@@ -269,6 +269,10 @@ login flag. This is still local-browser authentication, not secure multi-device 
   Officers - Merchandise (Dr Cash / Cr Due from Officers 1320) and Collection of Unpaid Sold Merchandise (Dr Cash / Cr Accounts Receivable - Merchandise 1200, with a
   "Receivable remaining after all these collections" box). Each amount is capped at the ledger balance of its receivable.
 
+- **Financial Statements gate (client, Oct 16 2026)**: besides open Review items and negative balances, the statements are not generated (and Print/Export are disabled)
+  while any draft transaction exists (`pendingDraftLabels` in `lib/statementReadiness.ts`: Review's drafts plus orphan draft entries). A note on the page always says all
+  transactions must be posted first.
+
 ## Known bugs / gaps, not yet fixed (flagged, intentionally left alone)
 
 - **Activities & Programs**: budget is now editable inline (click the Budget Cap figure), but

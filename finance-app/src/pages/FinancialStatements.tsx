@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { pendingDraftLabels } from '../lib/statementReadiness';
 import {
   FileSpreadsheet,
   Printer,
@@ -40,6 +41,7 @@ export function FinancialStatements(): React.ReactElement {
     formatCurrency, 
     settings,
     openingBalances,
+    draftTransactions,
     recordFinancialStatementHistory,
   } = useFinance();
 
@@ -178,7 +180,9 @@ export function FinancialStatements(): React.ReactElement {
     () => accounts.filter(account => account.type !== 'Fund Balance' && (cumulativeToEndBalances[account.code] || 0) < -0.005),
     [accounts, cumulativeToEndBalances]
   );
-  const isGated = incompleteReviewItems.length > 0 || negativeBalanceAccounts.length > 0;
+  // Client rule (Oct 2026): nothing may still be waiting as a draft when the statements are generated.
+  const pendingDrafts = useMemo(() => pendingDraftLabels(draftTransactions, journalEntries), [draftTransactions, journalEntries]);
+  const isGated = incompleteReviewItems.length > 0 || negativeBalanceAccounts.length > 0 || pendingDrafts.length > 0;
   const positionAssetGroups = useMemo(() => {
     const groups: Array<[string, string[]]> = [
       ['Cash and Cash Equivalents', ['1010', '1015']], ['Receivables', ['1200', '1300', '1310', '1330', '1360', '1370']], ['Advances and Dues', ['1250', '1270', '1320']], ['Inventories', ['1700']], ['Prepaid Expenses and Other Assets', ['1260', '1280', '1285', '1295', '1298']], ['Property and Equipment', ['1500', '1550', '1660']],
@@ -383,6 +387,7 @@ export function FinancialStatements(): React.ReactElement {
         <div>
           <h2 className="font-display text-3xl text-slate-900 dark:text-slate-100">Financial <em className="text-blue-700 dark:text-blue-400">Statements</em></h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">Generate, inspect, and print official GAAP-compliant financial summaries.</p>
+          <p role="note" className="mt-2 max-w-2xl rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">Note: All transactions must be posted first before the Financial Statements can be generated. Post or delete every draft transaction and resolve every item in Review.</p>
         </div>
 
         {/* Toolbar Controls */}
@@ -555,12 +560,23 @@ export function FinancialStatements(): React.ReactElement {
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 max-w-md mx-auto">
                 {negativeBalanceAccounts.length > 0
                   ? `${negativeBalanceAccounts.length} account${negativeBalanceAccounts.length === 1 ? '' : 's'} have a negative balance. Correct the previous transactions before generating financial statements.`
+                  : pendingDrafts.length > 0
+                  ? `${pendingDrafts.length} draft transaction${pendingDrafts.length === 1 ? '' : 's'} still ${pendingDrafts.length === 1 ? 'needs' : 'need'} to be posted. Post or delete every draft in Review, then come back here.`
                   : incompleteReviewItems.length > 0
                   ? `${incompleteReviewItems.length} item${incompleteReviewItems.length === 1 ? '' : 's'} in REVIEW still need an answer before the books are final. Resolve them in Review, then come back here.`
                   : 'Complete the three required Closing Entries stages for the active fiscal year before generating financial statements.'}
               </p>
               {negativeBalanceAccounts.length > 0 && <div className="mt-4 max-w-md mx-auto space-y-2 text-left">{negativeBalanceAccounts.map(account => <div key={account.code} className="rounded-lg border border-rose-200 bg-rose-50 px-3.5 py-2 text-[11px] font-semibold text-rose-800 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300">This account ({account.code} {account.name}, {formatCurrency(cumulativeToEndBalances[account.code] || 0)}) has a negative balance. Please check your previous transactions, as you may have missed something.</div>)}</div>}
               <div className="mt-6 max-w-md mx-auto text-left space-y-2">
+                {pendingDrafts.slice(0, 8).map((label, index) => (
+                  <div key={`draft-${index}`} className="flex justify-between items-center px-3.5 py-2 bg-amber-50 dark:bg-amber-500/10 border border-amber-100 dark:border-amber-500/20 rounded-lg text-[11px]">
+                    <span className="font-semibold text-amber-900 dark:text-amber-300 truncate pr-3">{label}</span>
+                    <span className="text-amber-700 dark:text-amber-400 font-bold whitespace-nowrap">Draft</span>
+                  </div>
+                ))}
+                {pendingDrafts.length > 8 && (
+                  <p className="text-[10px] text-slate-400 text-center pt-1">+{pendingDrafts.length - 8} more drafts in Review</p>
+                )}
                 {incompleteReviewItems.slice(0, 8).map(item => (
                   <div key={item.entry.id} className="flex justify-between items-center px-3.5 py-2 bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 rounded-lg text-[11px]">
                     <span className="font-semibold text-rose-900 dark:text-rose-300 truncate pr-3">{item.entry.customName || item.entry.description}</span>
