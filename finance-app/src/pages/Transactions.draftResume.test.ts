@@ -208,16 +208,15 @@ describe('resuming a saved draft', () => {
         merchandiseCollectionMethod: method, merchandiseCollectionOfficer: 'Alpha', merchandiseCollections: collected ? [{ id: 'c1', date: '2026-10-12', amount: collected }] : [] });
     const page = () => text(renderer.root).replace(/\s+/g, ' ');
 
-    it('links the accountable officer to the Advances to Officers balances', () => {
+    it('keeps the accountable officer as a plain field, without the Advances to Officers link', () => {
       start(seed, false);
       saleDraft('400');
-      expect(page()).toContain('Summary of Advances per Accountable Officer');
-      expect(page()).toContain('Available advance balance: ₱800.00');
-      expect(renderer.root.findAllByType('option').some(option => option.props.value === 'Alpha')).toBe(true);
-      expect(renderer.root.findAllByType('input').find(input => input.props.list === 'sale-collecting-officers')).toBeDefined();
+      expect(page()).not.toContain('Summary of Advances per Accountable Officer');
+      expect(page()).not.toContain('Available advance balance');
+      expect(renderer.root.findAllByType('input').some(input => input.props.list === 'sale-collecting-officers')).toBe(false);
     });
 
-    it('warns when less than the Total Sales has been collected, and not when everything is', () => {
+    it('warns when less than the Total Sales has been collected', () => {
       start(seed, false);
       saleDraft('400');
       expect(page()).toContain('The total amount collected is less than the Total Sales. The uncollected portion will be recorded as a receivable.');
@@ -233,6 +232,57 @@ describe('resuming a saved draft', () => {
       start(seed, false);
       saleDraft('', 'not-yet-collected');
       expect(page()).not.toContain('The total amount collected is less than the Total Sales');
+    });
+  });
+
+  describe('Collection of Receivables from Officers - Merchandise / Collection of Unpaid Sold Merchandise', () => {
+    const officers = 'Collection of Receivables from Officers - Merchandise';
+    const buyers = 'Collection of Unpaid Sold Merchandise';
+    const seedReceivables = () => {
+      finance.addJournalEntry('2026-10-06', 'Sale', PROJECT, [{ accountCode: '1320', debit: 400, credit: 0 }, { accountCode: '1200', debit: 600, credit: 0 }, { accountCode: '4070', debit: 0, credit: 1000 }]);
+    };
+    const draft = (title: string, credit: string, amount: number) => saveDraft(title, 'merchandise',
+      [{ accountCode: '1010', debit: amount, credit: 0 }, { accountCode: credit, debit: 0, credit: amount }], {}, { amount, date: '2026-10-12' });
+
+    it('collects from an officer up to the Due from Officers balance and clears it', () => {
+      start(seedReceivables, true);
+      draft(officers, '1320', 400);
+      expect(alerts()).toEqual([]);
+      expect(posted).toHaveLength(1);
+      expect(finance.accountBalances['1320']).toBe(0);
+      expect(finance.accountBalances['1010']).toBe(50000 + 400);
+    });
+
+    it('refuses an officer collection above the Due from Officers balance', () => {
+      start(seedReceivables, true);
+      draft(officers, '1320', 450);
+      expect(alerts()[0]).toContain('cannot exceed the outstanding Due from Officers balance');
+      expect(posted).toEqual([]);
+      expect(finance.draftTransactions).toHaveLength(1);
+    });
+
+    it('collects unpaid sold merchandise up to what is still receivable from buyers', () => {
+      start(seedReceivables, true);
+      draft(buyers, '1200', 250);
+      expect(alerts()).toEqual([]);
+      expect(finance.accountBalances['1200']).toBe(350);
+      expect(finance.accountBalances['1010']).toBe(50000 + 250);
+    });
+
+    it('refuses a buyer collection above the Accounts Receivable - Merchandise balance', () => {
+      start(seedReceivables, true);
+      draft(buyers, '1200', 700);
+      expect(alerts()[0]).toContain('cannot exceed the outstanding Accounts Receivable - Merchandise balance');
+      expect(posted).toEqual([]);
+    });
+
+    it('shows the outstanding balance and the receivable remaining after the collection', () => {
+      start(seedReceivables, false);
+      draft(buyers, '1200', 250);
+      const page = text(renderer.root).replace(/\s+/g, ' ');
+      expect(page).toContain('Still receivable from buyers (ledger balance)');
+      expect(page).toContain('Receivable remaining after all these collections');
+      expect(page).toContain('How much was collected?');
     });
   });
 

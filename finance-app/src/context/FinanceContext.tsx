@@ -619,6 +619,8 @@ export const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   { keyword: 'downpayment for pre-ordered merchandise', debitAccountCode: '1270', creditAccountCode: '1010', description: 'Downpayment for Pre-ordered Merchandise' },
   { keyword: 'payment for unpaid merchandise', debitAccountCode: '2020', creditAccountCode: '1010', description: 'Payment for Unpaid Merchandise Purchased and Received in Previous Period/Semester' },
   { keyword: 'collection of receivables from suppliers', debitAccountCode: '1010', creditAccountCode: '1360', description: 'Collection of Receivables from Suppliers' },
+  { keyword: 'collection of receivables from officers', debitAccountCode: '1010', creditAccountCode: '1320', description: 'Collection of Receivables from Officers - Merchandise' },
+  { keyword: 'collection of unpaid sold merchandise', debitAccountCode: '1010', creditAccountCode: '1200', description: 'Collection of Unpaid Sold Merchandise' },
   { keyword: 'inventory', debitAccountCode: '1700', creditAccountCode: '1010', description: 'Acquisition of Merchandise for Sale - Goods Received and On Hand' },
 
   // --- Inter-organization loans (working paper row 20) ---------------------------

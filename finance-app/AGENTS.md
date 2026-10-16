@@ -262,10 +262,12 @@ login flag. This is still local-browser authentication, not secure multi-device 
   disappears at zero. **Return of Advances** (own tab, `ReturnOfAdvancesEntry`): shows the per-officer advance table, limits the
   amount to that officer's remaining advance, posts Dr Cash / Cr Advances to Officers. Both tabs post directly (like Payables), no draft.
 
-- **Sale of Merchandise / Prepaid cautions (client, Oct 15 2026)**: the officer who collected the payments is picked from the
-  Advances to Officers names (datalist, new names still allowed) with the per-officer advance table and the selected officer's
-  balance shown. The payment shortfall Caution also appears on Sale of Merchandise (collected < Total Sales, worded as a receivable;
-  `MERCHANDISE_SALE_SHORTFALL_CAUTION`) and on Prepaid Expenses and Other Assets purchases (paid < Purchase Price of Asset).
+- **Sale of Merchandise / Prepaid cautions and receivable collections (client, Oct 15-16 2026)**: the payment shortfall Caution also appears on Sale of Merchandise
+  (collected < Total Sales, worded as a receivable; `MERCHANDISE_SALE_SHORTFALL_CAUTION`) and on Prepaid Expenses and Other Assets purchases (paid < Purchase Price
+  of Asset). The officer field on Sale of Merchandise is again a plain text field (the client withdrew the Advances to Officers link). Merchandise Transactions has
+  three collection types sharing one form (`lib/receivableCollections.ts`): Collection of Receivables from Suppliers (Cr 1360), Collection of Receivables from
+  Officers - Merchandise (Dr Cash / Cr Due from Officers 1320) and Collection of Unpaid Sold Merchandise (Dr Cash / Cr Accounts Receivable - Merchandise 1200, with a
+  "Receivable remaining after all these collections" box). Each amount is capped at the ledger balance of its receivable.
 
 ## Known bugs / gaps, not yet fixed (flagged, intentionally left alone)
 

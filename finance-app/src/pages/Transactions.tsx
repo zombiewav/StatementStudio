@@ -31,6 +31,7 @@ import { EXPENSE_ITEMS, expenseItemByLabel, expenseItemForAccount } from '../lib
 import { advanceCaution, ADVANCE_NO_RECORD_CAUTION, guidedPaymentCautions, MERCHANDISE_EXCESS_CAUTION, MERCHANDISE_PAYMENT_WINDOW_CAUTION, MERCHANDISE_SALE_SHORTFALL_CAUTION, MERCHANDISE_SHORTFALL_CAUTION, MERCHANDISE_TOTAL_COST_REMINDER, OFFICER_REIMBURSEMENT_NOTE, paymentExceedsCaution, paymentShortfallCaution } from '../lib/paymentCautions';
 import { MerchandisePaymentRows } from '../components/MerchandisePaymentRows';
 import { OfficerAdvanceSummary } from '../components/OfficerAdvanceSummary';
+import { buildReceivableCollectionPosting, receivableCollectionKind, receivableCollectionLimitMessage } from '../lib/receivableCollections';
 import { OfficerBreakdownTable } from '../components/OfficerBreakdownTable';
 import { officerBreakdown } from '../lib/officerBreakdown';
 import { PrepaidAssetEntry } from '../components/PrepaidAssetEntry';
@@ -44,7 +45,6 @@ import {
   resolveMerchandisePurchaseDate,
   splitMerchandiseAcquisitionPosting,
   buildMerchandisePrepaymentPosting,
-  buildSupplierReceivableCollectionPosting,
   aggregateAvailableMerchandisePrepayments,
   MerchandisePaymentMethod,
 } from '../lib/merchandiseAcquisition';
@@ -410,7 +410,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     : isExcessRefundStatus && membershipRefundStatus === 'nonrefundable'
       ? '4050'
       : creditCode;
-  const isSupplierReceivableCollection = selectedCategory === 'merchandise' && debitCode === '1010' && effectiveCreditCode === '1360';
+  const receivableCollection = selectedCategory === 'merchandise' ? receivableCollectionKind(debitCode, effectiveCreditCode) : undefined;
+  const isReceivableCollection = !!receivableCollection;
   const acquisitionUsesAdvance = isMerchandiseAcquisition && (merchandisePaymentMethod === 'organization-advance' || merchandisePaymentMethod === 'advance-and-personal');
   const merchandiseUsesOfficer = isMerchandiseAcquisition && (merchandisePaymentMethod === 'officer-personal' || merchandisePaymentMethod === 'organization-advance' || merchandisePaymentMethod === 'advance-and-personal');
   const isOfficerAdvance = debitCode === '1250';
@@ -709,7 +710,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   const supplierPayableBalances = useMemo(() => counterpartyBalances(ledgerEntries, '2010', 'Credit'), [ledgerEntries]);
   const merchandiseOfficerName = isMerchandiseAcquisition ? counterpartyName : outrightOfficer;
   const selectedOfficerAdvanceBalance = counterpartyBalance(ledgerEntries, '1250', 'Debit', merchandiseOfficerName);
-  const saleOfficerAdvanceBalance = counterpartyBalance(ledgerEntries, '1250', 'Debit', merchandiseCollectionOfficer);
   // The accountable officer has no advance to draw from (or none was recorded at all).
   const acquisitionNoAdvanceRecord = acquisitionUsesAdvance && selectedOfficerAdvanceBalance <= 0 && (!!counterpartyName.trim() || officerAdvanceBalances.length === 0);
   const reimbursementBreakdown = useMemo(() => officerBreakdown(ledgerEntries, counterpartyName), [ledgerEntries, counterpartyName]);
@@ -787,9 +787,9 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
         : [...merchandiseOrganizationPayments, ...merchandiseOfficerPayments, ...merchandiseAdvancePayments];
   const merchandisePrepaymentDate = merchandisePrepaymentPaymentRows.find(row => Number(row.amount) > 0 && row.date)?.date || localDateInputValue();
   const transactionAmount = isMerchandisePrepayment ? merchandisePrepaymentAmount : amount;
-  // Linked to the Accounts Receivable - Suppliers (1360) balance shown in the
-  // General Ledger and Trial Balance: a collection can never exceed it.
-  const supplierReceivableOutstanding = Math.max(0, Math.round((ledgerBalances['1360'] || 0) * 100) / 100);
+  // Linked to the balance of the receivable being collected (Accounts Receivable - Suppliers, Due from Officers or
+  // Accounts Receivable - Merchandise) as shown in the General Ledger and Trial Balance: a collection can never exceed it.
+  const receivableOutstanding = receivableCollection ? Math.max(0, Math.round((ledgerBalances[receivableCollection.creditCode] || 0) * 100) / 100) : 0;
 
   useEffect(() => {
     if (isPriorMembershipCollection) setAmount(membershipCollectionTotal);
@@ -983,8 +983,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     if (isMerchandiseAcquisition) return merchandiseAcquisitionResult.posting?.lines || [];
     if (isMerchandisePrepayment) return merchandisePrepaymentResult.lines;
     if (isBuyerDownpayment) return buyerDownpaymentResult.lines;
-    if (isSupplierReceivableCollection) {
-      try { return buildSupplierReceivableCollectionPosting(amount, date, supplierReceivableOutstanding); } catch { return []; }
+    if (receivableCollection) {
+      try { return buildReceivableCollectionPosting(receivableCollection, amount, date, receivableOutstanding); } catch { return []; }
     }
     if (isGuidedPurchase) return outrightExpenseResult.posting?.lines || [];
     const deferredAmount = showDeferPortionQuestion ? (Number(notYetUsedAmount) || 0) : 0;
@@ -999,7 +999,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       ]);
     }
     return buildJournalLines(debitCode, effectiveCreditCode, isEventProgramExpense ? eventExpenseTotal : amount);
-  }, [classificationPreview, transactionAmount, amount, isEventProgramExpense, eventExpenseTotal, date, debitCode, effectiveCreditCode, isExcessRefundStatus, membershipRefundResolutionResult, isMerchandiseAcquisition, merchandiseAcquisitionResult, isMerchandisePrepayment, merchandisePrepaymentResult, isBuyerDownpayment, buyerDownpaymentResult, isSupplierReceivableCollection, supplierReceivableOutstanding, isGuidedPurchase, outrightExpenseResult, requiresAccrualCompletion, isPriorMembershipCollection, membershipPostingResult, isMerchandiseSale, merchandiseSaleResult, showDeferPortionQuestion, notYetUsedAmount]);
+  }, [classificationPreview, transactionAmount, amount, isEventProgramExpense, eventExpenseTotal, date, debitCode, effectiveCreditCode, isExcessRefundStatus, membershipRefundResolutionResult, isMerchandiseAcquisition, merchandiseAcquisitionResult, isMerchandisePrepayment, merchandisePrepaymentResult, isBuyerDownpayment, buyerDownpaymentResult, isReceivableCollection, receivableOutstanding, receivableCollection, isGuidedPurchase, outrightExpenseResult, requiresAccrualCompletion, isPriorMembershipCollection, membershipPostingResult, isMerchandiseSale, merchandiseSaleResult, showDeferPortionQuestion, notYetUsedAmount]);
 
   // The rule's own debit/credit pair is only the starting point — payment method,
   // advances, payables and receivables change which accounts really get posted,
@@ -1232,8 +1232,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       setErrorMessage('Please enter the accountable officer for this supplier downpayment.');
       return;
     }
-    if (isSupplierReceivableCollection && amount > supplierReceivableOutstanding) {
-      setErrorMessage('Collection cannot exceed the outstanding Accounts Receivable - Suppliers balance.');
+    if (receivableCollection && amount > receivableOutstanding) {
+      setErrorMessage(`Collection cannot exceed the outstanding ${receivableCollection.accountLabel} balance.`);
       return;
     }
     if (isGuidedPurchase && outrightPaymentMethod === 'officer-advance' && selectedOfficerAdvanceBalance <= 0) {
@@ -1368,8 +1368,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
         ? `${description || txName} - ${merchandiseItemLabel} - ${merchandiseBatch.trim()}`
         : isMerchandisePrepayment || isBuyerDownpayment
           ? `${description || txName} - ${merchandiseItemLabel} - ${merchandiseBatch.trim()}`
-        : isSupplierReceivableCollection
-          ? 'Collection of Receivables from Suppliers'
+        : receivableCollection
+          ? receivableCollection.title
         : isMerchandiseSale
           ? `Sale of Merchandise - ${selectedMerchandiseBatch?.item || 'Merchandise'}`
         : isExcessRefundStatus
@@ -1481,7 +1481,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
             merchandiseBuyerDownpaymentEntryIds: isMerchandiseSale && matchingBuyerDownpayments.entryIds.length > 0 ? matchingBuyerDownpayments.entryIds : undefined,
             merchandiseBuyerDownpaymentAmount: isMerchandiseSale && matchingBuyerDownpayments.amount > 0 ? matchingBuyerDownpayments.amount : undefined,
             merchandiseDueFromOfficer: isMerchandiseSale ? merchandiseSaleResult.posting?.dueFromOfficer : undefined,
-            supplierReceivableCollectionAmount: isSupplierReceivableCollection ? amount : undefined,
+            supplierReceivableCollectionAmount: receivableCollection?.creditCode === '1360' ? amount : undefined,
             receiptAttachmentIds: [],
           },
         },
@@ -2103,15 +2103,16 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               </div>
             )}
 
-            {isSupplierReceivableCollection && (
+            {receivableCollection && (
               <div className="sm:col-span-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-500/20 dark:bg-emerald-500/10">
-                <h4 className="text-xs font-black text-emerald-900 dark:text-emerald-200">Collection of Receivables from Suppliers</h4>
-                <p className="mt-1 text-[10px] font-medium text-emerald-800 dark:text-emerald-300">Record cash returned or collected from suppliers against prior excess payments.</p>
+                <h4 className="text-xs font-black text-emerald-900 dark:text-emerald-200">{receivableCollection.title}</h4>
+                <p className="mt-1 text-[10px] font-medium text-emerald-800 dark:text-emerald-300">{receivableCollection.intro}</p>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  <div className="rounded-lg bg-white/80 p-3 dark:bg-slate-900/50"><span className="text-[9px] font-bold uppercase text-slate-500">Outstanding receivable (ledger balance)</span><p className="mt-1 text-sm font-black text-emerald-800 dark:text-emerald-200">{formatCurrency(supplierReceivableOutstanding)}</p></div>
-                  <div className="rounded-lg bg-white/80 p-3 text-[10px] font-semibold text-slate-600 dark:bg-slate-900/50 dark:text-slate-300">Journal entry: Debit Cash on Hand, Credit Accounts Receivable - Suppliers. This balance is linked to the Accounts Receivable - Suppliers account in the General Ledger; the collection cannot exceed it.</div>
+                  <div className="rounded-lg bg-white/80 p-3 dark:bg-slate-900/50"><span className="text-[9px] font-bold uppercase text-slate-500">{receivableCollection.outstandingLabel}</span><p className="mt-1 text-sm font-black text-emerald-800 dark:text-emerald-200">{formatCurrency(receivableOutstanding)}</p></div>
+                  <div className="rounded-lg bg-white/80 p-3 text-[10px] font-semibold text-slate-600 dark:bg-slate-900/50 dark:text-slate-300">{receivableCollection.journalNote}</div>
+                  {receivableCollection.creditCode === '1200' && <div className="rounded-lg bg-white/80 p-3 dark:bg-slate-900/50 sm:col-span-2"><span className="text-[9px] font-bold uppercase text-slate-500">Receivable remaining after all these collections</span><p className="mt-1 text-sm font-black text-emerald-800 dark:text-emerald-200">{formatCurrency(Math.max(0, Math.round((receivableOutstanding - amount) * 100) / 100))}</p></div>}
                 </div>
-                {supplierReceivableOutstanding <= 0 && <p className="mt-3 text-[10px] font-bold text-amber-700 dark:text-amber-300">No Accounts Receivable - Suppliers balance is available to collect.</p>}
+                {receivableOutstanding <= 0 && <p className="mt-3 text-[10px] font-bold text-amber-700 dark:text-amber-300">No {receivableCollection.accountLabel} balance is available to collect.</p>}
               </div>
             )}
 
@@ -2373,11 +2374,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                   <>
                     <div>
                       <label className="block text-[10px] font-bold text-indigo-900 dark:text-indigo-200">Accountable officer</label>
-                      <input type="text" list="sale-collecting-officers" value={merchandiseCollectionOfficer} onChange={event => setMerchandiseCollectionOfficer(event.target.value)} placeholder="Officer who collected the payments" className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required />
-                      <datalist id="sale-collecting-officers">{officerAdvanceSummary.map(record => <option key={record.name} value={record.name} />)}</datalist>
-                      {merchandiseCollectionOfficer.trim() && saleOfficerAdvanceBalance > 0 && <p className="mt-1 text-[10px] font-semibold text-indigo-700 dark:text-indigo-300">Available advance balance: {formatCurrency(saleOfficerAdvanceBalance)}</p>}
+                      <input type="text" value={merchandiseCollectionOfficer} onChange={event => setMerchandiseCollectionOfficer(event.target.value)} placeholder="Officer who collected the payments" className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required />
                     </div>
-                    <OfficerAdvanceSummary rows={officerAdvanceSummary} formatCurrency={formatCurrency} />
                     <DatedAmountRows label="How much was remitted to the organization?" rows={merchandiseRemittances} onChange={setMerchandiseRemittances} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={merchandiseCollectionTotal} addLabel="Add remittance" />
                   </>
                 )}
@@ -2472,15 +2470,15 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
             </div>}
 
             {selectedCategory !== 'ppe-transactions' && !isGuidedPurchase && !isEventProgramExpense && !isMerchandiseAcquisition && !isMerchandiseSale && !isMerchandisePrepayment && !isBuyerDownpayment && !requiresAccrualCompletion && !isPriorMembershipCollection && !isExcessRefundStatus && <div>
-              <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">{isMerchandisePrepayment ? 'Payment' : isSupplierReceivableCollection ? 'Amount collected' : 'Amount'}</label>
+              <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">{isMerchandisePrepayment ? 'Payment' : receivableCollection ? receivableCollection.amountLabel : 'Amount'}</label>
               <div className="relative">
                 <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 dark:text-slate-400">{settings.currencySymbol}</span>
                 <input
                   type="number"
                   step="0.01"
-                  min={isSupplierReceivableCollection ? 0 : undefined}
-                  max={isSupplierReceivableCollection ? supplierReceivableOutstanding : undefined}
-                  disabled={isSupplierReceivableCollection && supplierReceivableOutstanding <= 0}
+                  min={isReceivableCollection ? 0 : undefined}
+                  max={isReceivableCollection ? receivableOutstanding : undefined}
+                  disabled={isReceivableCollection && receivableOutstanding <= 0}
                   value={amount || ''}
                   onChange={(e) => setAmount(Number(e.target.value))}
                   placeholder="0.00"
@@ -2488,11 +2486,11 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                 />
               </div>
               {isDepreciationEntry && <p className="mt-1.5 text-[10px] font-bold text-slate-700 dark:text-slate-200">*Note: The amount entered here will be allocated based on the available quantity.</p>}
-              {isSupplierReceivableCollection && (
-                <p className={`mt-1.5 text-[10px] font-semibold ${amount > supplierReceivableOutstanding ? 'text-rose-700 dark:text-rose-300' : 'text-slate-500 dark:text-slate-400'}`}>
-                  {amount > supplierReceivableOutstanding
-                    ? `Collection cannot exceed the outstanding Accounts Receivable - Suppliers balance of ${formatCurrency(supplierReceivableOutstanding)}.`
-                    : `Up to ${formatCurrency(supplierReceivableOutstanding)} can be collected (latest Accounts Receivable - Suppliers balance).`}
+              {receivableCollection && (
+                <p className={`mt-1.5 text-[10px] font-semibold ${amount > receivableOutstanding ? 'text-rose-700 dark:text-rose-300' : 'text-slate-500 dark:text-slate-400'}`}>
+                  {amount > receivableOutstanding
+                    ? receivableCollectionLimitMessage(receivableCollection, receivableOutstanding, formatCurrency)
+                    : `Restricted: up to ${formatCurrency(receivableOutstanding)} can be collected (latest ${receivableCollection.accountLabel} balance).`}
                 </p>
               )}
               {/* Remove accidental duplicate light-only amount control (was causing permanent light/dark mismatch) */}
@@ -2537,7 +2535,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
             )}
 
             {!isMerchandiseAcquisition && !isMerchandisePrepayment && !isBuyerDownpayment && !isEventProgramExpense && !requiresAccrualCompletion && !isPriorMembershipCollection && !isExcessRefundStatus && !isOutrightExpense && <div>
-              <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">{isSupplierReceivableCollection ? 'Collection date' : 'Date'} <span className="normal-case font-medium text-slate-400">(optional; leave blank to use {defaultPostingDate})</span></label>
+              <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">{isReceivableCollection ? 'Collection date' : 'Date'} <span className="normal-case font-medium text-slate-400">(optional; leave blank to use {defaultPostingDate})</span></label>
               <input
                 type="date"
                 value={date}
