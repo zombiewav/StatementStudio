@@ -10,7 +10,7 @@ interface OfficerAdvanceSummaryProps {
 // each officer was given, how much has been used, and what is still available.
 export function OfficerAdvanceSummary({ rows, formatCurrency }: OfficerAdvanceSummaryProps): React.ReactElement {
   return (
-    <div className="overflow-hidden rounded-lg border border-indigo-200 bg-white/70 text-[10px] dark:border-indigo-500/30 dark:bg-slate-900/40">
+    <div className="overflow-hidden rounded-lg border border-indigo-200 bg-white/70 text-[12px] dark:border-indigo-500/30 dark:bg-slate-900/40">
       <p className="px-3 py-2 font-black uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Summary of Advances per Accountable Officer</p>
       <div className="grid grid-cols-4 gap-2 border-t border-indigo-100 px-3 py-2 font-bold text-slate-500 dark:border-indigo-500/20">
         <span>Accountable Officer</span><span className="text-right">Total Cash Advance</span><span className="text-right">Amount Used</span><span className="text-right">Balance</span>

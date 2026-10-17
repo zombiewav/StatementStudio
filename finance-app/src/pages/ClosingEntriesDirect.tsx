@@ -40,7 +40,7 @@ export function ClosingEntriesDirect(): React.ReactElement {
         ) : (
           <div className="mt-2 overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700">
             <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 text-[10px] uppercase text-slate-500 dark:bg-slate-800"><tr><th className="p-2.5">Account</th><th className="p-2.5 text-right">Debit</th><th className="p-2.5 text-right">Credit</th></tr></thead>
+              <thead className="bg-slate-50 text-[12px] uppercase text-slate-500 dark:bg-slate-800"><tr><th className="p-2.5">Account</th><th className="p-2.5 text-right">Debit</th><th className="p-2.5 text-right">Credit</th></tr></thead>
               <tbody>
                 {lines.map((line, index) => (
                   <tr key={`${line.accountCode}-${index}`} className="border-t border-slate-100 dark:border-slate-800">
@@ -53,7 +53,7 @@ export function ClosingEntriesDirect(): React.ReactElement {
             </table>
           </div>
         )}
-        <p className="mt-3 text-[11px] text-slate-500">Total revenue {formatCurrency(totalRevenue)} · Total expenses {formatCurrency(totalExpenses)} · {isDeficit ? `Deficit ${formatCurrency(-netIncome)} (debit to Fund Balance)` : netIncome > 0 ? `Surplus ${formatCurrency(netIncome)} (credit to Fund Balance)` : 'Revenue equals expenses, so no Fund Balance line is needed'}</p>
+        <p className="mt-3 text-[13px] text-slate-500">Total revenue {formatCurrency(totalRevenue)} · Total expenses {formatCurrency(totalExpenses)} · {isDeficit ? `Deficit ${formatCurrency(-netIncome)} (debit to Fund Balance)` : netIncome > 0 ? `Surplus ${formatCurrency(netIncome)} (credit to Fund Balance)` : 'Revenue equals expenses, so no Fund Balance line is needed'}</p>
         {entry && <p className="mt-4 flex items-center gap-2 text-xs font-bold text-emerald-700 dark:text-emerald-400"><CheckCircle2 className="h-4 w-4" /> Posted automatically as {entry.reference}, dated {entry.date}.</p>}
       </section>
       )}

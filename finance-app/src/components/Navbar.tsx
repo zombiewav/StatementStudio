@@ -178,14 +178,14 @@ export function Navbar({ onMenuToggle, searchTerm, setSearchTerm, onSearchSubmit
               aria-label="School year"
               className="absolute right-0 top-full z-50 mt-2 w-64 rounded-xl border border-slate-200 bg-white p-3 shadow-xl dark:border-slate-700 dark:bg-slate-900"
             >
-              <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Add or open semester</p>
+              <p className="mb-2 text-[12px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Add or open semester</p>
               <div className="mb-3 flex gap-2">
                 {SEMESTER_OPTIONS.map(option => (
                   <button
                     key={option}
                     type="button"
                     onClick={() => { setFySemester(option); setFyError(''); }}
-                    className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-bold transition-colors ${
+                    className={`flex-1 rounded-lg px-2 py-1.5 text-[13px] font-bold transition-colors ${
                       fySemester === option
                         ? 'bg-blue-700 text-white'
                         : 'border border-slate-300 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'
@@ -196,7 +196,7 @@ export function Navbar({ onMenuToggle, searchTerm, setSearchTerm, onSearchSubmit
                 ))}
               </div>
 
-              <label className="mb-3 block text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              <label className="mb-3 block text-[12px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                 School Year
                 <input
                   type="text"
@@ -209,27 +209,27 @@ export function Navbar({ onMenuToggle, searchTerm, setSearchTerm, onSearchSubmit
                 />
               </label>
 
-              <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Period</p>
-              <p className="mb-3 rounded-lg bg-slate-100 px-2.5 py-2 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+              <p className="mb-1 text-[12px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Period</p>
+              <p className="mb-3 rounded-lg bg-slate-100 px-2.5 py-2 text-[13px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                 {fySemester ? periodForSemester(fySemester) : 'Automatic once a semester is selected'}
               </p>
 
-              {fyError && <p className="mb-2 text-[10px] font-bold text-rose-600 dark:text-rose-400">{fyError}</p>}
+              {fyError && <p className="mb-2 text-[12px] font-bold text-rose-600 dark:text-rose-400">{fyError}</p>}
 
               <button
                 type="button"
                 onClick={applyFiscalYear}
-                className="w-full rounded-lg bg-blue-700 py-2 text-[11px] font-bold text-white hover:bg-blue-800"
+                className="w-full rounded-lg bg-blue-700 py-2 text-[13px] font-bold text-white hover:bg-blue-800"
               >
                 Apply to All
               </button>
-              <p className="mt-2 text-[9px] font-medium text-slate-500 dark:text-slate-400">Every new transaction uses this automatically — no need to set it again per-transaction.</p>
+              <p className="mt-2 text-[11px] font-medium text-slate-500 dark:text-slate-400">Every new transaction uses this automatically — no need to set it again per-transaction.</p>
               {reportingPeriodWorkspaces.length > 0 && (
                 <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-700">
-                  <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Saved semesters</p>
+                  <p className="mb-2 text-[12px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Saved semesters</p>
                   <div className="max-h-28 space-y-1 overflow-y-auto">
                     {reportingPeriodWorkspaces.map(workspace => (
-                      <button key={workspace.key} type="button" onClick={() => { switchReportingPeriod(workspace.schoolYear, workspace.semester, workspace.reportingYear); setShowFiscalYearDropdown(false); }} className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-left text-[10px] font-bold text-slate-700 hover:border-blue-300 hover:bg-blue-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">
+                      <button key={workspace.key} type="button" onClick={() => { switchReportingPeriod(workspace.schoolYear, workspace.semester, workspace.reportingYear); setShowFiscalYearDropdown(false); }} className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-left text-[12px] font-bold text-slate-700 hover:border-blue-300 hover:bg-blue-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">
                         {workspace.semester} {workspace.schoolYear}
                       </button>
                     ))}
@@ -289,16 +289,16 @@ export function Navbar({ onMenuToggle, searchTerm, setSearchTerm, onSearchSubmit
             <div className="absolute right-0 mt-2 w-80 app-surface rounded-2xl shadow-xl z-50 py-2 animate-in fade-in slide-in-from-top-2 duration-150">
               <div className="px-4 py-2 border-b app-divider flex items-center justify-between">
                 <span className="font-bold text-xs app-strong uppercase tracking-wider">Activity Feed</span>
-                <span className="text-[10px] text-blue-900 dark:text-blue-200 font-semibold bg-blue-50 dark:bg-blue-950/50 px-2 py-0.5 rounded-full">Real-time</span>
+                <span className="text-[12px] text-blue-900 dark:text-blue-200 font-semibold bg-blue-50 dark:bg-blue-950/50 px-2 py-0.5 rounded-full">Real-time</span>
               </div>
               <div className="max-h-64 overflow-y-auto">
                 {notifications.map((log) => (
                   <div key={log.id} className="px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors border-b app-divider last:border-none flex gap-2.5">
                     <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-[11px] font-semibold app-strong">{log.action}</p>
-                      <p className="text-[10px] app-muted line-clamp-2 mt-0.5">{log.details}</p>
-                      <p className="text-[9px] app-soft mt-1">{new Date(log.timestamp).toLocaleTimeString()}</p>
+                      <p className="text-[13px] font-semibold app-strong">{log.action}</p>
+                      <p className="text-[12px] app-muted line-clamp-2 mt-0.5">{log.details}</p>
+                      <p className="text-[11px] app-soft mt-1">{new Date(log.timestamp).toLocaleTimeString()}</p>
                     </div>
                   </div>
                 ))}
@@ -327,7 +327,7 @@ export function Navbar({ onMenuToggle, searchTerm, setSearchTerm, onSearchSubmit
             </div>
             <div className="hidden lg:block">
               <p className="text-xs font-bold text-blue-950 dark:text-blue-100 leading-tight">{settings.organizationName}</p>
-              <p className="text-[9px] app-soft font-semibold leading-none">Organization Account</p>
+              <p className="text-[11px] app-soft font-semibold leading-none">Organization Account</p>
             </div>
             <ChevronDown className={`hidden lg:block h-3.5 w-3.5 text-slate-400 transition-transform ${showProfileDropdown ? 'rotate-180' : ''}`} />
           </button>
@@ -340,20 +340,20 @@ export function Navbar({ onMenuToggle, searchTerm, setSearchTerm, onSearchSubmit
                 </div>
                 <div className="min-w-0">
                   <p className="truncate text-sm font-bold app-strong">{settings.organizationName}</p>
-                  <p className="text-[10px] app-soft font-semibold">Organization Account</p>
+                  <p className="text-[12px] app-soft font-semibold">Organization Account</p>
                 </div>
               </div>
-              <dl className="px-4 py-3 space-y-2.5 text-[11px]">
+              <dl className="px-4 py-3 space-y-2.5 text-[13px]">
                 <div>
-                  <dt className="text-[9px] font-bold uppercase tracking-wider app-soft">Signed in as</dt>
+                  <dt className="text-[11px] font-bold uppercase tracking-wider app-soft">Signed in as</dt>
                   <dd className="break-all font-semibold app-strong">{user?.email ?? '-'}</dd>
                 </div>
                 <div>
-                  <dt className="text-[9px] font-bold uppercase tracking-wider app-soft">Reporting period</dt>
+                  <dt className="text-[11px] font-bold uppercase tracking-wider app-soft">Reporting period</dt>
                   <dd className="font-semibold app-strong">{settings.fiscalYear}</dd>
                 </div>
                 <div>
-                  <dt className="text-[9px] font-bold uppercase tracking-wider app-soft">Currency</dt>
+                  <dt className="text-[11px] font-bold uppercase tracking-wider app-soft">Currency</dt>
                   <dd className="font-semibold app-strong">{settings.currencyCode} ({settings.currencySymbol})</dd>
                 </div>
               </dl>

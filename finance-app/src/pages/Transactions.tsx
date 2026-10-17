@@ -188,6 +188,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   // Form State
   const [txName, setTxName] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<TransactionCategoryId | null>(null);
+  const categoryContentRef = useRef<HTMLDivElement>(null);
   // Transaction Name search dropdown: open while the field has focus,
   // filtered live as you type. Selecting an option fills txName with its
   // description and applies that exact rule (see the exact-description
@@ -380,6 +381,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
 
   const selectCategory = (category: TransactionCategoryId) => {
     setSelectedCategory(category);
+    // Client survey: bring the transaction type list / form into view once a category is picked.
+    if (typeof window !== 'undefined') window.requestAnimationFrame?.(() => categoryContentRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }));
     const fixedOfficerType = category === 'advances-to-officers'
       ? 'Advances to Officers'
       : category === 'reimbursements-to-officers' ? 'Reimbursement to Officer' : '';
@@ -1660,21 +1663,21 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       </div>
 
       {editingDraftId && (
-        <div ref={draftBannerRef} className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-[11px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300 sm:flex-row sm:items-center sm:justify-between">
+        <div ref={draftBannerRef} className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-[13px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300 sm:flex-row sm:items-center sm:justify-between">
           <span>Continuing a saved draft — change anything below and press Save as Draft; it updates the same entry. Post it from Review when it is final.</span>
           <div className="flex shrink-0 gap-2">
             <button
               type="button"
               onClick={submitVisibleForm}
               disabled={isProcessingReceipts}
-              className="rounded-lg border border-amber-600 bg-amber-600 px-3 py-1.5 text-[10px] font-bold text-white transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-40"
+              className="rounded-lg border border-amber-600 bg-amber-600 px-3 py-1.5 text-[12px] font-bold text-white transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-40"
             >
               Save as Draft
             </button>
             <button
               type="button"
               onClick={handleDiscardDraft}
-              className="rounded-lg border border-amber-300 bg-white/70 px-3 py-1.5 text-[10px] font-bold text-amber-800 transition-colors hover:bg-white dark:border-amber-500/40 dark:bg-slate-900/40 dark:text-amber-300 dark:hover:bg-slate-900"
+              className="rounded-lg border border-amber-300 bg-white/70 px-3 py-1.5 text-[12px] font-bold text-amber-800 transition-colors hover:bg-white dark:border-amber-500/40 dark:bg-slate-900/40 dark:text-amber-300 dark:hover:bg-slate-900"
             >
               Discard this draft
             </button>
@@ -1685,7 +1688,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-5">
         <div className="mb-4">
           <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Choose a transaction category</h3>
-          <p className="mt-1 text-[10px] font-medium text-slate-500 dark:text-slate-400">Pick a category first so you only see the transaction types relevant to your task.</p>
+          <p className="mt-1 text-[12px] font-medium text-slate-500 dark:text-slate-400">Pick a category first so you only see the transaction types relevant to your task.</p>
         </div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
           {TRANSACTION_CATEGORIES.map(category => {
@@ -1733,13 +1736,14 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                 <span className="flex items-center gap-1.5">
                   <span className={`block text-xs font-bold text-slate-900 dark:text-slate-100`}>{category.label}</span>
                 </span>
-                <span className="mt-1 block text-[9px] font-medium leading-4 text-slate-500 dark:text-slate-400">{category.description}</span>
-                <span className="mt-2 block text-[9px] font-bold uppercase tracking-wide text-blue-700 dark:text-blue-300">{optionCount === null ? 'Guided workflow' : `${optionCount} type${optionCount === 1 ? '' : 's'}`}</span>
+                <span className="mt-1 block text-[11px] font-medium leading-4 text-slate-500 dark:text-slate-400">{category.description}</span>
+                <span className="mt-2 block text-[11px] font-bold uppercase tracking-wide text-blue-700 dark:text-blue-300">{optionCount === null ? 'Guided workflow' : `${optionCount} type${optionCount === 1 ? '' : 's'}`}</span>
               </button>
             );
           })}
         </div>
       </section>
+      <div ref={categoryContentRef} className="scroll-mt-4" aria-hidden="true" />
 
       {!selectedCategory && (
         <div className="rounded-2xl border border-dashed border-slate-300 bg-white/60 px-5 py-10 text-center dark:border-slate-700 dark:bg-slate-900/40">
@@ -1765,7 +1769,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               <PlusCircle className="w-5 h-5 text-blue-200" /> New Transaction
             </h3>
             {isSmartMatched && (
-              <span className="flex items-center gap-1 text-[10px] font-bold text-blue-900 bg-blue-50 border border-blue-100 px-2.5 py-1 rounded-full animate-pulse dark:text-blue-200 dark:bg-blue-500/10 dark:border-blue-500/20">
+              <span className="flex items-center gap-1 text-[12px] font-bold text-blue-900 bg-blue-50 border border-blue-100 px-2.5 py-1 rounded-full animate-pulse dark:text-blue-200 dark:bg-blue-500/10 dark:border-blue-500/20">
                 <Sparkles className="w-3.5 h-3.5" /> Rule Suggestion Match
               </span>
             )}
@@ -1791,7 +1795,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                 <button
                   type="button"
                   onClick={handleUndoLastPost}
-                  className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-emerald-200 bg-white/70 px-2.5 py-1 text-[10px] font-bold text-emerald-700 transition-colors hover:bg-white dark:border-emerald-500/30 dark:bg-slate-900/40 dark:text-emerald-300 dark:hover:bg-slate-900"
+                  className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-emerald-200 bg-white/70 px-2.5 py-1 text-[12px] font-bold text-emerald-700 transition-colors hover:bg-white dark:border-emerald-500/30 dark:bg-slate-900/40 dark:text-emerald-300 dark:hover:bg-slate-900"
                   title="Post a reversing entry for this transaction"
                 >
                   <Undo2 className="h-3.5 w-3.5" /> Undo
@@ -1803,7 +1807,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
           {/* Form Fields */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2 relative">
-              <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Transaction Type</label>
+              <label className="block text-[13px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Transaction Type</label>
               {isFixedOfficerTransactionType ? (
                 <div className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
                   {txName}
@@ -1811,14 +1815,14 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               ) : selectedCategory === 'ppe-transactions' ? (
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">PPE Dropdown</label>
+                    <label className="block text-[12px] font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">PPE Dropdown</label>
                     <select value={debitCodeNumber >= 1500 && debitCodeNumber <= 1599 ? txName : ''} onChange={event => { setTxName(event.target.value); setShowTxDropdown(false); }} className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white p-3 text-xs font-semibold text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
                       <option value="">Select a PPE purchase</option>
                       {classificationRules.filter(rule => { const code = Number(rule.debitAccountCode); return categorizeTransactionRule(rule) === 'ppe-transactions' && code >= 1500 && code <= 1599 && (rule.description.toLowerCase().startsWith('purchase of ') || rule.description === 'Purchase Chairs') && !isRetiredAssetPickerType(rule.description); }).map(rule => <option key={rule.description} value={rule.description}>{rule.description}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">F&amp;F Dropdown</label>
+                    <label className="block text-[12px] font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">F&amp;F Dropdown</label>
                     <select value={debitCodeNumber >= 1650 && debitCodeNumber <= 1699 ? txName : ''} onChange={event => { setTxName(event.target.value); setShowTxDropdown(false); }} className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white p-3 text-xs font-semibold text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
                       <option value="">Select a furniture purchase</option>
                       {classificationRules.filter(rule => { const code = Number(rule.debitAccountCode); return categorizeTransactionRule(rule) === 'ppe-transactions' && code >= 1650 && code <= 1699 && (rule.description.toLowerCase().startsWith('purchase of ') || rule.description === 'Purchase Chairs'); }).map(rule => <option key={rule.description} value={rule.description}>{rule.description}</option>)}
@@ -1860,14 +1864,14 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                       </button>
                     ))
                   ) : (
-                    <div className="px-3 py-2.5 text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                    <div className="px-3 py-2.5 text-[13px] text-slate-500 dark:text-slate-400 font-medium">
                       No matching type. Select a known type so the accounts remain automatic.
                     </div>
                   )}
                 </div>
               )}
 
-              <p className="text-[10px] text-slate-500 mt-1 font-medium dark:text-slate-400">Select a known type. Its accounting rule determines the accounts automatically.</p>
+              <p className="text-[12px] text-slate-500 mt-1 font-medium dark:text-slate-400">Select a known type. Its accounting rule determines the accounts automatically.</p>
               </>}
               <div className="mt-2"><ReviewLaterNote /></div>
 
@@ -1884,7 +1888,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
             </div>
 
             <div className="sm:col-span-2 rounded-xl border border-violet-200 bg-violet-50 p-3.5 dark:border-violet-500/20 dark:bg-violet-500/10">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Reporting Period</p>
+              <p className="text-[12px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Reporting Period</p>
               {semester && reportingPeriod && settings.reportingYear ? (
                 <p className="mt-1 text-xs font-semibold text-violet-800 dark:text-violet-200">
                   SY {settings.reportingYear}-{settings.reportingYear + 1} • {semester} ({reportingPeriod})
@@ -1894,12 +1898,12 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                   Not set — set it top right, next to the org name, before posting.
                 </p>
               )}
-              <p className="mt-1 text-[10px] text-violet-700 dark:text-violet-300">Set once for the whole organization; every transaction uses it automatically.</p>
+              <p className="mt-1 text-[12px] text-violet-700 dark:text-violet-300">Set once for the whole organization; every transaction uses it automatically.</p>
             </div>
 
             {classificationPreview?.purposeOptions && classificationPreview.purposeOptions.length > 0 && (
               <div className="sm:col-span-2">
-                <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">What Was It For?</label>
+                <label className="block text-[13px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">What Was It For?</label>
                 <select
                   value={purposeIndex}
                   onChange={(e) => handlePurposeChange(Number(e.target.value))}
@@ -1909,7 +1913,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                     <option key={opt.label} value={i}>{opt.label}</option>
                   ))}
                 </select>
-                <p className="text-[10px] text-slate-500 mt-1 font-medium dark:text-slate-400">Determines the memo for this transaction.</p>
+                <p className="text-[12px] text-slate-500 mt-1 font-medium dark:text-slate-400">Determines the memo for this transaction.</p>
               </div>
             )}
 
@@ -1917,24 +1921,24 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               <div className="sm:col-span-2 space-y-4 rounded-xl border border-violet-200 bg-violet-50 p-4 dark:border-violet-500/20 dark:bg-violet-500/10">
                 <div>
                   <h4 className="flex items-center gap-2 text-xs font-black text-violet-700 dark:text-violet-300">Pre-ordered merchandise details</h4>
-                  <p className="mt-1 text-[10px] font-medium text-violet-700 dark:text-violet-300">Record this downpayment separately before recording the acquisition. You can link it when the goods are received.</p>
+                  <p className="mt-1 text-[12px] font-medium text-violet-700 dark:text-violet-300">Record this downpayment separately before recording the acquisition. You can link it when the goods are received.</p>
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Merchandise pre-ordered</label>
+                    <label className="block text-[12px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Merchandise pre-ordered</label>
                     <select value={merchandiseItem} onChange={event => { setMerchandiseItem(event.target.value); if (event.target.value !== 'Others') setMerchandiseOtherTitle(''); }} className="mt-1.5 w-full rounded-lg border border-violet-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-violet-500/30 dark:bg-slate-800 dark:text-slate-100" required>
                       <option value="" disabled>Select merchandise…</option>
                       {MERCHANDISE_ITEM_OPTIONS.map(item => <option key={item} value={item}>{item}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Batch / pre-order reference</label>
+                    <label className="block text-[12px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Batch / pre-order reference</label>
                     <input type="text" value={merchandiseBatch} onChange={event => setMerchandiseBatch(event.target.value)} placeholder="Example: Lanyard Batch 1" className="mt-1.5 w-full rounded-lg border border-violet-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-violet-500/30 dark:bg-slate-800 dark:text-slate-100" required />
                   </div>
                 </div>
-                {merchandiseItem === 'Others' && <div><label className="block text-[10px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Other merchandise title</label><input type="text" value={merchandiseOtherTitle} onChange={event => setMerchandiseOtherTitle(event.target.value)} placeholder="Enter the merchandise name" className="mt-1.5 w-full rounded-lg border border-violet-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-violet-500/30 dark:bg-slate-800 dark:text-slate-100" required /></div>}
+                {merchandiseItem === 'Others' && <div><label className="block text-[12px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Other merchandise title</label><input type="text" value={merchandiseOtherTitle} onChange={event => setMerchandiseOtherTitle(event.target.value)} placeholder="Enter the merchandise name" className="mt-1.5 w-full rounded-lg border border-violet-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-violet-500/30 dark:bg-slate-800 dark:text-slate-100" required /></div>}
                 <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Payment method</label>
+                  <label className="block text-[12px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Payment method</label>
                   <select value={merchandisePaymentMethod} onChange={event => changeMerchandisePaymentMethod(event.target.value as MerchandisePaymentMethod)} className="mt-1.5 w-full rounded-lg border border-violet-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-violet-500/30 dark:bg-slate-800 dark:text-slate-100">
                     <option value="organization-funds">Paid directly by the organization</option>
                     <option value="officer-personal">Paid by an officer using personal money</option>
@@ -1943,22 +1947,22 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                   </select>
                 </div>
                 {(merchandisePaymentMethod === 'officer-personal' || merchandisePaymentMethod === 'organization-advance' || merchandisePaymentMethod === 'advance-and-personal') && <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Accountable officer</label>
+                  <label className="block text-[12px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Accountable officer</label>
                   <input list="preorder-officers" value={outrightOfficer} onChange={event => setOutrightOfficer(event.target.value)} placeholder="Officer name" className="mt-1.5 w-full rounded-lg border border-violet-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-violet-500/30 dark:bg-slate-800 dark:text-slate-100" required />
                   <datalist id="preorder-officers">{officerAdvanceBalances.map(record => <option key={record.name} value={record.name} />)}</datalist>
-                  {(merchandisePaymentMethod === 'organization-advance' || merchandisePaymentMethod === 'advance-and-personal') && <p className="mt-1 text-[10px] font-medium text-violet-700 dark:text-violet-300">Available advance for this officer: {formatCurrency(selectedOfficerAdvanceBalance)}</p>}
+                  {(merchandisePaymentMethod === 'organization-advance' || merchandisePaymentMethod === 'advance-and-personal') && <p className="mt-1 text-[12px] font-medium text-violet-700 dark:text-violet-300">Available advance for this officer: {formatCurrency(selectedOfficerAdvanceBalance)}</p>}
                 </div>}
                 {(merchandisePaymentMethod === 'organization-funds' || merchandisePaymentMethod === 'advance-and-personal') && <DatedAmountRows label={`Organization payment (available cash: ${formatCurrency(cashAvailable)})`} rows={merchandiseOrganizationPayments} onChange={setMerchandiseOrganizationPayments} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={cashAvailable} allowBlankDates allowEmptyAmounts={merchandisePaymentMethod === 'advance-and-personal'} allowMultiple={false} blankDateHelp="Date is optional." />}
                 {(merchandisePaymentMethod === 'officer-personal' || merchandisePaymentMethod === 'advance-and-personal') && <div>
                   <DatedAmountRows label="Amount paid personally by the officer" rows={merchandiseOfficerPayments} onChange={setMerchandiseOfficerPayments} currencySymbol={settings.currencySymbol} defaultDate={date} allowBlankDates allowEmptyAmounts={merchandisePaymentMethod === 'advance-and-personal'} allowMultiple={false} blankDateHelp="Date is optional." />
-                  <p className="mt-1 text-[10px] font-medium text-violet-700 dark:text-violet-300">Record reimbursement separately under Reimbursement to Officer.</p>
+                  <p className="mt-1 text-[12px] font-medium text-violet-700 dark:text-violet-300">Record reimbursement separately under Reimbursement to Officer.</p>
                 </div>}
                 {(merchandisePaymentMethod === 'organization-advance' || merchandisePaymentMethod === 'advance-and-personal') && <>
                   <DatedAmountRows label="Payment using the officer cash advance" rows={merchandiseAdvancePayments} onChange={setMerchandiseAdvancePayments} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={selectedOfficerAdvanceBalance} allowBlankDates allowEmptyAmounts={merchandisePaymentMethod === 'advance-and-personal'} allowMultiple={false} blankDateHelp="Date is optional." />
-                  {outrightOfficer.trim() && selectedOfficerAdvanceBalance <= 0 && <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[10px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">No recorded cash advance is available for {outrightOfficer.trim()}. Record the advance first under Advances to Officers before using it for this supplier downpayment.</div>}
+                  {outrightOfficer.trim() && selectedOfficerAdvanceBalance <= 0 && <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[12px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">No recorded cash advance is available for {outrightOfficer.trim()}. Record the advance first under Advances to Officers before using it for this supplier downpayment.</div>}
                 {officerAdvanceBalances.length > 0 && <OfficerAdvanceSummary rows={officerAdvanceSummary} formatCurrency={formatCurrency} />}
                 </>}
-                {merchandisePrepaymentResult.error && transactionAmount > 0 && <p className="text-[10px] font-bold text-rose-700 dark:text-rose-300">{merchandisePrepaymentResult.error}</p>}
+                {merchandisePrepaymentResult.error && transactionAmount > 0 && <p className="text-[12px] font-bold text-rose-700 dark:text-rose-300">{merchandisePrepaymentResult.error}</p>}
               </div>
             )}
 
@@ -1966,30 +1970,30 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               <div className="sm:col-span-2 space-y-4 rounded-xl border border-violet-200 bg-violet-50 p-4 dark:border-violet-500/20 dark:bg-violet-500/10">
                 <div>
                   <h4 className="flex items-center gap-2 text-xs font-black text-violet-700 dark:text-violet-300">Buyer downpayment for pre-ordered merchandise</h4>
-                  <p className="mt-1 text-[10px] font-medium text-violet-700 dark:text-violet-300">Record what the buyer paid in advance. It is held as Unearned Merchandise Revenue until you record the sale of this item and batch.</p>
+                  <p className="mt-1 text-[12px] font-medium text-violet-700 dark:text-violet-300">Record what the buyer paid in advance. It is held as Unearned Merchandise Revenue until you record the sale of this item and batch.</p>
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Merchandise pre-ordered</label>
+                    <label className="block text-[12px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Merchandise pre-ordered</label>
                     <select value={merchandiseItem} onChange={event => { setMerchandiseItem(event.target.value); if (event.target.value !== 'Others') setMerchandiseOtherTitle(''); }} className="mt-1.5 w-full rounded-lg border border-violet-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-violet-500/30 dark:bg-slate-800 dark:text-slate-100" required>
                       <option value="" disabled>Select merchandise…</option>
                       {MERCHANDISE_ITEM_OPTIONS.map(item => <option key={item} value={item}>{item}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Batch / pre-order reference</label>
+                    <label className="block text-[12px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Batch / pre-order reference</label>
                     <input type="text" value={merchandiseBatch} onChange={event => setMerchandiseBatch(event.target.value)} placeholder="Example: Lanyard Batch 1" className="mt-1.5 w-full rounded-lg border border-violet-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-violet-500/30 dark:bg-slate-800 dark:text-slate-100" required />
                   </div>
                 </div>
-                {merchandiseItem === 'Others' && <div><label className="block text-[10px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Other merchandise title</label><input type="text" value={merchandiseOtherTitle} onChange={event => setMerchandiseOtherTitle(event.target.value)} placeholder="Enter the merchandise name" className="mt-1.5 w-full rounded-lg border border-violet-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-violet-500/30 dark:bg-slate-800 dark:text-slate-100" required /></div>}
+                {merchandiseItem === 'Others' && <div><label className="block text-[12px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">Other merchandise title</label><input type="text" value={merchandiseOtherTitle} onChange={event => setMerchandiseOtherTitle(event.target.value)} placeholder="Enter the merchandise name" className="mt-1.5 w-full rounded-lg border border-violet-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-violet-500/30 dark:bg-slate-800 dark:text-slate-100" required /></div>}
                 <DatedAmountRows label="Initial downpayment" rows={buyerInitialDownpayment} onChange={setBuyerInitialDownpayment} currencySymbol={settings.currencySymbol} defaultDate={date} allowMultiple={false} />
                 <DatedAmountRows label="Subsequent downpayments (optional)" rows={buyerSubsequentDownpayments} onChange={setBuyerSubsequentDownpayments} currencySymbol={settings.currencySymbol} defaultDate={buyerInitialDownpayment[0]?.date || date} addLabel="Add subsequent downpayment" allowBlankDates allowEmptyAmounts minRows={0} blankDateHelp="Date is optional; a blank date uses the initial downpayment date." />
                 <div className="rounded-lg bg-white/80 p-3 dark:bg-slate-900/60">
-                  <span className="text-[9px] font-bold uppercase text-slate-500">Total downpayments — automatically computed</span>
+                  <span className="text-[11px] font-bold uppercase text-slate-500">Total downpayments — automatically computed</span>
                   <p className="mt-1 text-lg font-black text-violet-800 dark:text-violet-200">{formatCurrency(buyerDownpaymentTotalEntered)}</p>
-                  <p className="text-[9px] text-slate-500">Initial downpayment + total subsequent downpayments</p>
+                  <p className="text-[11px] text-slate-500">Initial downpayment + total subsequent downpayments</p>
                 </div>
-                {buyerDownpaymentResult.error && buyerDownpaymentTotalEntered > 0 && <p className="text-[10px] font-bold text-rose-700 dark:text-rose-300">{buyerDownpaymentResult.error}</p>}
+                {buyerDownpaymentResult.error && buyerDownpaymentTotalEntered > 0 && <p className="text-[12px] font-bold text-rose-700 dark:text-rose-300">{buyerDownpaymentResult.error}</p>}
               </div>
             )}
 
@@ -1997,58 +2001,58 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               <div className="sm:col-span-2 space-y-4 rounded-xl border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-500/20 dark:bg-indigo-500/10">
                 <div>
                   <h4 className="flex items-center gap-2 text-xs font-black text-violet-700 dark:text-violet-300">Acquisition of Merchandise for Sale - Goods Received and On Hand</h4>
-                  <p className="mt-1 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Record each received batch separately so its item, optional quantity, full cost, downpayments, and supplier settlement remain traceable.</p>
+                  <p className="mt-1 text-[12px] font-medium text-indigo-700 dark:text-indigo-300">Record each received batch separately so its item, optional quantity, full cost, downpayments, and supplier settlement remain traceable.</p>
                 </div>
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Merchandise purchased</label>
+                    <label className="block text-[12px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Merchandise purchased</label>
                     <select value={merchandiseItem} onChange={event => { setMerchandiseItem(event.target.value); if (event.target.value !== 'Others') setMerchandiseOtherTitle(''); }} className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required>
                       <option value="" disabled>Select merchandise…</option>
                       {MERCHANDISE_ITEM_OPTIONS.map(item => <option key={item} value={item}>{item}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Quantity purchased (optional)</label>
+                    <label className="block text-[12px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Quantity purchased (optional)</label>
                     <input type="number" min="1" step="1" value={merchandiseQuantity} onChange={event => setMerchandiseQuantity(event.target.value)} placeholder="Number of units, if applicable" className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-bold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" />
                   </div>
                 </div>
 
                 {merchandiseItem === 'Others' && (
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Other merchandise title</label>
+                    <label className="block text-[12px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Other merchandise title</label>
                     <input type="text" value={merchandiseOtherTitle} onChange={event => setMerchandiseOtherTitle(event.target.value)} placeholder="Enter the merchandise name" className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required />
                   </div>
                 )}
 
                 <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Batch</label>
+                  <label className="block text-[12px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Batch</label>
                   <input type="text" value={merchandiseBatch} onChange={event => setMerchandiseBatch(event.target.value)} placeholder="Example: Lanyard Batch 1" className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required />
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Previously recorded downpayment (if applicable)</label>
+                  <label className="block text-[12px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Previously recorded downpayment (if applicable)</label>
                   <select value={merchandisePrepaymentEntryId} onChange={event => setMerchandisePrepaymentEntryId(event.target.value)} className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100">
                     <option value="">No linked downpayment</option>
                     {matchingMerchandisePrepayment.entryIds.length > 0 && <option value={matchingMerchandisePrepayment.entryIds[0]}>{merchandiseItemLabel || 'Merchandise'} — {merchandiseBatch.trim() || 'Batch'} — Total downpayments {formatCurrency(matchingMerchandisePrepayment.amount)}{matchingMerchandisePrepayment.draftCount > 0 ? ` (${matchingMerchandisePrepayment.draftCount} still ${matchingMerchandisePrepayment.draftCount === 1 ? 'a draft' : 'drafts'})` : ''}</option>}
                   </select>
-                  <p className="mt-1 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">All unused downpayment transactions matching this merchandise and batch are combined into one total, including saved drafts.</p>
-                  {merchandiseItemLabel && merchandiseBatch.trim() && matchingMerchandisePrepayment.entryIds.length === 0 && <p className="mt-1 text-[10px] font-semibold text-amber-700 dark:text-amber-300">No unused downpayment was found for this merchandise and batch. Check that the item and the batch name match the downpayment you recorded.</p>}
+                  <p className="mt-1 text-[12px] font-medium text-indigo-700 dark:text-indigo-300">All unused downpayment transactions matching this merchandise and batch are combined into one total, including saved drafts.</p>
+                  {merchandiseItemLabel && merchandiseBatch.trim() && matchingMerchandisePrepayment.entryIds.length === 0 && <p className="mt-1 text-[12px] font-semibold text-amber-700 dark:text-amber-300">No unused downpayment was found for this merchandise and batch. Check that the item and the batch name match the downpayment you recorded.</p>}
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Total cost of this batch</label>
+                  <label className="block text-[12px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Total cost of this batch</label>
                   <div className="relative mt-1.5">
                     <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-indigo-500">{settings.currencySymbol}</span>
                     <input type="number" min="0.01" step="0.01" value={amount || ''} onChange={event => setAmount(Number(event.target.value))} placeholder="Full cost whether paid or unpaid" className="w-full rounded-lg border border-indigo-200 bg-white p-2.5 pl-8 text-xs font-bold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required />
                   </div>
-                  <p className="mt-2 rounded-lg border-l-4 border-amber-500 bg-amber-50 px-3 py-2.5 text-[11px] font-semibold leading-relaxed text-amber-900 dark:border-amber-400 dark:bg-amber-500/10 dark:text-amber-200">
+                  <p className="mt-2 rounded-lg border-l-4 border-amber-500 bg-amber-50 px-3 py-2.5 text-[13px] font-semibold leading-relaxed text-amber-900 dark:border-amber-400 dark:bg-amber-500/10 dark:text-amber-200">
                     <span className="font-black uppercase tracking-wide">Reminder: </span>{MERCHANDISE_TOTAL_COST_REMINDER}
                   </p>
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">How will the merchandise be paid?</label>
+                  <label className="block text-[12px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">How will the merchandise be paid?</label>
                   <select value={merchandisePaymentMethod} onChange={event => changeMerchandisePaymentMethod(event.target.value as MerchandisePaymentMethod)} className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100">
                     <option value="organization-funds">Paid directly by the organization</option>
                     <option value="officer-personal">Paid by an officer using personal money - to be reimbursed</option>
@@ -2060,7 +2064,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
 
                 {merchandiseUsesOfficer && (
                   <div>
-                    <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-slate-700 dark:text-slate-300">Accountable Officer Name</label>
+                    <label className="mb-1.5 block text-[13px] font-medium uppercase tracking-wider text-slate-700 dark:text-slate-300">Accountable Officer Name</label>
                     <input
                       type="text"
                       list="acquisition-officers"
@@ -2071,7 +2075,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                       required
                     />
                     <datalist id="acquisition-officers">{[...new Set([...officerAdvanceSummary, ...officerPayableBalances].map(record => record.name))].map(name => <option key={name} value={name} />)}</datalist>
-                    <p className="mt-1 text-[10px] font-medium text-slate-500 dark:text-slate-400">Saved with the transaction for Review and audit history.</p>
+                    <p className="mt-1 text-[12px] font-medium text-slate-500 dark:text-slate-400">Saved with the transaction for Review and audit history.</p>
                   </div>
                 )}
 
@@ -2083,42 +2087,42 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                   <div className="space-y-2 payment-group">
                     <MerchandisePaymentRows label={`Payments using ${counterpartyName.trim() || 'the selected officer'}'s cash advance (available: ${formatCurrency(selectedOfficerAdvanceBalance)})`} rows={merchandiseAdvancePayments} onChange={setMerchandiseAdvancePayments} currencySymbol={settings.currencySymbol} addLabel="Add advance payment" />
                     {(merchandisePaymentMethod === 'organization-advance' || acquisitionNoAdvanceRecord) && <OfficerAdvanceSummary rows={officerAdvanceSummary} formatCurrency={formatCurrency} />}
-                    {acquisitionNoAdvanceRecord && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[10px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">{ADVANCE_NO_RECORD_CAUTION}</p>}
-                    {merchandiseAdvancePaymentTotal > selectedOfficerAdvanceBalance && <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-[10px] font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">{advanceCaution('expense', 'advance')}</p>}
+                    {acquisitionNoAdvanceRecord && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[12px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">{ADVANCE_NO_RECORD_CAUTION}</p>}
+                    {merchandiseAdvancePaymentTotal > selectedOfficerAdvanceBalance && <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-[12px] font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">{advanceCaution('expense', 'advance')}</p>}
                   </div>
                 )}
 
                 {(merchandisePaymentMethod === 'officer-personal' || merchandisePaymentMethod === 'advance-and-personal') && (
                   <div className="space-y-2 payment-group">
                     <MerchandisePaymentRows label="Payments made personally by the officer" rows={merchandiseOfficerPayments} onChange={setMerchandiseOfficerPayments} currencySymbol={settings.currencySymbol} addLabel="Add officer payment" />
-                    {(merchandisePaymentMethod === 'officer-personal' || merchandiseOfficerPaymentTotal > 0) && <p className="rounded-lg bg-white/80 p-3 text-[10px] font-semibold text-rose-700 dark:bg-slate-900/60 dark:text-rose-300">{OFFICER_REIMBURSEMENT_NOTE}</p>}
+                    {(merchandisePaymentMethod === 'officer-personal' || merchandiseOfficerPaymentTotal > 0) && <p className="rounded-lg bg-white/80 p-3 text-[12px] font-semibold text-rose-700 dark:bg-slate-900/60 dark:text-rose-300">{OFFICER_REIMBURSEMENT_NOTE}</p>}
                   </div>
                 )}
 
-                {merchandisePaymentMethod === 'not-yet-paid' && <p className="rounded-lg bg-white/80 p-3 text-[10px] font-semibold text-indigo-800 dark:bg-slate-900/60 dark:text-indigo-200">The full batch cost will remain in Accounts Payable - Merchandise and appear in Review until settled. Pay it later under Payables.</p>}
-                {merchandisePaymentMethod !== 'not-yet-paid' && <p className="rounded-lg bg-white/80 p-3 text-[10px] font-semibold text-indigo-800 dark:bg-slate-900/60 dark:text-indigo-200">{MERCHANDISE_PAYMENT_WINDOW_CAUTION}</p>}
-                {merchandisePaymentMethod !== 'not-yet-paid' && merchandiseAcquisitionResult.posting && merchandiseAcquisitionResult.posting.merchandisePayable > 0 && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[10px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">{MERCHANDISE_SHORTFALL_CAUTION}</p>}
-                {merchandiseAcquisitionResult.posting && merchandiseAcquisitionResult.posting.supplierReceivable > 0 && <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-[10px] font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">{MERCHANDISE_EXCESS_CAUTION}</p>}
-                {merchandiseAcquisitionResult.error && amount > 0 && !(merchandiseAdvancePaymentTotal > selectedOfficerAdvanceBalance) && <p className="text-[10px] font-bold text-rose-700 dark:text-rose-300">{merchandiseAcquisitionResult.error}</p>}
+                {merchandisePaymentMethod === 'not-yet-paid' && <p className="rounded-lg bg-white/80 p-3 text-[12px] font-semibold text-indigo-800 dark:bg-slate-900/60 dark:text-indigo-200">The full batch cost will remain in Accounts Payable - Merchandise and appear in Review until settled. Pay it later under Payables.</p>}
+                {merchandisePaymentMethod !== 'not-yet-paid' && <p className="rounded-lg bg-white/80 p-3 text-[12px] font-semibold text-indigo-800 dark:bg-slate-900/60 dark:text-indigo-200">{MERCHANDISE_PAYMENT_WINDOW_CAUTION}</p>}
+                {merchandisePaymentMethod !== 'not-yet-paid' && merchandiseAcquisitionResult.posting && merchandiseAcquisitionResult.posting.merchandisePayable > 0 && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[12px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">{MERCHANDISE_SHORTFALL_CAUTION}</p>}
+                {merchandiseAcquisitionResult.posting && merchandiseAcquisitionResult.posting.supplierReceivable > 0 && <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-[12px] font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">{MERCHANDISE_EXCESS_CAUTION}</p>}
+                {merchandiseAcquisitionResult.error && amount > 0 && !(merchandiseAdvancePaymentTotal > selectedOfficerAdvanceBalance) && <p className="text-[12px] font-bold text-rose-700 dark:text-rose-300">{merchandiseAcquisitionResult.error}</p>}
               </div>
             )}
 
             {receivableCollection && (
               <div className="sm:col-span-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-500/20 dark:bg-emerald-500/10">
                 <h4 className="text-xs font-black text-emerald-900 dark:text-emerald-200">{receivableCollection.title}</h4>
-                <p className="mt-1 text-[10px] font-medium text-emerald-800 dark:text-emerald-300">{receivableCollection.intro}</p>
+                <p className="mt-1 text-[12px] font-medium text-emerald-800 dark:text-emerald-300">{receivableCollection.intro}</p>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  <div className="rounded-lg bg-white/80 p-3 dark:bg-slate-900/50"><span className="text-[9px] font-bold uppercase text-slate-500">{receivableCollection.outstandingLabel}</span><p className="mt-1 text-sm font-black text-emerald-800 dark:text-emerald-200">{formatCurrency(receivableOutstanding)}</p></div>
-                  <div className="rounded-lg bg-white/80 p-3 text-[10px] font-semibold text-slate-600 dark:bg-slate-900/50 dark:text-slate-300">{receivableCollection.journalNote}</div>
-                  {receivableCollection.creditCode === '1200' && <div className="rounded-lg bg-white/80 p-3 dark:bg-slate-900/50 sm:col-span-2"><span className="text-[9px] font-bold uppercase text-slate-500">Receivable remaining after all these collections</span><p className="mt-1 text-sm font-black text-emerald-800 dark:text-emerald-200">{formatCurrency(Math.max(0, Math.round((receivableOutstanding - amount) * 100) / 100))}</p></div>}
+                  <div className="rounded-lg bg-white/80 p-3 dark:bg-slate-900/50"><span className="text-[11px] font-bold uppercase text-slate-500">{receivableCollection.outstandingLabel}</span><p className="mt-1 text-sm font-black text-emerald-800 dark:text-emerald-200">{formatCurrency(receivableOutstanding)}</p></div>
+                  <div className="rounded-lg bg-white/80 p-3 text-[12px] font-semibold text-slate-600 dark:bg-slate-900/50 dark:text-slate-300">{receivableCollection.journalNote}</div>
+                  {receivableCollection.creditCode === '1200' && <div className="rounded-lg bg-white/80 p-3 dark:bg-slate-900/50 sm:col-span-2"><span className="text-[11px] font-bold uppercase text-slate-500">Receivable remaining after all these collections</span><p className="mt-1 text-sm font-black text-emerald-800 dark:text-emerald-200">{formatCurrency(Math.max(0, Math.round((receivableOutstanding - amount) * 100) / 100))}</p></div>}
                 </div>
-                {receivableOutstanding <= 0 && <p className="mt-3 text-[10px] font-bold text-amber-700 dark:text-amber-300">No {receivableCollection.accountLabel} balance is available to collect.</p>}
+                {receivableOutstanding <= 0 && <p className="mt-3 text-[12px] font-bold text-amber-700 dark:text-amber-300">No {receivableCollection.accountLabel} balance is available to collect.</p>}
               </div>
             )}
 
             {needsCounterpartyName && !merchandiseUsesOfficer && (
               <div className="sm:col-span-2">
-                <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">{counterpartyLabel}</label>
+                <label className="block text-[13px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">{counterpartyLabel}</label>
                 <input
                   type="text"
                   value={counterpartyName}
@@ -2127,16 +2131,16 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                   className="w-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-blue-900 focus:ring-blue-900/10 rounded-xl text-xs font-semibold p-3 outline-none transition-colors dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/20"
                   required
                 />
-                <p className="text-[10px] text-slate-500 mt-1 font-medium dark:text-slate-400">Saved with the transaction for Review and audit history.</p>
+                <p className="text-[12px] text-slate-500 mt-1 font-medium dark:text-slate-400">Saved with the transaction for Review and audit history.</p>
                 {(isOfficerAdvance || isOfficerReimbursement || isLoanToOrganization || isLoanCollection || isPriorExpensePayablePayment) && (
                   <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
-                    <p className="bg-slate-50 px-3 py-2 text-[10px] font-black uppercase text-slate-600 dark:bg-slate-800 dark:text-slate-300">{counterpartyBalanceHeading}</p>
-                    {visibleCounterpartyBalances.length > 0 ? ((isLoanToOrganization || isLoanCollection) ? <div className="text-[10px]">
+                    <p className="bg-slate-50 px-3 py-2 text-[12px] font-black uppercase text-slate-600 dark:bg-slate-800 dark:text-slate-300">{counterpartyBalanceHeading}</p>
+                    {visibleCounterpartyBalances.length > 0 ? ((isLoanToOrganization || isLoanCollection) ? <div className="text-[12px]">
                       <div className="grid grid-cols-4 gap-2 px-3 py-2 font-bold text-slate-500"><span>Organization</span><span className="text-right">Amount of Loan</span><span className="text-right">Amount Repaid</span><span className="text-right">Outstanding Balance</span></div>
                       <div className="divide-y divide-slate-100 dark:divide-slate-800">{visibleCounterpartyBalances.map(item => <div key={item.name.toLocaleLowerCase()} className="grid grid-cols-4 gap-2 px-3 py-2"><span className="font-semibold text-slate-700 dark:text-slate-200">{item.name}</span><span className="text-right font-semibold text-slate-700 dark:text-slate-200">{formatCurrency(item.debit)}</span><span className="text-right font-semibold text-slate-700 dark:text-slate-200">{item.credit > 0 ? formatCurrency(item.credit) : '-'}</span><span className="text-right font-black text-blue-800 dark:text-blue-200">{formatCurrency(item.balance)}</span></div>)}</div>
                       <p className="border-t border-slate-100 px-3 py-2 font-medium text-slate-500 dark:border-slate-800">Running balance: it updates with every new loan or collection and stays here until the balance reaches zero.</p>
-                    </div> : <div className="divide-y divide-slate-100 dark:divide-slate-800">{visibleCounterpartyBalances.map(item => <div key={item.name.toLocaleLowerCase()} className="flex items-center justify-between px-3 py-2 text-[10px]"><span className="font-semibold text-slate-700 dark:text-slate-200">{item.name}</span><span className="font-black text-blue-800 dark:text-blue-200">{formatCurrency(item.balance)}</span></div>)}</div>) : <p className="px-3 py-3 text-[10px] font-medium text-amber-700 dark:text-amber-300">{isOfficerReimbursement && totalDueToOfficers > 0 ? 'No balance is tied to a named officer. The total below is still available for reimbursement.' : 'No outstanding balance has been recorded yet.'}</p>}
-                    {isOfficerReimbursement && <p className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-black text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"><span>Total Due to Officers (available to reimburse)</span><span className="text-blue-800 dark:text-blue-200">{formatCurrency(totalDueToOfficers)}</span></p>}
+                    </div> : <div className="divide-y divide-slate-100 dark:divide-slate-800">{visibleCounterpartyBalances.map(item => <div key={item.name.toLocaleLowerCase()} className="flex items-center justify-between px-3 py-2 text-[12px]"><span className="font-semibold text-slate-700 dark:text-slate-200">{item.name}</span><span className="font-black text-blue-800 dark:text-blue-200">{formatCurrency(item.balance)}</span></div>)}</div>) : <p className="px-3 py-3 text-[12px] font-medium text-amber-700 dark:text-amber-300">{isOfficerReimbursement && totalDueToOfficers > 0 ? 'No balance is tied to a named officer. The total below is still available for reimbursement.' : 'No outstanding balance has been recorded yet.'}</p>}
+                    {isOfficerReimbursement && <p className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-3 py-2 text-[12px] font-black text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"><span>Total Due to Officers (available to reimburse)</span><span className="text-blue-800 dark:text-blue-200">{formatCurrency(totalDueToOfficers)}</span></p>}
                   </div>
                 )}
                 {isOfficerReimbursement && <OfficerBreakdownTable officer={counterpartyName} breakdown={reimbursementBreakdown} formatCurrency={formatCurrency} />}
@@ -2145,13 +2149,13 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
 
             {isCashSponsorshipDonation && (
               <div className="sm:col-span-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3.5 dark:border-emerald-500/20 dark:bg-emerald-500/10">
-                <label className="block text-[11px] font-bold text-emerald-900 dark:text-emerald-200">Purpose <span className="text-rose-600">*required</span></label>
+                <label className="block text-[13px] font-bold text-emerald-900 dark:text-emerald-200">Purpose <span className="text-rose-600">*required</span></label>
                 <select value={contributionPurpose} onChange={event => setContributionPurpose(event.target.value as '' | 'donations' | 'sponsorships')} className="mt-1.5 w-full rounded-lg border border-emerald-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-emerald-500/30 dark:bg-slate-800 dark:text-slate-100" required>
                   <option value="">Choose Donations or Sponsorships</option>
                   <option value="donations">Donations</option>
                   <option value="sponsorships">Sponsorships</option>
                 </select>
-                <p className="mt-1.5 text-[10px] font-medium text-emerald-800 dark:text-emerald-300">The selected purpose determines whether the credit goes to Donations or Sponsorships.</p>
+                <p className="mt-1.5 text-[12px] font-medium text-emerald-800 dark:text-emerald-300">The selected purpose determines whether the credit goes to Donations or Sponsorships.</p>
               </div>
             )}
 
@@ -2159,11 +2163,11 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               <div className="sm:col-span-2 space-y-4 p-3.5 bg-amber-50 border border-amber-100 rounded-xl dark:bg-amber-500/10 dark:border-amber-500/20">
                 <h4 className="flex items-center gap-2 text-xs font-black text-slate-900 dark:text-slate-100">{isNewMembersAccrual ? 'New/Additional Members fees collection schedule' : 'Membership Fees collection schedule'}</h4>
                 <div>
-                  <label className="block text-[11px] font-bold text-amber-900 dark:text-amber-300 mb-1.5">When did the membership period start? (Date 1) <span className="text-amber-600">*required</span></label>
+                  <label className="block text-[13px] font-bold text-amber-900 dark:text-amber-300 mb-1.5">When did the membership period start? (Date 1) <span className="text-amber-600">*required</span></label>
                   <input type="date" min={membershipPeriodBounds?.startDate} max={membershipPeriodBounds?.endDate} value={date} onChange={event => setDate(event.target.value)} className="w-full rounded-lg border border-amber-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-amber-500/30 dark:bg-slate-800 dark:text-slate-100" required />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-bold text-amber-900 dark:text-amber-300 mb-1.5">{isNewMembersAccrual ? 'How much is total fees collectible from new/additional members of the org?' : 'Total membership fees collectible from all members'} <span className="text-amber-600">*required</span></label>
+                  <label className="block text-[13px] font-bold text-amber-900 dark:text-amber-300 mb-1.5">{isNewMembersAccrual ? 'How much is total fees collectible from new/additional members of the org?' : 'Total membership fees collectible from all members'} <span className="text-amber-600">*required</span></label>
                   <div className="relative">
                     <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-amber-500">{settings.currencySymbol}</span>
                     <input type="number" step="0.01" min="0.01" value={amount || ''} onChange={event => setAmount(Number(event.target.value))} placeholder="0.00" className="w-full bg-white border border-amber-200 text-slate-900 rounded-lg text-xs font-bold p-2.5 pl-8 outline-none dark:bg-slate-800 dark:border-amber-500/30 dark:text-slate-100" required />
@@ -2183,13 +2187,13 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                   blankDateHelp={`Leave Date 2, Date 3, or another collection date blank to use Date 1 (${date || 'transaction date'}).`}
                 />
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
-                  <div className="rounded-lg bg-white/80 p-3 dark:bg-slate-900/60"><span className="text-[9px] font-bold text-slate-500">TOTAL FEES</span><p className="mt-1 text-xs font-black text-slate-900 dark:text-slate-100">{formatCurrency(amount)}</p></div>
-                  <div className="rounded-lg bg-white/80 p-3 dark:bg-slate-900/60"><span className="text-[9px] font-bold text-slate-500">COLLECTED</span><p className="mt-1 text-xs font-black text-emerald-700 dark:text-emerald-300">{formatCurrency(membershipCollectionTotal)}</p></div>
-                  <div className="rounded-lg bg-white/80 p-3 dark:bg-slate-900/60"><span className="text-[9px] font-bold text-slate-500">STILL RECEIVABLE</span><p className="mt-1 text-xs font-black text-rose-700 dark:text-rose-300">{formatCurrency(membershipPostingResult.posting?.amountStillReceivable || 0)}</p></div>
-                  <div className="rounded-lg bg-white/80 p-3 dark:bg-slate-900/60"><span className="text-[9px] font-bold text-slate-500">REFUND LIABILITY</span><p className="mt-1 text-xs font-black text-amber-700 dark:text-amber-300">{formatCurrency(membershipPostingResult.posting?.refundLiability || 0)}</p></div>
+                  <div className="rounded-lg bg-white/80 p-3 dark:bg-slate-900/60"><span className="text-[11px] font-bold text-slate-500">TOTAL FEES</span><p className="mt-1 text-xs font-black text-slate-900 dark:text-slate-100">{formatCurrency(amount)}</p></div>
+                  <div className="rounded-lg bg-white/80 p-3 dark:bg-slate-900/60"><span className="text-[11px] font-bold text-slate-500">COLLECTED</span><p className="mt-1 text-xs font-black text-emerald-700 dark:text-emerald-300">{formatCurrency(membershipCollectionTotal)}</p></div>
+                  <div className="rounded-lg bg-white/80 p-3 dark:bg-slate-900/60"><span className="text-[11px] font-bold text-slate-500">STILL RECEIVABLE</span><p className="mt-1 text-xs font-black text-rose-700 dark:text-rose-300">{formatCurrency(membershipPostingResult.posting?.amountStillReceivable || 0)}</p></div>
+                  <div className="rounded-lg bg-white/80 p-3 dark:bg-slate-900/60"><span className="text-[11px] font-bold text-slate-500">REFUND LIABILITY</span><p className="mt-1 text-xs font-black text-amber-700 dark:text-amber-300">{formatCurrency(membershipPostingResult.posting?.refundLiability || 0)}</p></div>
                 </div>
-                <p className="text-[10px] text-amber-700 dark:text-amber-400 font-medium">Use dates within {reportingPeriod} {settings.semester === '1st Semester' ? settings.reportingYear : (settings.reportingYear || 0) + 1}. The full fee is recognized on Date 1. Later collections clear Membership Fees Receivable first; any collection above the total fees is recorded separately as Refund Liability - Membership Fees.</p>
-                {membershipPostingResult.error && <p className="text-[10px] font-bold text-rose-700 dark:text-rose-300">{membershipPostingResult.error}</p>}
+                <p className="text-[12px] text-amber-700 dark:text-amber-400 font-medium">Use dates within {reportingPeriod} {settings.semester === '1st Semester' ? settings.reportingYear : (settings.reportingYear || 0) + 1}. The full fee is recognized on Date 1. Later collections clear Membership Fees Receivable first; any collection above the total fees is recorded separately as Refund Liability - Membership Fees.</p>
+                {membershipPostingResult.error && <p className="text-[12px] font-bold text-rose-700 dark:text-rose-300">{membershipPostingResult.error}</p>}
               </div>
             )}
 
@@ -2197,7 +2201,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               <div className="sm:col-span-2 space-y-3 rounded-xl border border-indigo-200 bg-indigo-50 p-3.5 dark:border-indigo-500/20 dark:bg-indigo-500/10">
                 <div>
                   <h4 className="flex items-center gap-2 text-xs font-black text-violet-700 dark:text-violet-300">Collection of unpaid membership fees</h4>
-                  <p className="mt-1 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Use this for membership fees that have not yet been paid (e.g. last semester).</p>
+                  <p className="mt-1 text-[12px] font-medium text-indigo-700 dark:text-indigo-300">Use this for membership fees that have not yet been paid (e.g. last semester).</p>
                 </div>
                 <DatedAmountRows
                   label="How much was collected?"
@@ -2209,8 +2213,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                   addLabel="Add collection"
                   allowMultiple={false}
                 />
-                <div className="rounded-lg bg-white/80 p-3 text-[10px] dark:bg-slate-900/60"><span className="font-bold text-slate-500">Receivable remaining after these collections</span><p className="mt-1 font-black text-indigo-800 dark:text-indigo-200">{formatCurrency(Math.max(0, membershipReceivableOutstanding - membershipCollectionTotal))}</p></div>
-                {membershipPostingResult.error && <p className="text-[10px] font-bold text-rose-700 dark:text-rose-300">{membershipPostingResult.error}</p>}
+                <div className="rounded-lg bg-white/80 p-3 text-[12px] dark:bg-slate-900/60"><span className="font-bold text-slate-500">Receivable remaining after these collections</span><p className="mt-1 font-black text-indigo-800 dark:text-indigo-200">{formatCurrency(Math.max(0, membershipReceivableOutstanding - membershipCollectionTotal))}</p></div>
+                {membershipPostingResult.error && <p className="text-[12px] font-bold text-rose-700 dark:text-rose-300">{membershipPostingResult.error}</p>}
               </div>
             )}
 
@@ -2218,10 +2222,10 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               <div className="sm:col-span-2 space-y-4 rounded-xl border border-violet-200 bg-violet-50 p-4 dark:border-violet-500/20 dark:bg-violet-500/10">
                 <div>
                   <h4 className="text-xs font-black text-violet-800 dark:text-violet-200">{isMerchandiseRefundStatus ? 'Excess Merchandise Collection - Status' : 'Excess Membership Fee Collection - Status'}</h4>
-                  <p className="mt-1 text-[10px] font-medium text-violet-700 dark:text-violet-300">Available Refund Liability - {excessCollectionLabel}: {formatCurrency(excessRefundLiabilityOutstanding)}</p>
+                  <p className="mt-1 text-[12px] font-medium text-violet-700 dark:text-violet-300">Available Refund Liability - {excessCollectionLabel}: {formatCurrency(excessRefundLiabilityOutstanding)}</p>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">How will the excess collection be handled?</label>
+                  <label className="block text-[12px] font-bold uppercase tracking-wide text-violet-900 dark:text-violet-200">How will the excess collection be handled?</label>
                   <select value={membershipRefundStatus} onChange={event => { setMembershipRefundStatus(event.target.value as MembershipRefundStatus); setAmount(0); setDate(''); }} className="mt-1.5 w-full rounded-lg border border-violet-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-violet-500/30 dark:bg-slate-800 dark:text-slate-100">
                     <option value="current">Refunded in the Current Reporting Period</option>
                     <option value="next">Will Be Refunded in the Next Reporting Period</option>
@@ -2229,27 +2233,27 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                   </select>
                 </div>
                 {membershipRefundStatus === 'next' ? (
-                  <p className="rounded-lg bg-white/80 p-3 text-[10px] font-semibold text-violet-700 dark:bg-slate-900/60 dark:text-violet-300">No journal entry will be posted. The liability will remain outstanding for the next reporting period.</p>
+                  <p className="rounded-lg bg-white/80 p-3 text-[12px] font-semibold text-violet-700 dark:bg-slate-900/60 dark:text-violet-300">No journal entry will be posted. The liability will remain outstanding for the next reporting period.</p>
                 ) : (
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
-                      <label className="block text-[10px] font-bold text-violet-900 dark:text-violet-200">Amount <span className="text-rose-600">*required</span></label>
+                      <label className="block text-[12px] font-bold text-violet-900 dark:text-violet-200">Amount <span className="text-rose-600">*required</span></label>
                       <div className="relative mt-1.5"><span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-violet-500">{settings.currencySymbol}</span><input type="number" min="0.01" step="0.01" max={excessRefundLiabilityOutstanding || undefined} value={amount || ''} onChange={event => setAmount(Number(event.target.value))} placeholder="0.00" className="w-full rounded-lg border border-violet-200 bg-white p-2.5 pl-8 text-xs font-bold text-slate-900 outline-none dark:border-violet-500/30 dark:bg-slate-800 dark:text-slate-100" required /></div>
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold text-violet-900 dark:text-violet-200">Date {membershipRefundStatus === 'current' && !isMerchandiseRefundStatus ? <span className="text-rose-600">*required</span> : <span className="font-medium text-slate-400">(optional)</span>}</label>
+                      <label className="block text-[12px] font-bold text-violet-900 dark:text-violet-200">Date {membershipRefundStatus === 'current' && !isMerchandiseRefundStatus ? <span className="text-rose-600">*required</span> : <span className="font-medium text-slate-400">(optional)</span>}</label>
                       <input type="date" value={date} onChange={event => setDate(event.target.value)} className="mt-1.5 w-full rounded-lg border border-violet-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-violet-500/30 dark:bg-slate-800 dark:text-slate-100" required={membershipRefundStatus === 'current' && !isMerchandiseRefundStatus} />
                     </div>
                   </div>
                 )}
-                {membershipRefundResolutionResult.error && <p className="text-[10px] font-bold text-rose-700 dark:text-rose-300">{membershipRefundResolutionResult.error}</p>}
+                {membershipRefundResolutionResult.error && <p className="text-[12px] font-bold text-rose-700 dark:text-rose-300">{membershipRefundResolutionResult.error}</p>}
               </div>
             )}
 
             {showDeferPortionQuestion && (
               <div className="sm:col-span-2 space-y-3 p-3.5 bg-amber-50 border border-amber-100 rounded-xl dark:bg-amber-500/10 dark:border-amber-500/20">
                 <div>
-                  <label className="block text-[11px] font-bold text-amber-900 dark:text-amber-300 mb-1.5">How much of this is NOT yet used, consumed, or benefited from this period? <span className="text-amber-600">*required</span></label>
+                  <label className="block text-[13px] font-bold text-amber-900 dark:text-amber-300 mb-1.5">How much of this is NOT yet used, consumed, or benefited from this period? <span className="text-amber-600">*required</span></label>
                   <div className="relative">
                     <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-amber-500">{settings.currencySymbol}</span>
                     <input
@@ -2268,7 +2272,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
 
                 {Number(notYetUsedAmount) > 0 && (
                   <div>
-                    <label className="block text-[11px] font-bold text-amber-900 dark:text-amber-300 mb-1.5">When will it be used?</label>
+                    <label className="block text-[13px] font-bold text-amber-900 dark:text-amber-300 mb-1.5">When will it be used?</label>
                     <select
                       value={expectedUsePeriod}
                       onChange={(e) => setExpectedUsePeriod(e.target.value as 'within' | 'next')}
@@ -2280,18 +2284,18 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                   </div>
                 )}
 
-                <p className="text-[10px] text-amber-700 dark:text-amber-400 font-medium">Posted to Prepaid Expenses instead of expensed immediately — resolve it in REVIEW once it's actually used.</p>
+                <p className="text-[12px] text-amber-700 dark:text-amber-400 font-medium">Posted to Prepaid Expenses instead of expensed immediately — resolve it in REVIEW once it's actually used.</p>
               </div>
             )}
 
             {showCashAdvanceWarning && (
-              <div className="sm:col-span-2 p-3 bg-rose-50 border border-rose-100 text-rose-700 text-[11px] font-semibold rounded-xl dark:bg-rose-500/10 dark:border-rose-500/20 dark:text-rose-300">
+              <div className="sm:col-span-2 p-3 bg-rose-50 border border-rose-100 text-rose-700 text-[13px] font-semibold rounded-xl dark:bg-rose-500/10 dark:border-rose-500/20 dark:text-rose-300">
                 Caution: this amount exceeds the {formatCurrency(advancesOutstanding)} currently outstanding as cash advances. Record the cash-advance-given transaction first.
               </div>
             )}
 
             {showMembershipReceivableWarning && (
-              <div className="sm:col-span-2 p-3 bg-rose-50 border border-rose-100 text-rose-700 text-[11px] font-semibold rounded-xl dark:bg-rose-500/10 dark:border-rose-500/20 dark:text-rose-300">
+              <div className="sm:col-span-2 p-3 bg-rose-50 border border-rose-100 text-rose-700 text-[13px] font-semibold rounded-xl dark:bg-rose-500/10 dark:border-rose-500/20 dark:text-rose-300">
                 Caution: this exceeds the {formatCurrency(membershipReceivableOutstanding)} currently on the books as Membership Dues Receivable. Make sure the fee was accrued and recorded as a receivable in the previous reporting period/semester.
               </div>
             )}
@@ -2300,59 +2304,59 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               <div className="sm:col-span-2 space-y-4 rounded-xl border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-500/20 dark:bg-indigo-500/10">
                 <div>
                   <h4 className="flex items-center gap-2 text-xs font-black text-violet-700 dark:text-violet-300">Sale of merchandise</h4>
-                  <p className="mt-1 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Select the item and its batch reference (the same batch reference used in Acquisition of Merchandise for Sale), then enter the cost of all items sold and the total sales.</p>
+                  <p className="mt-1 text-[12px] font-medium text-indigo-700 dark:text-indigo-300">Select the item and its batch reference (the same batch reference used in Acquisition of Merchandise for Sale), then enter the cost of all items sold and the total sales.</p>
                 </div>
 
                 {merchandiseBatches.length === 0 ? (
-                  <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[10px] font-bold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">No batch with inventory cost remaining was found. Record an Acquisition of Merchandise first.</p>
+                  <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[12px] font-bold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">No batch with inventory cost remaining was found. Record an Acquisition of Merchandise first.</p>
                 ) : (
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Name of item</label>
+                      <label className="block text-[12px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Name of item</label>
                       <select value={effectiveMerchandiseSaleItem} onChange={event => { setMerchandiseSaleItem(event.target.value); setMerchandiseSaleBatchId(''); setMerchandiseQuantitySold(''); setMerchandiseCost(''); }} className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required>
                         <option value="" disabled>Select an inventory item…</option>
                         {merchandiseSaleItems.map(item => <option key={item} value={item}>{item}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Batch reference</label>
+                      <label className="block text-[12px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Batch reference</label>
                       <select value={merchandiseSaleBatchId} onChange={event => { setMerchandiseSaleBatchId(event.target.value); setMerchandiseQuantitySold(''); setMerchandiseCost(''); }} disabled={!effectiveMerchandiseSaleItem} className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none disabled:cursor-not-allowed disabled:bg-slate-100 dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100 dark:disabled:bg-slate-800/60" required>
                         <option value="" disabled>{effectiveMerchandiseSaleItem ? 'Select a batch reference…' : 'Choose an item first'}</option>
                         {merchandiseBatchesForSelectedItem.map(batch => <option key={batch.entryId} value={batch.entryId}>{batch.batch} — {formatCurrency(batch.netInventoryBalance)} of cost remaining</option>)}
                       </select>
                     </div>
-                    {selectedMerchandiseBatch && <p className="sm:col-span-2 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Total Cost of This Batch: {formatCurrency(selectedMerchandiseBatch.acquisitionCost)}. {formatCurrency(selectedMerchandiseBatch.netInventoryBalance)} of it has not been released to Cost of Sales yet.</p>}
+                    {selectedMerchandiseBatch && <p className="sm:col-span-2 text-[12px] font-medium text-indigo-700 dark:text-indigo-300">Total Cost of This Batch: {formatCurrency(selectedMerchandiseBatch.acquisitionCost)}. {formatCurrency(selectedMerchandiseBatch.netInventoryBalance)} of it has not been released to Cost of Sales yet.</p>}
                   </div>
                 )}
 
                 <div>
-                  <label className="flex items-center gap-1.5 text-[10px] font-bold text-indigo-900 dark:text-indigo-200">Cost of all items sold <span title="Cost of sales is the total cost of the items sold. It includes the purchase price and any costs directly attributable to preparing or producing the merchandise, such as materials, design fees, printing, or labor." className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-indigo-300 text-[9px] font-black">?</span></label>
+                  <label className="flex items-center gap-1.5 text-[12px] font-bold text-indigo-900 dark:text-indigo-200">Cost of all items sold <span title="Cost of sales is the total cost of the items sold. It includes the purchase price and any costs directly attributable to preparing or producing the merchandise, such as materials, design fees, printing, or labor." className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-indigo-300 text-[11px] font-black">?</span></label>
                   <div className="relative mt-1.5"><span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-indigo-500">{settings.currencySymbol}</span><input type="number" step="0.01" min="0.01" max={selectedMerchandiseBatch?.netInventoryBalance || undefined} value={merchandiseCost} onChange={event => setMerchandiseCost(event.target.value)} placeholder="Enter the total cost of the items sold" className="w-full rounded-lg border border-indigo-200 bg-white p-2.5 pl-8 text-xs font-bold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required /></div>
-                  <p className="mt-1.5 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Include all costs attributable to the merchandise being sold, including purchase, materials, design, printing, and labor costs. The amount cannot exceed the {formatCurrency(selectedMerchandiseBatch?.netInventoryBalance || 0)} remaining for the selected batch. This automatically debits Cost of Sales and credits Merchandise Inventory.</p>
+                  <p className="mt-1.5 text-[12px] font-medium text-indigo-700 dark:text-indigo-300">Include all costs attributable to the merchandise being sold, including purchase, materials, design, printing, and labor costs. The amount cannot exceed the {formatCurrency(selectedMerchandiseBatch?.netInventoryBalance || 0)} remaining for the selected batch. This automatically debits Cost of Sales and credits Merchandise Inventory.</p>
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold text-indigo-900 dark:text-indigo-200">Total sales</label>
+                  <label className="block text-[12px] font-bold text-indigo-900 dark:text-indigo-200">Total sales</label>
                   <div className="relative mt-1.5"><span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-indigo-500">{settings.currencySymbol}</span><input type="number" min="0.01" step="0.01" value={merchandiseTotalSales} onChange={event => setMerchandiseTotalSales(event.target.value)} placeholder="0.00" className="w-full rounded-lg border border-indigo-200 bg-white p-2.5 pl-8 text-xs font-bold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required /></div>
-                  <p className="mt-1.5 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">You can compute this by: Quantity Sold x Selling Price</p>
+                  <p className="mt-1.5 text-[12px] font-medium text-indigo-700 dark:text-indigo-300">You can compute this by: Quantity Sold x Selling Price</p>
                 </div>
 
                 {selectedMerchandiseBatch && (
                   <div className="rounded-lg border border-indigo-200 bg-white/80 p-3 dark:border-indigo-500/30 dark:bg-slate-900/60">
-                    <span className="text-[9px] font-bold uppercase text-slate-500">Previously recorded downpayment (if applicable)</span>
+                    <span className="text-[11px] font-bold uppercase text-slate-500">Previously recorded downpayment (if applicable)</span>
                     {matchingBuyerDownpayments.amount > 0 ? (
                       <>
                         <p className="mt-1 text-lg font-black text-indigo-800 dark:text-indigo-200">{formatCurrency(matchingBuyerDownpayments.amount)}</p>
-                        <p className="text-[9px] text-slate-500">Total buyer downpayments for {selectedMerchandiseBatch.item} — {selectedMerchandiseBatch.batch}{matchingBuyerDownpayments.draftCount > 0 ? ` (${matchingBuyerDownpayments.draftCount} still ${matchingBuyerDownpayments.draftCount === 1 ? 'a draft' : 'drafts'})` : ''}. They are applied to this sale and taken out of Unearned Merchandise Revenue.</p>
+                        <p className="text-[11px] text-slate-500">Total buyer downpayments for {selectedMerchandiseBatch.item} — {selectedMerchandiseBatch.batch}{matchingBuyerDownpayments.draftCount > 0 ? ` (${matchingBuyerDownpayments.draftCount} still ${matchingBuyerDownpayments.draftCount === 1 ? 'a draft' : 'drafts'})` : ''}. They are applied to this sale and taken out of Unearned Merchandise Revenue.</p>
                       </>
                     ) : (
-                      <p className="mt-1 text-[10px] font-medium text-slate-500 dark:text-slate-400">No buyer downpayment was found for this item and batch. If buyers paid in advance, check that the pre-order reference matches this batch.</p>
+                      <p className="mt-1 text-[12px] font-medium text-slate-500 dark:text-slate-400">No buyer downpayment was found for this item and batch. If buyers paid in advance, check that the pre-order reference matches this batch.</p>
                     )}
                   </div>
                 )}
 
                 <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">How was payment collected during this reporting period?</label>
+                  <label className="block text-[12px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">How was payment collected during this reporting period?</label>
                   <select value={merchandiseCollectionMethod} onChange={event => setMerchandiseCollectionMethod(event.target.value as MerchandiseCollectionMethod)} className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100">
                     <option value="not-yet-collected">Not yet collected</option>
                     <option value="organization-direct">Collected directly by the organization</option>
@@ -2365,7 +2369,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                 )}
 
                 {(merchandiseSaleResult.posting?.refundLiability || 0) > 0 && (
-                  <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[10px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+                  <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[12px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
                     {formatCurrency(merchandiseSaleResult.posting?.refundLiability || 0)} more was collected (including downpayments) than the Total Sales. The excess is recorded as Refund Liability - Merchandise; resolve it later with Excess Merchandise Collection - Status.
                   </p>
                 )}
@@ -2373,7 +2377,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                 {merchandiseCollectionMethod === 'officer-to-remit' && (
                   <>
                     <div>
-                      <label className="block text-[10px] font-bold text-indigo-900 dark:text-indigo-200">Accountable officer</label>
+                      <label className="block text-[12px] font-bold text-indigo-900 dark:text-indigo-200">Accountable officer</label>
                       <input type="text" value={merchandiseCollectionOfficer} onChange={event => setMerchandiseCollectionOfficer(event.target.value)} placeholder="Officer who collected the payments" className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required />
                     </div>
                     <DatedAmountRows label="How much was remitted to the organization?" rows={merchandiseRemittances} onChange={setMerchandiseRemittances} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={merchandiseCollectionTotal} addLabel="Add remittance" />
@@ -2382,12 +2386,12 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
 
                 {merchandiseSaleResult.posting && (
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <div className="rounded-lg bg-white/80 p-3 text-[10px] dark:bg-slate-900/60"><span className="font-bold text-slate-500">Still receivable from buyers</span><p className="mt-1 font-black text-rose-700 dark:text-rose-300">{formatCurrency(merchandiseSaleResult.posting.accountsReceivable)}</p></div>
-                    {merchandiseCollectionMethod === 'officer-to-remit' && <div className="rounded-lg bg-white/80 p-3 text-[10px] dark:bg-slate-900/60"><span className="font-bold text-slate-500">Still held by officer</span><p className="mt-1 font-black text-amber-700 dark:text-amber-300">{formatCurrency(merchandiseSaleResult.posting.dueFromOfficer)}</p></div>}
+                    <div className="rounded-lg bg-white/80 p-3 text-[12px] dark:bg-slate-900/60"><span className="font-bold text-slate-500">Still receivable from buyers</span><p className="mt-1 font-black text-rose-700 dark:text-rose-300">{formatCurrency(merchandiseSaleResult.posting.accountsReceivable)}</p></div>
+                    {merchandiseCollectionMethod === 'officer-to-remit' && <div className="rounded-lg bg-white/80 p-3 text-[12px] dark:bg-slate-900/60"><span className="font-bold text-slate-500">Still held by officer</span><p className="mt-1 font-black text-amber-700 dark:text-amber-300">{formatCurrency(merchandiseSaleResult.posting.dueFromOfficer)}</p></div>}
                   </div>
                 )}
-                {merchandiseCollectionMethod !== 'not-yet-collected' && (merchandiseSaleResult.posting?.accountsReceivable || 0) > 0 && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[10px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">{MERCHANDISE_SALE_SHORTFALL_CAUTION}</p>}
-                {merchandiseSaleResult.error && <p className="text-[10px] font-bold text-rose-700 dark:text-rose-300">{merchandiseSaleResult.error}</p>}
+                {merchandiseCollectionMethod !== 'not-yet-collected' && (merchandiseSaleResult.posting?.accountsReceivable || 0) > 0 && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[12px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">{MERCHANDISE_SALE_SHORTFALL_CAUTION}</p>}
+                {merchandiseSaleResult.error && <p className="text-[12px] font-bold text-rose-700 dark:text-rose-300">{merchandiseSaleResult.error}</p>}
               </div>
             )}
 
@@ -2395,58 +2399,58 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               <div className="sm:col-span-2 space-y-4 rounded-xl border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-500/20 dark:bg-indigo-500/10">
               <div>
                   <h4 className="text-xs font-black text-violet-700 dark:text-violet-300">{isPpeAcquisition ? 'Property, Plant and Equipment purchase' : 'Outright expense payment'}</h4>
-                  <p className="mt-1 text-[10px] font-medium text-indigo-700 dark:text-indigo-300">Record the full {isPpeAcquisition ? 'purchase cost' : 'expense'} now. Each payment is posted separately; any unpaid balance remains in {activeAccounts.find(account => account.code === guidedPayableAccountCode)?.name || 'the related payable'} for Review.</p>
+                  <p className="mt-1 text-[12px] font-medium text-indigo-700 dark:text-indigo-300">Record the full {isPpeAcquisition ? 'purchase cost' : 'expense'} now. Each payment is posted separately; any unpaid balance remains in {activeAccounts.find(account => account.code === guidedPayableAccountCode)?.name || 'the related payable'} for Review.</p>
                 </div>
                 {isOutrightExpense && <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Is this expense for an event?</label>
+                    <label className="block text-[12px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Is this expense for an event?</label>
                     <select value={expenseEvent} onChange={event => setExpenseEvent(event.target.value as '' | 'yes' | 'no')} className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100">
                       <option value="">Select Yes or No</option><option value="yes">Yes</option><option value="no">No</option>
                     </select>
                   </div>
-                  {expenseEvent === 'yes' && <div><label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Event name</label><input value={expenseEventName} onChange={event => setExpenseEventName(event.target.value)} placeholder="Name of event" className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required /></div>}
+                  {expenseEvent === 'yes' && <div><label className="block text-[12px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Event name</label><input value={expenseEventName} onChange={event => setExpenseEventName(event.target.value)} placeholder="Name of event" className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required /></div>}
                 </div>}
                 {isOutrightExpense && <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Date <span className="normal-case font-medium">(optional; clear to use today)</span></label>
+                  <label className="block text-[12px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Date <span className="normal-case font-medium">(optional; clear to use today)</span></label>
                   <input type="date" value={date} onChange={event => setDate(event.target.value)} className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" />
                 </div>}
-                {isOutrightExpense && expenseEvent === 'no' && <p className="text-[10px] font-semibold text-indigo-800 dark:text-indigo-200">This will be classified as General and Administrative Expense.</p>}
+                {isOutrightExpense && expenseEvent === 'no' && <p className="text-[12px] font-semibold text-indigo-800 dark:text-indigo-200">This will be classified as General and Administrative Expense.</p>}
                 {isPpeAcquisition && <>
-                  <div><label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Quantity <span className="text-rose-600">*required</span></label><input type="number" min="1" step="1" value={ppeQuantity} onChange={event => changePpeQuantity(event.target.value)} placeholder="Number of units bought" className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-bold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" /></div>
-                  <div><label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Amount per Unit <span className="text-rose-600">*required</span></label><div className="relative mt-1.5"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-indigo-500">{settings.currencySymbol}</span><input type="number" min="0" step="0.01" value={ppeUnitCost} onChange={event => changePpeUnitCost(event.target.value)} placeholder="0.00" className="w-full rounded-lg border border-indigo-200 bg-white p-2.5 pl-8 text-xs font-bold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" /></div><p className="mt-1 text-[10px] font-semibold text-rose-700 dark:text-rose-300">Note: Do not enter the total purchase cost in place of the amount per unit if the quantity is more than 1.</p></div>
-                  <p className="rounded-lg bg-white/80 p-3 text-[10px] font-bold text-indigo-900 dark:bg-slate-900/60 dark:text-indigo-200">Total Purchase Cost (Quantity × Amount per Unit): {formatCurrency(amount)}</p>
+                  <div><label className="block text-[12px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Quantity <span className="text-rose-600">*required</span></label><input type="number" min="1" step="1" value={ppeQuantity} onChange={event => changePpeQuantity(event.target.value)} placeholder="Number of units bought" className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-bold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" /></div>
+                  <div><label className="block text-[12px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Amount per Unit <span className="text-rose-600">*required</span></label><div className="relative mt-1.5"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-indigo-500">{settings.currencySymbol}</span><input type="number" min="0" step="0.01" value={ppeUnitCost} onChange={event => changePpeUnitCost(event.target.value)} placeholder="0.00" className="w-full rounded-lg border border-indigo-200 bg-white p-2.5 pl-8 text-xs font-bold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" /></div><p className="mt-1 text-[12px] font-semibold text-rose-700 dark:text-rose-300">Note: Do not enter the total purchase cost in place of the amount per unit if the quantity is more than 1.</p></div>
+                  <p className="rounded-lg bg-white/80 p-3 text-[12px] font-bold text-indigo-900 dark:bg-slate-900/60 dark:text-indigo-200">Total Purchase Cost (Quantity × Amount per Unit): {formatCurrency(amount)}</p>
                 </>}
-                {!isPpeAcquisition && <div><label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Total expense amount</label><div className="relative mt-1.5"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-indigo-500">{settings.currencySymbol}</span><input type="number" min="0" step="0.01" value={amount || ''} onChange={event => setAmount(Number(event.target.value))} placeholder="0.00" className="w-full rounded-lg border border-indigo-200 bg-white p-2.5 pl-8 text-xs font-bold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required /></div></div>}
+                {!isPpeAcquisition && <div><label className="block text-[12px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Total expense amount</label><div className="relative mt-1.5"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-indigo-500">{settings.currencySymbol}</span><input type="number" min="0" step="0.01" value={amount || ''} onChange={event => setAmount(Number(event.target.value))} placeholder="0.00" className="w-full rounded-lg border border-indigo-200 bg-white p-2.5 pl-8 text-xs font-bold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" required /></div></div>}
                 <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Payment method</label>
+                  <label className="block text-[12px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Payment method</label>
                   <select value={outrightPaymentMethod} onChange={event => changeOutrightPaymentMethod(event.target.value as OutrightExpensePaymentMethod)} className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100">
                     <option value="organization-funds">Paid directly by the organization</option><option value="officer-personal">Paid by an officer using personal money</option><option value="officer-advance">Paid using an officer cash advance</option><option value="combination">Combination of organization funds, officer money, and/or advance</option><option value="not-yet-paid">Not yet paid — will be paid next reporting period</option>
                   </select>
                 </div>
                 {(outrightPaymentMethod === 'organization-funds' || outrightPaymentMethod === 'combination') && <DatedAmountRows label={`Organization payments (available cash: ${formatCurrency(cashAvailable)})`} rows={outrightOrganizationPayments} onChange={setOutrightOrganizationPayments} currencySymbol={settings.currencySymbol} defaultDate={date} maxTotal={cashAvailable} addLabel="Add organization payment" allowBlankDates blankDateHelp="Date is optional and can be cleared. Entered dates cannot repeat." />}
                 {(outrightPaymentMethod === 'officer-personal' || outrightPaymentMethod === 'combination') && <DatedAmountRows label="Officer personal payments" rows={outrightOfficerPayments} onChange={setOutrightOfficerPayments} currencySymbol={settings.currencySymbol} defaultDate={date} addLabel="Add officer payment" allowBlankDates blankDateHelp="Date is optional and can be cleared. Entered dates cannot repeat." />}
-                {guidedCautions.reimbursementNote && <p className="rounded-lg bg-white/80 p-3 text-[10px] font-semibold text-rose-700 dark:bg-slate-900/60 dark:text-rose-300">{OFFICER_REIMBURSEMENT_NOTE}</p>}
+                {guidedCautions.reimbursementNote && <p className="rounded-lg bg-white/80 p-3 text-[12px] font-semibold text-rose-700 dark:bg-slate-900/60 dark:text-rose-300">{OFFICER_REIMBURSEMENT_NOTE}</p>}
                 {(outrightPaymentMethod === 'officer-advance' || outrightPaymentMethod === 'combination') && <DatedAmountRows label={`Payments using ${outrightOfficer.trim() || 'this officer'}'s advance (available: ${formatCurrency(selectedOfficerAdvanceBalance)})`} rows={outrightAdvancePayments} onChange={setOutrightAdvancePayments} currencySymbol={settings.currencySymbol} defaultDate={date} addLabel="Add advance payment" allowBlankDates blankDateHelp="Date is optional and can be cleared. Entered dates cannot repeat." />}
                 {usesOfficerAdvance && (outrightPaymentMethod === 'officer-advance' || noAdvanceRecord) && <OfficerAdvanceSummary rows={officerAdvanceSummary} formatCurrency={formatCurrency} />}
-                {noAdvanceRecord && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[10px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">{ADVANCE_NO_RECORD_CAUTION}</p>}
-                {guidedCautions.advanceIssue && <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-[10px] font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">{advanceCaution(guidedPurchaseKind, guidedCautions.advanceIssue)}</p>}
-                {(outrightPaymentMethod === 'officer-personal' || outrightPaymentMethod === 'officer-advance' || outrightPaymentMethod === 'combination') && <div><label className="block text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Accountable officer</label><input list="expense-officers" value={outrightOfficer} onChange={event => setOutrightOfficer(event.target.value)} placeholder="Officer who paid or used the advance" className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" /><datalist id="expense-officers">{[...new Set([...officerAdvanceSummary, ...officerPayableBalances].map(record => record.name))].map(name => <option key={name} value={name} />)}</datalist></div>}
-                {outrightPaymentMethod === 'not-yet-paid' && <p className="rounded-lg bg-white/80 p-3 text-[10px] font-semibold text-indigo-800 dark:bg-slate-900/60 dark:text-indigo-200">Posts Debit to the selected {isPpeAcquisition ? 'asset' : 'expense'} account and Credit to {activeAccounts.find(account => account.code === guidedPayableAccountCode)?.name || 'Accounts Payable'}. The payable carries into the next reporting period and remains in Review until paid.</p>}
-                {outrightExpenseResult.posting && <div className="grid grid-cols-1 gap-2 sm:grid-cols-3"><div className="rounded-lg bg-white/80 p-3 text-[10px] dark:bg-slate-900/60"><span className="font-bold text-slate-500">{activeAccounts.find(account => account.code === guidedPayableAccountCode)?.name || 'Accounts Payable - Expense'}</span><p className="mt-1 font-black text-rose-700">{formatCurrency(outrightExpenseResult.posting.dueToSupplier)}</p></div><div className="rounded-lg bg-white/80 p-3 text-[10px] dark:bg-slate-900/60"><span className="font-bold text-slate-500">Due to officer</span><p className="mt-1 font-black text-amber-700">{formatCurrency(outrightExpenseResult.posting.dueToOfficer)}</p></div><div className="rounded-lg bg-white/80 p-3 text-[10px] dark:bg-slate-900/60"><span className="font-bold text-slate-500">Advance used</span><p className="mt-1 font-black text-indigo-700">{formatCurrency(outrightExpenseResult.posting.advanceUsed)}</p></div></div>}
-                {guidedCautions.shortfall && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[10px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">{paymentShortfallCaution(guidedPurchaseKind)}</p>}
-                {guidedCautions.exceeds && <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-[10px] font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">{paymentExceedsCaution(guidedPurchaseKind)}</p>}
-                {outrightExpenseResult.error && !guidedCautions.exceeds && !guidedCautions.advanceIssue && <p className="text-[10px] font-bold text-rose-700 dark:text-rose-300">{outrightExpenseResult.error}</p>}
+                {noAdvanceRecord && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[12px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">{ADVANCE_NO_RECORD_CAUTION}</p>}
+                {guidedCautions.advanceIssue && <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-[12px] font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">{advanceCaution(guidedPurchaseKind, guidedCautions.advanceIssue)}</p>}
+                {(outrightPaymentMethod === 'officer-personal' || outrightPaymentMethod === 'officer-advance' || outrightPaymentMethod === 'combination') && <div><label className="block text-[12px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Accountable officer</label><input list="expense-officers" value={outrightOfficer} onChange={event => setOutrightOfficer(event.target.value)} placeholder="Officer who paid or used the advance" className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white p-2.5 text-xs font-semibold text-slate-900 outline-none dark:border-indigo-500/30 dark:bg-slate-800 dark:text-slate-100" /><datalist id="expense-officers">{[...new Set([...officerAdvanceSummary, ...officerPayableBalances].map(record => record.name))].map(name => <option key={name} value={name} />)}</datalist></div>}
+                {outrightPaymentMethod === 'not-yet-paid' && <p className="rounded-lg bg-white/80 p-3 text-[12px] font-semibold text-indigo-800 dark:bg-slate-900/60 dark:text-indigo-200">Posts Debit to the selected {isPpeAcquisition ? 'asset' : 'expense'} account and Credit to {activeAccounts.find(account => account.code === guidedPayableAccountCode)?.name || 'Accounts Payable'}. The payable carries into the next reporting period and remains in Review until paid.</p>}
+                {outrightExpenseResult.posting && <div className="grid grid-cols-1 gap-2 sm:grid-cols-3"><div className="rounded-lg bg-white/80 p-3 text-[12px] dark:bg-slate-900/60"><span className="font-bold text-slate-500">{activeAccounts.find(account => account.code === guidedPayableAccountCode)?.name || 'Accounts Payable - Expense'}</span><p className="mt-1 font-black text-rose-700">{formatCurrency(outrightExpenseResult.posting.dueToSupplier)}</p></div><div className="rounded-lg bg-white/80 p-3 text-[12px] dark:bg-slate-900/60"><span className="font-bold text-slate-500">Due to officer</span><p className="mt-1 font-black text-amber-700">{formatCurrency(outrightExpenseResult.posting.dueToOfficer)}</p></div><div className="rounded-lg bg-white/80 p-3 text-[12px] dark:bg-slate-900/60"><span className="font-bold text-slate-500">Advance used</span><p className="mt-1 font-black text-indigo-700">{formatCurrency(outrightExpenseResult.posting.advanceUsed)}</p></div></div>}
+                {guidedCautions.shortfall && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[12px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">{paymentShortfallCaution(guidedPurchaseKind)}</p>}
+                {guidedCautions.exceeds && <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-[12px] font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">{paymentExceedsCaution(guidedPurchaseKind)}</p>}
+                {outrightExpenseResult.error && !guidedCautions.exceeds && !guidedCautions.advanceIssue && <p className="text-[12px] font-bold text-rose-700 dark:text-rose-300">{outrightExpenseResult.error}</p>}
               </div>
             )}
 
             {isDepreciationEntry && <div className="sm:col-span-2 space-y-2">
-              <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-[10px] font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">Note: Compute depreciation based on your organization’s depreciation policy and include the depreciation for the entire semester.</p>
-              <p className="rounded-lg bg-slate-50 p-3 text-[10px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">Event: General and Administrative (automatic classification)</p>
+              <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-[12px] font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">Note: Compute depreciation based on your organization’s depreciation policy and include the depreciation for the entire semester.</p>
+              <p className="rounded-lg bg-slate-50 p-3 text-[12px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">Event: General and Administrative (automatic classification)</p>
               {depreciableReferences.length > 0 && <div className="space-y-2">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">Select the purchase to depreciate</p>
+                <p className="text-[12px] font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">Select the purchase to depreciate</p>
                 {depreciableReferences.map(reference => {
                   const chosen = selectedPpe?.referenceId === reference.referenceId;
-                  return <button key={reference.referenceId} type="button" aria-pressed={chosen} onClick={() => setPpeReferenceChoice(reference.referenceId)} className={`grid w-full grid-cols-2 gap-2 rounded-lg border p-3 text-left text-[10px] sm:grid-cols-4 ${chosen ? 'border-blue-700 bg-blue-50 dark:bg-blue-500/10' : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800'}`}>
+                  return <button key={reference.referenceId} type="button" aria-pressed={chosen} onClick={() => setPpeReferenceChoice(reference.referenceId)} className={`grid w-full grid-cols-2 gap-2 rounded-lg border p-3 text-left text-[12px] sm:grid-cols-4 ${chosen ? 'border-blue-700 bg-blue-50 dark:bg-blue-500/10' : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800'}`}>
                     <span><span className="block font-bold text-slate-500">Available Quantity</span><span className="mt-1 block text-xs font-black text-slate-900 dark:text-slate-100">{reference.quantity}</span></span>
                     <span><span className="block font-bold text-slate-500">Amount per Unit</span><span className="mt-1 block text-xs font-black text-slate-900 dark:text-slate-100">{formatCurrency(reference.unitCost)}</span></span>
                     <span><span className="block font-bold text-slate-500">Remaining Original Cost</span><span className="mt-1 block text-xs font-black text-slate-900 dark:text-slate-100">{formatCurrency(reference.cost)}</span></span>
@@ -2454,23 +2458,23 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                   </button>;
                 })}
               </div>}
-              {selectedPpe && <p className="text-[10px] font-semibold text-slate-600 dark:text-slate-300">Net Book Value of the selected purchase: {formatCurrency(selectedPpe.netBookValue)}. The depreciation amount cannot be more than this.</p>}
+              {selectedPpe && <p className="text-[12px] font-semibold text-slate-600 dark:text-slate-300">Net Book Value of the selected purchase: {formatCurrency(selectedPpe.netBookValue)}. The depreciation amount cannot be more than this.</p>}
             </div>}
 
             {selectedCategory === 'ppe-transactions' && !isGuidedPurchase && <div className="sm:col-span-2 grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Quantity <span className="text-rose-600">*required</span></label>
+                <label className="block text-[13px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Quantity <span className="text-rose-600">*required</span></label>
                 <input type="number" min="1" step="1" value={ppeQuantity} onChange={event => changePpeQuantity(event.target.value)} placeholder="Number of units bought" className="w-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-blue-900 focus:ring-blue-900/10 rounded-xl text-xs font-bold p-2.5 outline-none transition-colors dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/20" />
               </div>
               <div>
-                <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Amount per Unit <span className="text-rose-600">*required</span></label>
+                <label className="block text-[13px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Amount per Unit <span className="text-rose-600">*required</span></label>
                 <input type="number" min="0" step="0.01" value={ppeUnitCost} onChange={event => changePpeUnitCost(event.target.value)} placeholder="0.00" className="w-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-blue-900 focus:ring-blue-900/10 rounded-xl text-xs font-bold p-2.5 outline-none transition-colors dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/20" />
               </div>
-              <p className="sm:col-span-2 text-[10px] font-semibold text-rose-700 dark:text-rose-300">Note: Do not enter the total purchase cost in place of the amount per unit if the quantity is more than 1. Total Purchase Cost (Quantity × Amount per Unit): {formatCurrency(amount)}</p>
+              <p className="sm:col-span-2 text-[12px] font-semibold text-rose-700 dark:text-rose-300">Note: Do not enter the total purchase cost in place of the amount per unit if the quantity is more than 1. Total Purchase Cost (Quantity × Amount per Unit): {formatCurrency(amount)}</p>
             </div>}
 
             {selectedCategory !== 'ppe-transactions' && !isGuidedPurchase && !isEventProgramExpense && !isMerchandiseAcquisition && !isMerchandiseSale && !isMerchandisePrepayment && !isBuyerDownpayment && !requiresAccrualCompletion && !isPriorMembershipCollection && !isExcessRefundStatus && <div>
-              <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">{isMerchandisePrepayment ? 'Payment' : receivableCollection ? receivableCollection.amountLabel : 'Amount'}</label>
+              <label className="block text-[13px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">{isMerchandisePrepayment ? 'Payment' : receivableCollection ? receivableCollection.amountLabel : 'Amount'}</label>
               <div className="relative">
                 <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 dark:text-slate-400">{settings.currencySymbol}</span>
                 <input
@@ -2485,9 +2489,9 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                   className="w-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-blue-900 focus:ring-blue-900/10 rounded-xl text-xs font-bold p-2.5 pl-8 outline-none transition-colors disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/20"
                 />
               </div>
-              {isDepreciationEntry && <p className="mt-1.5 text-[10px] font-bold text-slate-700 dark:text-slate-200">*Note: The amount entered here will be allocated based on the available quantity.</p>}
+              {isDepreciationEntry && <p className="mt-1.5 text-[12px] font-bold text-slate-700 dark:text-slate-200">*Note: The amount entered here will be allocated based on the available quantity.</p>}
               {receivableCollection && (
-                <p className={`mt-1.5 text-[10px] font-semibold ${amount > receivableOutstanding ? 'text-rose-700 dark:text-rose-300' : 'text-slate-500 dark:text-slate-400'}`}>
+                <p className={`mt-1.5 text-[12px] font-semibold ${amount > receivableOutstanding ? 'text-rose-700 dark:text-rose-300' : 'text-slate-500 dark:text-slate-400'}`}>
                   {amount > receivableOutstanding
                     ? receivableCollectionLimitMessage(receivableCollection, receivableOutstanding, formatCurrency)
                     : `Restricted: up to ${formatCurrency(receivableOutstanding)} can be collected (latest ${receivableCollection.accountLabel} balance).`}
@@ -2501,18 +2505,18 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               <div className="sm:col-span-2 space-y-3">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1.4fr_1fr_auto]">
                   <div>
-                    <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Amount</label>
+                    <label className="block text-[13px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Amount</label>
                     <div className="relative">
                       <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">{settings.currencySymbol}</span>
                       <input type="number" step="0.01" value={amount || ''} onChange={event => setAmount(Number(event.target.value))} placeholder="0.00" className="w-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-blue-900 focus:ring-blue-900/10 rounded-xl text-xs font-semibold p-2.5 outline-none transition-colors dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/20 pl-8" />
                     </div>
                   </div>
                   <div>
-                    <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Event Name</label>
+                    <label className="block text-[13px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Event Name</label>
                     <input type="text" value={expenseEventName} onChange={event => setExpenseEventName(event.target.value)} placeholder="Name of event or program" className="w-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-blue-900 focus:ring-blue-900/10 rounded-xl text-xs font-semibold p-2.5 outline-none transition-colors dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/20" />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Date <span className="normal-case font-medium text-slate-400">(optional)</span></label>
+                    <label className="block text-[13px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Date <span className="normal-case font-medium text-slate-400">(optional)</span></label>
                     <input type="date" value={date} onChange={event => setDate(event.target.value)} className="w-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-blue-900 focus:ring-blue-900/10 rounded-xl text-xs font-semibold p-2.5 outline-none transition-colors dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/20" />
                   </div>
                   <span className="hidden sm:block sm:w-9" aria-hidden="true" />
@@ -2528,14 +2532,14 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                     <button type="button" aria-label={`Remove event ${index + 2}`} onClick={() => setAdditionalEvents(previous => previous.filter(item => item.id !== row.id))} className="rounded-xl border border-slate-200 px-2.5 text-slate-500 hover:text-rose-600 dark:border-slate-700"><X className="h-3.5 w-3.5" /></button>
                   </div>
                 ))}
-                <button type="button" onClick={() => setAdditionalEvents(previous => [...previous, { id: `event-${Date.now()}-${previous.length}`, amount: '', eventName: '', date: '' }])} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"><PlusCircle className="h-3.5 w-3.5" /> Add Event</button>
-                {additionalEvents.length > 0 && <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Total of all events: {formatCurrency(eventExpenseTotal)}. Each event is posted as its own entry with its own event name.</p>}
-                {eventCashError && <p role="alert" className="text-[10px] font-bold text-rose-700 dark:text-rose-300">{eventCashError}</p>}
+                <button type="button" onClick={() => setAdditionalEvents(previous => [...previous, { id: `event-${Date.now()}-${previous.length}`, amount: '', eventName: '', date: '' }])} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-[13px] font-bold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"><PlusCircle className="h-3.5 w-3.5" /> Add Event</button>
+                {additionalEvents.length > 0 && <p className="text-[12px] font-semibold text-slate-500 dark:text-slate-400">Total of all events: {formatCurrency(eventExpenseTotal)}. Each event is posted as its own entry with its own event name.</p>}
+                {eventCashError && <p role="alert" className="text-[12px] font-bold text-rose-700 dark:text-rose-300">{eventCashError}</p>}
               </div>
             )}
 
             {!isMerchandiseAcquisition && !isMerchandisePrepayment && !isBuyerDownpayment && !isEventProgramExpense && !requiresAccrualCompletion && !isPriorMembershipCollection && !isExcessRefundStatus && !isOutrightExpense && <div>
-              <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">{isReceivableCollection ? 'Collection date' : 'Date'} <span className="normal-case font-medium text-slate-400">(optional; leave blank to use {defaultPostingDate})</span></label>
+              <label className="block text-[13px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">{isReceivableCollection ? 'Collection date' : 'Date'} <span className="normal-case font-medium text-slate-400">(optional; leave blank to use {defaultPostingDate})</span></label>
               <input
                 type="date"
                 value={date}
@@ -2544,19 +2548,19 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               />
             </div>}
 
-            {(reimbursementAmountError || cashLimitError) && <p role="alert" className="sm:col-span-2 text-[10px] font-bold text-rose-700 dark:text-rose-300">{reimbursementAmountError || cashLimitError}</p>}
+            {(reimbursementAmountError || cashLimitError) && <p role="alert" className="sm:col-span-2 text-[12px] font-bold text-rose-700 dark:text-rose-300">{reimbursementAmountError || cashLimitError}</p>}
 
             {!requiresAccrualCompletion && !isPriorMembershipCollection && !isExcessRefundStatus && (
               <div className="sm:col-span-2 rounded-xl border border-dashed border-slate-300 bg-slate-50/70 p-3.5 dark:border-slate-700 dark:bg-slate-950/30">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <p className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 dark:text-slate-200">
+                    <p className="flex items-center gap-1.5 text-[13px] font-bold text-slate-700 dark:text-slate-200">
                       <Paperclip className="h-3.5 w-3.5" /> Receipt / Supporting Photo <span className="font-medium text-slate-400">(optional)</span>
                     </p>
-                    <p className="mt-0.5 text-[9px] font-medium text-slate-500 dark:text-slate-400">JPG, PNG, or WebP. Up to 3 images; photos are compressed before saving.</p>
+                    <p className="mt-0.5 text-[11px] font-medium text-slate-500 dark:text-slate-400">JPG, PNG, or WebP. Up to 3 images; photos are compressed before saving.</p>
                   </div>
                   {pendingReceipts.length < 3 && (
-                    <label className="cursor-pointer rounded-lg bg-blue-700 px-3 py-1.5 text-[10px] font-bold text-white hover:bg-blue-800 dark:bg-blue-600 dark:hover:bg-blue-500">
+                    <label className="cursor-pointer rounded-lg bg-blue-700 px-3 py-1.5 text-[12px] font-bold text-white hover:bg-blue-800 dark:bg-blue-600 dark:hover:bg-blue-500">
                       {isProcessingReceipts ? 'Processing…' : pendingReceipts.length > 0 ? 'Add another' : 'Choose image'}
                       <input
                         type="file"
@@ -2582,7 +2586,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                         >
                           <X className="h-3 w-3" />
                         </button>
-                        <div className="flex gap-1 p-2 text-[9px]">
+                        <div className="flex gap-1 p-2 text-[11px]">
                           <span className="min-w-0 flex-1 truncate font-semibold text-slate-700 dark:text-slate-200">{receipt.fileName}</span>
                           <span className="text-slate-400">{formatReceiptSize(receipt.size)}</span>
                         </div>
@@ -2590,12 +2594,12 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                     ))}
                   </div>
                 )}
-                {receiptMessage && <p className="mt-2 text-[10px] font-semibold text-rose-600 dark:text-rose-300">{receiptMessage}</p>}
+                {receiptMessage && <p className="mt-2 text-[12px] font-semibold text-rose-600 dark:text-rose-300">{receiptMessage}</p>}
               </div>
             )}
 
             <div className="sm:col-span-2">
-              <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Memo / Description</label>
+              <label className="block text-[13px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Memo / Description</label>
               <input
                 type="text"
                 value={description}
@@ -2605,19 +2609,19 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               />
             </div>
 
-            <div className="sm:col-span-2 pt-1 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+            <div className="sm:col-span-2 pt-1 text-[12px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
               Accounts (determined automatically)
             </div>
 
             <div>
-              <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Debit Account (Increase Assets/Expenses)</label>
+              <label className="block text-[13px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Debit Account (Increase Assets/Expenses)</label>
               <div className="w-full bg-slate-100 border border-slate-200 text-slate-600 rounded-xl text-xs font-semibold p-2.5 dark:bg-slate-800/60 dark:border-slate-700 dark:text-slate-400">
                 {debitAccountLabels.length ? debitAccountLabels.map(label => <div key={label}>{label}</div>) : 'Select a transaction type first'}
               </div>
             </div>
 
             <div>
-              <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Credit Account (Increase Liabilities/Revenue)</label>
+              <label className="block text-[13px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Credit Account (Increase Liabilities/Revenue)</label>
               <div className="w-full bg-slate-100 border border-slate-200 text-slate-600 rounded-xl text-xs font-semibold p-2.5 dark:bg-slate-800/60 dark:border-slate-700 dark:text-slate-400">
                 {creditAccountLabels.length ? creditAccountLabels.map(label => <div key={label}>{label}</div>) : 'Select a transaction type first'}
               </div>
@@ -2643,7 +2647,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
             <h3 className="text-xs font-semibold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 pb-3">Journal Entry Preview</h3>
             
             <div className="space-y-4">
-              <div className="flex justify-between text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 px-2">
+              <div className="flex justify-between text-[12px] uppercase font-bold text-slate-500 dark:text-slate-400 px-2">
                 <span>Account & Details</span>
                 <div className="flex gap-12 w-28 justify-between">
                   <span>Debit</span>
@@ -2652,7 +2656,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               </div>
 
               {previewLines.length === 0 ? (
-                <div className="p-4 text-center text-[11px] font-medium text-slate-400 dark:text-slate-500">
+                <div className="p-4 text-center text-[13px] font-medium text-slate-400 dark:text-slate-500">
                   Select a transaction type and enter an amount to preview its journal lines.
                 </div>
               ) : orderLinesDebitsFirst(previewLines, date).map((line, index) => {
@@ -2661,7 +2665,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                   <div key={`${line.accountCode}-${index}`} className={`preview-line grid grid-cols-[1fr_7rem] items-center gap-3 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800/50 p-2 rounded-xl ${line.credit > 0 ? 'pl-6' : ''}`}>
                     <div>
                       <p className="text-slate-900 dark:text-slate-100">{account?.name || line.accountCode}</p>
-                      <p className="text-[9px] text-slate-500 dark:text-slate-400">Code: {line.accountCode} • Date: {line.date || date} • Normal: {account?.normalBalance}</p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">Code: {line.accountCode} • Date: {line.date || date} • Normal: {account?.normalBalance}</p>
                     </div>
                     <div className="grid grid-cols-2 gap-3 text-right">
                       <span className="font-bold text-slate-900 dark:text-slate-100">{line.debit > 0 ? formatCurrency(line.debit) : '—'}</span>
@@ -2672,7 +2676,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               })}
             </div>
 
-            <div className="p-3.5 bg-emerald-50 border border-emerald-100 rounded-2xl text-[10px] text-emerald-700 font-semibold flex justify-between items-center dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-400">
+            <div className="p-3.5 bg-emerald-50 border border-emerald-100 rounded-2xl text-[12px] text-emerald-700 font-semibold flex justify-between items-center dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-400">
               <span>Equation Status</span>
               <span className="flex items-center gap-1 text-emerald-700 dark:text-emerald-400">
                 <Scale className="w-3.5 h-3.5" /> {previewLines.length > 0 ? 'Balanced Dr = Cr' : 'Waiting for transaction'}
@@ -2686,17 +2690,17 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
 
             <div className="space-y-3.5">
               {projectedImpacts.length === 0 ? (
-                <p className="py-3 text-center text-[11px] font-medium text-slate-400 dark:text-slate-500">No ledger movement to preview yet.</p>
+                <p className="py-3 text-center text-[13px] font-medium text-slate-400 dark:text-slate-500">No ledger movement to preview yet.</p>
               ) : projectedImpacts.map(item => (
                 <div key={item.accountCode} className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-xs font-semibold text-slate-900 dark:text-slate-100">{item.account?.name || item.accountCode}</p>
-                    <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                    <p className="text-[12px] text-slate-500 dark:text-slate-400 font-medium">
                       {item.debit > 0 ? `Debit ${formatCurrency(item.debit)}` : `Credit ${formatCurrency(item.credit)}`} • Balance {item.normalBalanceDelta >= 0 ? 'increases' : 'decreases'}
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="text-[10px] text-slate-400 font-semibold">Before {formatCurrency(item.before)}</p>
+                    <p className="text-[12px] text-slate-400 font-semibold">Before {formatCurrency(item.before)}</p>
                     <p className={`text-xs font-bold ${item.normalBalanceDelta >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>After {formatCurrency(item.after)}</p>
                   </div>
                 </div>
@@ -2710,14 +2714,14 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
             
             <div className="grid grid-cols-2 gap-4 text-center">
               <div className="p-3 bg-blue-50 rounded-2xl border border-blue-100 dark:bg-blue-500/10 dark:border-blue-500/20">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1 dark:text-slate-400">Balance Sheet Impact</span>
+                <span className="text-[12px] font-bold text-slate-500 uppercase tracking-wider block mb-1 dark:text-slate-400">Balance Sheet Impact</span>
                 <span className="text-xs font-bold text-blue-900 dark:text-blue-200 flex items-center justify-center gap-1">
                   <Layers className="w-3.5 h-3.5" /> 
                   {assetImpact !== 0 ? `Assets: ${assetImpact > 0 ? '+' : ''}${formatCurrency(assetImpact)}` : 'No net Asset change'}
                 </span>
               </div>
               <div className="p-3 bg-orange-50 rounded-2xl border border-orange-100 dark:bg-orange-500/10 dark:border-orange-500/20">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1 dark:text-slate-400">Income Statement Impact</span>
+                <span className="text-[12px] font-bold text-slate-500 uppercase tracking-wider block mb-1 dark:text-slate-400">Income Statement Impact</span>
                 <span className={`text-xs font-bold flex items-center justify-center gap-1 ${
                   netIncomeImpact < 0 ? 'text-rose-600 dark:text-rose-400' : netIncomeImpact > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-700 dark:text-slate-300'
                 }`}>

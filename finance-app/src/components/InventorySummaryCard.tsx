@@ -15,28 +15,28 @@ export function InventorySummaryCard({ compact = false }: { compact?: boolean })
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-slate-100"><Boxes className="h-4 w-4" /> Inventory Summary</h3>
-          <p className="mt-1 text-[10px] font-medium text-slate-600 dark:text-slate-400">Lifetime merchandise inventory balance. It carries forward across fiscal years until sold or otherwise released.</p>
+          <p className="mt-1 text-[12px] font-medium text-slate-600 dark:text-slate-400">Lifetime merchandise inventory balance. It carries forward across fiscal years until sold or otherwise released.</p>
         </div>
         <div className="rounded-xl bg-white px-4 py-2 text-right shadow-sm dark:bg-slate-900">
-          <span className="block text-[9px] font-bold uppercase text-slate-400">Inventory on hand</span>
+          <span className="block text-[11px] font-bold uppercase text-slate-400">Inventory on hand</span>
           <span className="text-lg font-black text-indigo-800 dark:text-indigo-200">{formatCurrency(summary.balance)}</span>
         </div>
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
-        <div className="rounded-xl bg-white/80 p-3 dark:bg-slate-900/70"><span className="text-[9px] font-bold uppercase text-slate-400">Total inventory added</span><p className="mt-1 text-xs font-black text-emerald-700 dark:text-emerald-300">{formatCurrency(summary.totalAdded)}</p></div>
-        <div className="rounded-xl bg-white/80 p-3 dark:bg-slate-900/70"><span className="text-[9px] font-bold uppercase text-slate-400">Inventory released</span><p className="mt-1 text-xs font-black text-rose-700 dark:text-rose-300">{formatCurrency(summary.totalReleased)}</p></div>
-        <div className="rounded-xl bg-white/80 p-3 dark:bg-slate-900/70"><span className="text-[9px] font-bold uppercase text-slate-400">Cost of sales recorded</span><p className="mt-1 text-xs font-black text-slate-800 dark:text-slate-200">{formatCurrency(summary.costOfSales)}</p></div>
+        <div className="rounded-xl bg-white/80 p-3 dark:bg-slate-900/70"><span className="text-[11px] font-bold uppercase text-slate-400">Total inventory added</span><p className="mt-1 text-xs font-black text-emerald-700 dark:text-emerald-300">{formatCurrency(summary.totalAdded)}</p></div>
+        <div className="rounded-xl bg-white/80 p-3 dark:bg-slate-900/70"><span className="text-[11px] font-bold uppercase text-slate-400">Inventory released</span><p className="mt-1 text-xs font-black text-rose-700 dark:text-rose-300">{formatCurrency(summary.totalReleased)}</p></div>
+        <div className="rounded-xl bg-white/80 p-3 dark:bg-slate-900/70"><span className="text-[11px] font-bold uppercase text-slate-400">Cost of sales recorded</span><p className="mt-1 text-xs font-black text-slate-800 dark:text-slate-200">{formatCurrency(summary.costOfSales)}</p></div>
       </div>
 
       <div className="mt-4 border-t border-indigo-200 pt-3 dark:border-indigo-500/20">
-        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Recent inventory movements</p>
+        <p className="text-[12px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Recent inventory movements</p>
         {recentMovements.length === 0 ? (
-          <p className="mt-2 text-[10px] font-medium text-slate-500 dark:text-slate-400">No merchandise inventory has been recorded yet.</p>
+          <p className="mt-2 text-[12px] font-medium text-slate-500 dark:text-slate-400">No merchandise inventory has been recorded yet.</p>
         ) : (
           <div className="mt-2 space-y-1.5">
             {recentMovements.map(line => (
-              <div key={`${line.entryId}-${line.debit}-${line.credit}`} className="flex items-center justify-between gap-3 rounded-lg bg-white/70 px-3 py-2 text-[10px] dark:bg-slate-900/60">
+              <div key={`${line.entryId}-${line.debit}-${line.credit}`} className="flex items-center justify-between gap-3 rounded-lg bg-white/70 px-3 py-2 text-[12px] dark:bg-slate-900/60">
                 <span className="min-w-0"><span className="font-bold text-slate-800 dark:text-slate-200">{line.reference}</span><span className="ml-2 text-slate-500">{line.date} · {line.description}</span></span>
                 <span className={`flex shrink-0 items-center gap-1 font-black ${line.movement === 'increase' ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-700 dark:text-rose-300'}`}>{line.movement === 'increase' ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}{line.movement === 'increase' ? '+' : '−'}{formatCurrency(Math.abs(line.debit - line.credit))}</span>
               </div>
@@ -47,13 +47,13 @@ export function InventorySummaryCard({ compact = false }: { compact?: boolean })
 
       {acquisitionBatches.length > 0 && (
         <div className="mt-4 border-t border-indigo-200 pt-3 dark:border-indigo-500/20">
-          <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Recorded purchase batches</p>
+          <p className="text-[12px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Recorded purchase batches</p>
           <div className="mt-2 overflow-x-auto rounded-lg border border-indigo-100 dark:border-indigo-500/20">
-            <div className="grid min-w-[620px] grid-cols-[1.4fr_.8fr_.9fr_.9fr_.9fr] gap-2 bg-indigo-100/70 px-3 py-2 text-[9px] font-black uppercase tracking-wide text-indigo-900 dark:bg-indigo-500/15 dark:text-indigo-200">
+            <div className="grid min-w-[620px] grid-cols-[1.4fr_.8fr_.9fr_.9fr_.9fr] gap-2 bg-indigo-100/70 px-3 py-2 text-[11px] font-black uppercase tracking-wide text-indigo-900 dark:bg-indigo-500/15 dark:text-indigo-200">
               <span>Merchandise / Batch</span><span>Units purchased</span><span className="text-right">Total cost</span><span className="text-right">Cost of sales</span><span className="text-right">Net inventory</span>
             </div>
             {acquisitionBatches.map(batch => (
-              <div key={batch.entryId} className="grid min-w-[620px] grid-cols-[1.4fr_.8fr_.9fr_.9fr_.9fr] gap-2 border-t border-indigo-100 bg-white/70 px-3 py-2 text-[10px] dark:border-indigo-500/20 dark:bg-slate-900/60">
+              <div key={batch.entryId} className="grid min-w-[620px] grid-cols-[1.4fr_.8fr_.9fr_.9fr_.9fr] gap-2 border-t border-indigo-100 bg-white/70 px-3 py-2 text-[12px] dark:border-indigo-500/20 dark:bg-slate-900/60">
                 <span className="min-w-0"><span className="font-bold text-slate-800 dark:text-slate-200">{batch.item} — {batch.batch}</span><span className="block text-slate-500">{batch.reference} · {batch.date}</span></span>
                 <span className="font-bold text-slate-700 dark:text-slate-300">{batch.purchasedQuantity > 0 ? batch.purchasedQuantity : '—'}</span>
                 <span className="text-right font-bold text-slate-700 dark:text-slate-300">{formatCurrency(batch.acquisitionCost)}</span>
@@ -62,7 +62,7 @@ export function InventorySummaryCard({ compact = false }: { compact?: boolean })
               </div>
             ))}
           </div>
-          <p className="mt-2 text-[9px] font-medium text-slate-500 dark:text-slate-400">Each batch stays in this running summary across fiscal years until its inventory balance is fully released.</p>
+          <p className="mt-2 text-[11px] font-medium text-slate-500 dark:text-slate-400">Each batch stays in this running summary across fiscal years until its inventory balance is fully released.</p>
         </div>
       )}
     </section>

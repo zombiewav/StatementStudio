@@ -277,7 +277,7 @@ login flag. This is still local-browser authentication, not secure multi-device 
   (15px lines, 13px totals/headings, 20px organization name) instead of 10-12px monospace. The Statement of Financial Position lists every
   Equipment item (1500-1516), Furniture and Fixtures item (1651-1653) and both accumulated depreciation accounts under Property and Equipment
   (`isPropertyAndEquipmentAccount`, accounts 1500-1699); before, only 1500/1550/1660 were grouped there and items such as Microphone or Chairs
-  fell under Other Assets. Survey suggestions not done yet: scroll to the type list after picking a transaction category, and a larger font app-wide.
+  fell under Other Assets. Survey follow-ups, also done: Transactions scrolls smoothly to the type list / form after a category is clicked (`categoryContentRef`), and text is larger app-wide (`--text-xs`/`--text-sm` raised in the index.css theme; the arbitrary `text-[9-11px]` sizes were each moved up 2px).
 
 ## Known bugs / gaps, not yet fixed (flagged, intentionally left alone)
 

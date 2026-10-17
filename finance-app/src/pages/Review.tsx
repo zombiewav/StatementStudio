@@ -99,20 +99,20 @@ function ObligationRow({
       <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900">
         <div>
           <p className="text-xs font-bold text-slate-900 dark:text-slate-100">{obligation.description}</p>
-          <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+          <p className="text-[12px] text-slate-500 dark:text-slate-400 mt-0.5">
             {obligation.reference} • {obligation.date} • {obligationAccountLabel(obligation.accountCode, accounts)}
             {obligation.eventName ? ` • ${obligation.eventName}` : ''}
           </p>
         </div>
         <div className="flex items-center gap-4">
           <div className="text-right">
-            <p className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Remaining</p>
+            <p className="text-[11px] uppercase tracking-wider text-slate-400 font-bold">Remaining</p>
             <p className="text-sm font-black text-rose-600 dark:text-rose-400">{formatCurrency(obligation.remainingAmount)}</p>
           </div>
           <button
             type="button"
             onClick={() => setIsOpen(!isOpen)}
-            className="text-[11px] font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-500/10 px-3 py-1.5 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-500/20 transition-colors"
+            className="text-[13px] font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-500/10 px-3 py-1.5 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-500/20 transition-colors"
           >
             {isOpen ? 'Close' : 'Review'}
           </button>
@@ -122,9 +122,9 @@ function ObligationRow({
       {isOpen && (
         <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 space-y-3">
           {rowMessage && (
-            <div className="rounded-lg border border-rose-200 bg-rose-50 p-2.5 text-[10px] font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">{rowMessage}</div>
+            <div className="rounded-lg border border-rose-200 bg-rose-50 p-2.5 text-[12px] font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">{rowMessage}</div>
           )}
-          <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300">
+          <label className="block text-[13px] font-bold text-slate-700 dark:text-slate-300">
             How much of this has been used or consumed this semester?
           </label>
           <input
@@ -141,7 +141,7 @@ function ObligationRow({
           {Number(prepaidAmount) > 0 && (
             <>
               <div>
-                <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1">Purpose</label>
+                <label className="block text-[12px] font-bold text-slate-600 dark:text-slate-400 mb-1">Purpose</label>
                 <select
                   value={purpose}
                   onChange={(e) => setPurpose(e.target.value as 'general' | 'event')}
@@ -153,7 +153,7 @@ function ObligationRow({
               </div>
               {purpose === 'event' && (
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1">Event name</label>
+                  <label className="block text-[12px] font-bold text-slate-600 dark:text-slate-400 mb-1">Event name</label>
                   <input
                     value={eventName}
                     onChange={(e) => setEventName(e.target.value)}
@@ -163,7 +163,7 @@ function ObligationRow({
               )}
               {!relatedExpenseCode && (
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1">Which expense is this?</label>
+                  <label className="block text-[12px] font-bold text-slate-600 dark:text-slate-400 mb-1">Which expense is this?</label>
                   <select
                     value={expenseAccountCode}
                     onChange={(e) => setExpenseAccountCode(e.target.value)}
@@ -328,7 +328,7 @@ export function Review({ onContinueDraft, onPostDraft, notice, onNoticeShown }: 
       </div>
 
       {settlementMessage && (
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-100 bg-emerald-50 p-3 text-[11px] font-semibold text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300">
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-100 bg-emerald-50 p-3 text-[13px] font-semibold text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300">
           <span className="flex items-center gap-2">
             <CheckCircle2 className="h-4 w-4 shrink-0" /> {settlementMessage}
           </span>
@@ -336,7 +336,7 @@ export function Review({ onContinueDraft, onPostDraft, notice, onNoticeShown }: 
             <button
               type="button"
               onClick={handleUndoSettlement}
-              className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-emerald-200 bg-white/70 px-2.5 py-1 text-[10px] font-bold transition-colors hover:bg-white dark:border-emerald-500/30 dark:bg-slate-900/40 dark:hover:bg-slate-900"
+              className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-emerald-200 bg-white/70 px-2.5 py-1 text-[12px] font-bold transition-colors hover:bg-white dark:border-emerald-500/30 dark:bg-slate-900/40 dark:hover:bg-slate-900"
               title="Post a reversing entry for this settlement"
             >
               <Undo2 className="h-3.5 w-3.5" /> Undo
@@ -345,7 +345,7 @@ export function Review({ onContinueDraft, onPostDraft, notice, onNoticeShown }: 
         </div>
       )}
 
-      <div className={`rounded-xl border p-3.5 text-[11px] font-semibold flex items-center gap-2 ${incompleteCount > 0 ? 'border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300' : 'border-emerald-100 bg-emerald-50 text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300'}`}>
+      <div className={`rounded-xl border p-3.5 text-[13px] font-semibold flex items-center gap-2 ${incompleteCount > 0 ? 'border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300' : 'border-emerald-100 bg-emerald-50 text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300'}`}>
         {incompleteCount > 0 ? <AlertCircle className="h-4 w-4 shrink-0" /> : <CheckCircle2 className="h-4 w-4 shrink-0" />}
         {incompleteCount > 0
           ? `${incompleteCount} transaction${incompleteCount === 1 ? '' : 's'} must be completed before Financial Statements can be finalized.`
@@ -356,30 +356,30 @@ export function Review({ onContinueDraft, onPostDraft, notice, onNoticeShown }: 
         <section className="space-y-3">
           <div>
             <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Draft Transactions</h3>
-            <p className="mt-0.5 text-[10px] font-medium text-slate-500 dark:text-slate-400">Balanced draft journal entries are visible in the ledger, but stay out of final Financial Statements until completed. Continue the transaction to add or change details (it stays saved as a draft each time), then Post it when it is final, or Delete it.</p>
+            <p className="mt-0.5 text-[12px] font-medium text-slate-500 dark:text-slate-400">Balanced draft journal entries are visible in the ledger, but stay out of final Financial Statements until completed. Continue the transaction to add or change details (it stays saved as a draft each time), then Post it when it is final, or Delete it.</p>
           </div>
           <div className="space-y-2">
             {draftTransactions.map(draft => (
               <div key={draft.id} className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3.5 dark:border-amber-500/30 dark:bg-amber-500/10 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
                   <p className="truncate text-xs font-bold text-slate-900 dark:text-slate-100">{draft.label}</p>
-                  <p className="mt-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">Saved {new Date(draft.savedAt).toLocaleString()}</p>
+                  <p className="mt-0.5 text-[12px] font-medium text-amber-700 dark:text-amber-300">Saved {new Date(draft.savedAt).toLocaleString()}</p>
                 </div>
                 <div className="flex shrink-0 gap-2">
                   {draft.category === CUSTOMER_ORDER_DRAFT ? (
-                    <p className="max-w-[16rem] self-center text-[10px] font-semibold text-amber-800 dark:text-amber-300">This pre-order form has been retired. Delete this draft.</p>
+                    <p className="max-w-[16rem] self-center text-[12px] font-semibold text-amber-800 dark:text-amber-300">This pre-order form has been retired. Delete this draft.</p>
                   ) : (<>
                   <button
                     type="button"
                     onClick={() => onContinueDraft(draft.id)}
-                    className="rounded-lg bg-blue-700 px-3 py-1.5 text-[10px] font-bold text-white transition-colors hover:bg-blue-800 dark:bg-blue-600 dark:hover:bg-blue-500"
+                    className="rounded-lg bg-blue-700 px-3 py-1.5 text-[12px] font-bold text-white transition-colors hover:bg-blue-800 dark:bg-blue-600 dark:hover:bg-blue-500"
                   >
                     Continue
                   </button>
                   <button
                     type="button"
                     onClick={() => onPostDraft(draft.id)}
-                    className="rounded-lg bg-emerald-700 px-3 py-1.5 text-[10px] font-bold text-white transition-colors hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+                    className="rounded-lg bg-emerald-700 px-3 py-1.5 text-[12px] font-bold text-white transition-colors hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500"
                     title="Post this draft as a final transaction"
                   >
                     Post
@@ -388,7 +388,7 @@ export function Review({ onContinueDraft, onPostDraft, notice, onNoticeShown }: 
                   <button
                     type="button"
                     onClick={() => handleDeleteDraft(draft.id, draft.label)}
-                    className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-[10px] font-bold text-rose-700 transition-colors hover:bg-rose-50 dark:border-rose-500/30 dark:bg-slate-900 dark:text-rose-300 dark:hover:bg-rose-500/10"
+                    className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-[12px] font-bold text-rose-700 transition-colors hover:bg-rose-50 dark:border-rose-500/30 dark:bg-slate-900 dark:text-rose-300 dark:hover:bg-rose-500/10"
                   >
                     <Trash2 className="h-3 w-3" /> Delete
                   </button>
@@ -403,7 +403,7 @@ export function Review({ onContinueDraft, onPostDraft, notice, onNoticeShown }: 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Transaction Review</h3>
-            <p className="mt-0.5 text-[10px] font-medium text-slate-500 dark:text-slate-400">Complete follow-up work inside each red transaction. Completed transactions remain visible.</p>
+            <p className="mt-0.5 text-[12px] font-medium text-slate-500 dark:text-slate-400">Complete follow-up work inside each red transaction. Completed transactions remain visible.</p>
           </div>
           <div className="flex flex-wrap gap-1.5">
             {(['all', 'incomplete', 'complete', 'reversed'] as const).map(filter => (
@@ -411,7 +411,7 @@ export function Review({ onContinueDraft, onPostDraft, notice, onNoticeShown }: 
                 key={filter}
                 type="button"
                 onClick={() => setStatusFilter(filter)}
-                className={`rounded-lg px-3 py-1.5 text-[10px] font-bold capitalize transition-colors ${statusFilter === filter ? 'bg-blue-700 text-white dark:bg-blue-600' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-300 dark:border-slate-800 dark:hover:bg-slate-800'}`}
+                className={`rounded-lg px-3 py-1.5 text-[12px] font-bold capitalize transition-colors ${statusFilter === filter ? 'bg-blue-700 text-white dark:bg-blue-600' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-300 dark:border-slate-800 dark:hover:bg-slate-800'}`}
               >
                 {filter} {filter === 'all' ? `(${reviewStates.length})` : `(${reviewStates.filter(state => state.status === filter).length})`}
               </button>
@@ -436,14 +436,14 @@ export function Review({ onContinueDraft, onPostDraft, notice, onNoticeShown }: 
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="truncate text-xs font-bold text-slate-900 dark:text-slate-100">{state.entry.customName || state.entry.description}</p>
-                    <span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wide ${isIncomplete ? 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300' : state.status === 'complete' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300' : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300'}`}>{state.status}</span>
+                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-black uppercase tracking-wide ${isIncomplete ? 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300' : state.status === 'complete' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300' : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300'}`}>{state.status}</span>
                   </div>
-                  <p className="mt-1 text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                  <p className="mt-1 text-[12px] font-medium text-slate-500 dark:text-slate-400">
                     {state.entry.reference} • {state.entry.date} • {state.entry.transactionType || 'Legacy transaction'} • {state.entry.eventName || state.entry.project}
                   </p>
-                  {state.completedOn && <p className="mt-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">Completed {state.completedOn}</p>}
+                  {state.completedOn && <p className="mt-1 text-[12px] font-semibold text-emerald-600 dark:text-emerald-400">Completed {state.completedOn}</p>}
                   {isIncomplete && (
-                    <ul className="mt-2 space-y-1 text-[10px] font-semibold text-rose-700 dark:text-rose-300">
+                    <ul className="mt-2 space-y-1 text-[12px] font-semibold text-rose-700 dark:text-rose-300">
                       {state.missing.map(reason => <li key={reason}>• {reason}</li>)}
                     </ul>
                   )}
@@ -454,7 +454,7 @@ export function Review({ onContinueDraft, onPostDraft, notice, onNoticeShown }: 
                     type="button"
                     disabled={editLocked}
                     onClick={() => editingEntryId === state.entry.id ? setEditingEntryId(null) : beginEdit(state.entry)}
-                    className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-[10px] font-bold text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-blue-500/30 dark:bg-slate-900 dark:text-blue-300 dark:hover:bg-blue-500/10"
+                    className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-[12px] font-bold text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-blue-500/30 dark:bg-slate-900 dark:text-blue-300 dark:hover:bg-blue-500/10"
                     title={editLocked ? 'This transaction is finalized, reversed, carried forward, or in a closed period and cannot be edited.' : 'Edit this transaction'}
                   >
                     {editingEntryId === state.entry.id ? <X className="h-3 w-3" /> : <Pencil className="h-3 w-3" />}
@@ -464,7 +464,7 @@ export function Review({ onContinueDraft, onPostDraft, notice, onNoticeShown }: 
                     <button
                       type="button"
                       onClick={() => handleRestrictionRelease(state.entry, state.restrictedRemaining)}
-                      className="rounded-lg bg-rose-700 px-3 py-1.5 text-[10px] font-bold text-white transition-colors hover:bg-rose-800 dark:bg-rose-600 dark:hover:bg-rose-500"
+                      className="rounded-lg bg-rose-700 px-3 py-1.5 text-[12px] font-bold text-white transition-colors hover:bg-rose-800 dark:bg-rose-600 dark:hover:bg-rose-500"
                     >
                       Event occurred — release {formatCurrency(state.restrictedRemaining)}
                     </button>
@@ -473,7 +473,7 @@ export function Review({ onContinueDraft, onPostDraft, notice, onNoticeShown }: 
                     <button
                       type="button"
                       onClick={() => handleDeletePostedTransaction(state.entry)}
-                      className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-[10px] font-bold text-rose-700 transition-colors hover:bg-rose-50 dark:border-rose-500/30 dark:bg-slate-900 dark:text-rose-300 dark:hover:bg-rose-500/10"
+                      className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-[12px] font-bold text-rose-700 transition-colors hover:bg-rose-50 dark:border-rose-500/30 dark:bg-slate-900 dark:text-rose-300 dark:hover:bg-rose-500/10"
                       title="Permanently delete this posted transaction"
                     >
                       <Trash2 className="h-3 w-3" /> Delete
@@ -483,20 +483,20 @@ export function Review({ onContinueDraft, onPostDraft, notice, onNoticeShown }: 
               </div>
               {editingEntryId === state.entry.id && (
                 <div className="mt-4 grid grid-cols-1 gap-3 rounded-xl border border-blue-200 bg-blue-50/70 p-3 dark:border-blue-500/30 dark:bg-blue-500/5 sm:grid-cols-2">
-                  <label className="text-[10px] font-bold text-slate-700 dark:text-slate-300">Date
+                  <label className="text-[12px] font-bold text-slate-700 dark:text-slate-300">Date
                     <input type="date" value={editDate} onChange={event => setEditDate(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-200 bg-white p-2 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
                   </label>
-                  <label className="text-[10px] font-bold text-slate-700 dark:text-slate-300">Transaction description
+                  <label className="text-[12px] font-bold text-slate-700 dark:text-slate-300">Transaction description
                     <input value={editDescription} onChange={event => setEditDescription(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-200 bg-white p-2 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
                   </label>
-                  <label className="text-[10px] font-bold text-slate-700 dark:text-slate-300 sm:col-span-2">Amount
+                  <label className="text-[12px] font-bold text-slate-700 dark:text-slate-300 sm:col-span-2">Amount
                     <input type="number" min="0.01" step="0.01" value={editAmount} disabled={!amountEditable} onChange={event => setEditAmount(event.target.value)} placeholder="Amount editing is available for a single debit and credit line" className="mt-1 block w-full rounded-lg border border-slate-200 bg-white p-2 text-xs disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800" />
                     {!amountEditable && <span className="mt-1 block font-medium text-slate-500">This entry has multiple lines; the amount is locked to preserve its accounting split.</span>}
                   </label>
-                  {editError && <p role="alert" className="text-[10px] font-bold text-rose-700 sm:col-span-2">{editError}</p>}
+                  {editError && <p role="alert" className="text-[12px] font-bold text-rose-700 sm:col-span-2">{editError}</p>}
                   <div className="flex justify-end gap-2 sm:col-span-2">
-                    <button type="button" onClick={() => setEditingEntryId(null)} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-[10px] font-bold text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">Cancel</button>
-                    <button type="button" onClick={() => saveEntryEdit(state.entry)} className="rounded-lg bg-blue-700 px-3 py-1.5 text-[10px] font-bold text-white hover:bg-blue-800">Save changes</button>
+                    <button type="button" onClick={() => setEditingEntryId(null)} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-[12px] font-bold text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">Cancel</button>
+                    <button type="button" onClick={() => saveEntryEdit(state.entry)} className="rounded-lg bg-blue-700 px-3 py-1.5 text-[12px] font-bold text-white hover:bg-blue-800">Save changes</button>
                   </div>
                 </div>
               )}

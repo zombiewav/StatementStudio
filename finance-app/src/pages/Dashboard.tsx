@@ -172,7 +172,7 @@ export function Dashboard(): React.ReactElement {
           </div>
           <div>
             <h3 className="text-lg font-bold text-blue-950 dark:text-blue-100 truncate"><CountUp id="dash-assets" value={totals.Assets} format={formatCurrency} /></h3>
-            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold flex items-center gap-1 mt-1">
+            <span className="text-[12px] text-slate-400 dark:text-slate-500 font-semibold flex items-center gap-1 mt-1">
               <TrendingUp className="w-3 h-3 text-emerald-500" /> Cash, Receivables, Equipment
             </span>
           </div>
@@ -187,7 +187,7 @@ export function Dashboard(): React.ReactElement {
           </div>
           <div>
             <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 truncate"><CountUp id="dash-liabilities" value={totals.Liabilities} format={formatCurrency} /></h3>
-            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold flex items-center gap-1 mt-1">
+            <span className="text-[12px] text-slate-400 dark:text-slate-500 font-semibold flex items-center gap-1 mt-1">
               Payables & Financial Obligations
             </span>
           </div>
@@ -202,7 +202,7 @@ export function Dashboard(): React.ReactElement {
           </div>
           <div>
             <h3 className="text-lg font-bold text-emerald-700 dark:text-emerald-300 truncate"><CountUp id="dash-revenue" value={totals.Revenue} format={formatCurrency} /></h3>
-            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold flex items-center gap-1 mt-1">
+            <span className="text-[12px] text-slate-400 dark:text-slate-500 font-semibold flex items-center gap-1 mt-1">
               Grants, Donations & Student Organization Funds
             </span>
           </div>
@@ -217,7 +217,7 @@ export function Dashboard(): React.ReactElement {
           </div>
           <div>
             <h3 className="text-lg font-bold text-rose-600 dark:text-rose-300 truncate"><CountUp id="dash-expenses" value={totals.Expenses} format={formatCurrency} /></h3>
-            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold flex items-center gap-1 mt-1">
+            <span className="text-[12px] text-slate-400 dark:text-slate-500 font-semibold flex items-center gap-1 mt-1">
               Program and Operational Expenses
             </span>
           </div>
@@ -234,7 +234,7 @@ export function Dashboard(): React.ReactElement {
             <h3 className={`text-lg font-bold truncate ${netIncome >= 0 ? 'text-blue-950 dark:text-blue-100' : 'text-rose-600 dark:text-rose-300'}`}>
               {formatCurrency(netIncome)}
             </h3>
-            <span className={`text-[10px] font-semibold flex items-center gap-0.5 mt-1 ${netIncome >= 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-rose-500 dark:text-rose-300'}`}>
+            <span className={`text-[12px] font-semibold flex items-center gap-0.5 mt-1 ${netIncome >= 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-rose-500 dark:text-rose-300'}`}>
               {netIncome >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
               {netIncome >= 0 ? 'Fund Surplus' : 'Fund Deficit'}
             </span>
@@ -260,7 +260,7 @@ export function Dashboard(): React.ReactElement {
           </div>
           <div>
             <h3 className="text-base font-bold truncate">{isBalanced ? 'Balanced Records' : 'Records Require Review'}</h3>
-            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold block mt-1">
+            <span className="text-[12px] text-slate-400 dark:text-slate-500 font-semibold block mt-1">
               {isBalanced ? 'Financial records are balanced' : `Difference: ${formatCurrency(Math.abs(totals.Assets - totalLiabilitiesAndFund))}`}
             </span>
           </div>
@@ -272,13 +272,13 @@ export function Dashboard(): React.ReactElement {
           <div className="flex justify-between items-center mb-6">
             <div>
               <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">Student Organization Income vs Student Organization Expenses</h3>
-              <p className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">Comparison of monthly inflows and outflows</p>
+              <p className="text-[12px] text-slate-400 dark:text-slate-500 font-medium">Comparison of monthly inflows and outflows</p>
             </div>
             <div className="flex items-center gap-3">
-                <span className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                <span className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-500 dark:text-slate-400">
                   <span className="w-2.5 h-2.5 bg-blue-900 rounded-full" /> Student Organization Income
                 </span>
-                <span className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                <span className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-500 dark:text-slate-400">
                   <span className="w-2.5 h-2.5 bg-orange-500 rounded-full" /> Student Organization Expenses
                 </span>
             </div>
@@ -300,7 +300,7 @@ export function Dashboard(): React.ReactElement {
         <div className="lg:col-span-5 app-surface p-6 rounded-3xl">
           <div className="mb-6">
             <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">Fund Balance Trend</h3>
-            <p className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">Running balance of cash on hand over time</p>
+            <p className="text-[12px] text-slate-400 dark:text-slate-500 font-medium">Running balance of cash on hand over time</p>
           </div>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
@@ -327,13 +327,13 @@ export function Dashboard(): React.ReactElement {
           <div className="flex justify-between items-center mb-6">
             <div>
               <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">Recent Journal Entries</h3>
-              <p className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">Latest transactions recorded in the books</p>
+              <p className="text-[12px] text-slate-400 dark:text-slate-500 font-medium">Latest transactions recorded in the books</p>
             </div>
           </div>
           <div className="overflow-x-auto flex-1">
             <table className="w-full text-left min-w-[500px] text-xs">
               <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-800 text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500">
+                <tr className="border-b border-slate-200 dark:border-slate-800 text-[12px] uppercase font-bold text-slate-400 dark:text-slate-500">
                   <th className="pb-3">Ref</th>
                   <th className="pb-3">Date</th>
                   <th className="pb-3">Description</th>
@@ -352,7 +352,7 @@ export function Dashboard(): React.ReactElement {
                       </td>
                       <td className="py-2.5 font-medium text-slate-800 dark:text-slate-100 max-w-[150px] truncate">{entry.description}</td>
                       <td className="py-2.5">
-                        <span className="px-2.5 py-0.5 rounded-full bg-blue-50/80 dark:bg-blue-950/40 text-blue-900 dark:text-blue-200 font-semibold text-[10px]">
+                        <span className="px-2.5 py-0.5 rounded-full bg-blue-50/80 dark:bg-blue-950/40 text-blue-900 dark:text-blue-200 font-semibold text-[12px]">
                           {entry.project}
                         </span>
                       </td>
@@ -411,8 +411,8 @@ export function Dashboard(): React.ReactElement {
                   <div className={`w-1.5 h-1.5 rounded-full shrink-0 mt-1.5 bg-blue-600`} />
                   <div>
                     <span className="font-bold text-slate-800 dark:text-slate-100">{log.action}</span>
-                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">{log.details}</p>
-                    <span className="text-[9px] text-slate-400 dark:text-slate-500 mt-1 block">
+                    <p className="text-[12px] text-slate-500 dark:text-slate-400 mt-0.5">{log.details}</p>
+                    <span className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 block">
                       By {log.user} - {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>

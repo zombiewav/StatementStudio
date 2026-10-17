@@ -119,27 +119,27 @@ return (
       {/* KPI Stats Row */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
         <div id="a4" className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-          <span className="text-[10px] font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider block mb-1">Surplus Margin</span>
+          <span className="text-[12px] font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider block mb-1">Surplus Margin</span>
           <h4 className="text-lg font-black text-slate-900 dark:text-slate-100">{stats.profitMargin.toFixed(1)}%</h4>
-          <span className="text-[9px] text-slate-500 dark:text-slate-400 font-semibold block mt-0.5">Net Surplus divided by Inflows</span>
+          <span className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold block mt-0.5">Net Surplus divided by Inflows</span>
         </div>
 
         <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-          <span className="text-[10px] font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider block mb-1">Expense Ratio</span>
+          <span className="text-[12px] font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider block mb-1">Expense Ratio</span>
           <h4 className="text-lg font-black text-slate-900 dark:text-slate-100">{stats.expenseRatio.toFixed(1)}%</h4>
-          <span className="text-[9px] text-slate-500 dark:text-slate-400 font-semibold block mt-0.5">Outflows as % of Inflows</span>
+          <span className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold block mt-0.5">Outflows as % of Inflows</span>
         </div>
 
         <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-          <span className="text-[10px] font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider block mb-1">Operating Inflows</span>
+          <span className="text-[12px] font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider block mb-1">Operating Inflows</span>
           <h4 className="text-lg font-black text-slate-900 dark:text-slate-100">{formatCurrency(stats.totalRevenue)}</h4>
-          <span className="text-[9px] text-slate-500 dark:text-slate-400 font-semibold block mt-0.5">Total funding & earnings</span>
+          <span className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold block mt-0.5">Total funding & earnings</span>
         </div>
 
         <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-          <span className="text-[10px] font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider block mb-1">Operating Outflows</span>
+          <span className="text-[12px] font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider block mb-1">Operating Outflows</span>
           <h4 className="text-lg font-black text-slate-900 dark:text-slate-100">{formatCurrency(stats.totalExpenses)}</h4>
-          <span className="text-[9px] text-slate-500 dark:text-slate-400 font-semibold block mt-0.5">Total cost of delivery</span>
+          <span className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold block mt-0.5">Total cost of delivery</span>
         </div>
       </div>
 
@@ -149,7 +149,7 @@ return (
         <div id="a5" className="lg:col-span-8 bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm">
           <div className="mb-6">
             <h3 id="a6" className="text-sm font-bold text-slate-900 dark:text-slate-100">Program Profitability</h3>
-            <p id="a7" className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Comparison of Allocated Budget, Billed Revenues, and Actual Cost per program</p>
+            <p id="a7" className="text-[12px] text-slate-500 dark:text-slate-400 font-medium">Comparison of Allocated Budget, Billed Revenues, and Actual Cost per program</p>
           </div>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
@@ -190,7 +190,7 @@ return (
         <div className="lg:col-span-4 bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col">
           <div className="mb-6">
             <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Expense Breakdown</h3>
-            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Proportional allocation of total operational expenditures</p>
+            <p className="text-[12px] text-slate-500 dark:text-slate-400 font-medium">Proportional allocation of total operational expenditures</p>
           </div>
           
           <div className="h-48 relative flex-1">
@@ -234,7 +234,7 @@ return (
           {/* Custom Legends list */}
           <div className="mt-4 space-y-2.5 max-h-36 overflow-y-auto pr-1">
             {expenseBreakdownData.map((item, idx) => (
-              <div key={idx} className="flex items-center justify-between text-[11px] font-semibold">
+              <div key={idx} className="flex items-center justify-between text-[13px] font-semibold">
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
                   <span className="text-slate-500 dark:text-slate-400 truncate max-w-[130px]">{item.name}</span>

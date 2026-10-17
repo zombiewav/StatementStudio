@@ -270,7 +270,7 @@ export function FinancialStatements(): React.ReactElement {
         <div>
           <h2 className="font-display text-3xl text-slate-900 dark:text-slate-100">Financial <em className="text-blue-700 dark:text-blue-400">Statements</em></h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">Generate, inspect, and print official GAAP-compliant financial summaries.</p>
-          <p role="note" className="mt-2 max-w-2xl rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">Note: All transactions must be posted first before the Financial Statements can be generated. Post or delete every draft transaction and resolve every item in Review.</p>
+          <p role="note" className="mt-2 max-w-2xl rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] font-semibold text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">Note: All transactions must be posted first before the Financial Statements can be generated. Post or delete every draft transaction and resolve every item in Review.</p>
         </div>
 
         {/* Toolbar Controls */}
@@ -314,22 +314,22 @@ export function FinancialStatements(): React.ReactElement {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
         {/* Navigation Tabs - Left */}
         <div className="lg:col-span-3 bg-white dark:bg-slate-900 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-1.5 print:hidden">
-          <span className="text-[10px] font-bold text-gray-400 dark:text-slate-400 uppercase tracking-wider px-3 pb-1.5 border-b border-gray-50 dark:border-slate-800 mb-1.5">Statement Reports</span>
+          <span className="text-[12px] font-bold text-gray-400 dark:text-slate-400 uppercase tracking-wider px-3 pb-1.5 border-b border-gray-50 dark:border-slate-800 mb-1.5">Statement Reports</span>
           <div className="mb-2 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-950/40">
             <div className="flex items-center justify-between gap-2">
-              <p className="text-[10px] font-bold text-slate-700 dark:text-slate-200">Custom FS set</p>
+              <p className="text-[12px] font-bold text-slate-700 dark:text-slate-200">Custom FS set</p>
               <button
                 type="button"
                 onClick={() => setSelectedStatements({ position: true, activities: true, functional: true, cashflow: true })}
-                className="text-[9px] font-bold text-blue-700 hover:underline dark:text-blue-300"
+                className="text-[11px] font-bold text-blue-700 hover:underline dark:text-blue-300"
               >
                 Select all
               </button>
             </div>
-            <p className="mt-0.5 text-[9px] text-slate-500 dark:text-slate-400">Choose which reports are available to generate. At least one is required.</p>
+            <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">Choose which reports are available to generate. At least one is required.</p>
             <div className="mt-2 space-y-1.5">
               {STATEMENT_OPTIONS.map(option => (
-                <label key={option.id} className="flex cursor-pointer items-center gap-2 text-[10px] font-semibold text-slate-600 dark:text-slate-300">
+                <label key={option.id} className="flex cursor-pointer items-center gap-2 text-[12px] font-semibold text-slate-600 dark:text-slate-300">
                   <input
                     type="checkbox"
                     checked={selectedStatements[option.id]}
@@ -408,25 +408,25 @@ export function FinancialStatements(): React.ReactElement {
                   ? `${incompleteReviewItems.length} item${incompleteReviewItems.length === 1 ? '' : 's'} in REVIEW still need an answer before the books are final. Resolve them in Review, then come back here.`
                   : 'Complete the three required Closing Entries stages for the active fiscal year before generating financial statements.'}
               </p>
-              {negativeBalanceAccounts.length > 0 && <div className="mt-4 max-w-md mx-auto space-y-2 text-left">{negativeBalanceAccounts.map(account => <div key={account.code} className="rounded-lg border border-rose-200 bg-rose-50 px-3.5 py-2 text-[11px] font-semibold text-rose-800 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300">This account ({account.code} {account.name}, {formatCurrency(cumulativeToEndBalances[account.code] || 0)}) has a negative balance. Please check your previous transactions, as you may have missed something.</div>)}</div>}
+              {negativeBalanceAccounts.length > 0 && <div className="mt-4 max-w-md mx-auto space-y-2 text-left">{negativeBalanceAccounts.map(account => <div key={account.code} className="rounded-lg border border-rose-200 bg-rose-50 px-3.5 py-2 text-[13px] font-semibold text-rose-800 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300">This account ({account.code} {account.name}, {formatCurrency(cumulativeToEndBalances[account.code] || 0)}) has a negative balance. Please check your previous transactions, as you may have missed something.</div>)}</div>}
               <div className="mt-6 max-w-md mx-auto text-left space-y-2">
                 {pendingDrafts.slice(0, 8).map((label, index) => (
-                  <div key={`draft-${index}`} className="flex justify-between items-center px-3.5 py-2 bg-amber-50 dark:bg-amber-500/10 border border-amber-100 dark:border-amber-500/20 rounded-lg text-[11px]">
+                  <div key={`draft-${index}`} className="flex justify-between items-center px-3.5 py-2 bg-amber-50 dark:bg-amber-500/10 border border-amber-100 dark:border-amber-500/20 rounded-lg text-[13px]">
                     <span className="font-semibold text-amber-900 dark:text-amber-300 truncate pr-3">{label}</span>
                     <span className="text-amber-700 dark:text-amber-400 font-bold whitespace-nowrap">Draft</span>
                   </div>
                 ))}
                 {pendingDrafts.length > 8 && (
-                  <p className="text-[10px] text-slate-400 text-center pt-1">+{pendingDrafts.length - 8} more drafts in Review</p>
+                  <p className="text-[12px] text-slate-400 text-center pt-1">+{pendingDrafts.length - 8} more drafts in Review</p>
                 )}
                 {incompleteReviewItems.slice(0, 8).map(item => (
-                  <div key={item.entry.id} className="flex justify-between items-center px-3.5 py-2 bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 rounded-lg text-[11px]">
+                  <div key={item.entry.id} className="flex justify-between items-center px-3.5 py-2 bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 rounded-lg text-[13px]">
                     <span className="font-semibold text-rose-900 dark:text-rose-300 truncate pr-3">{item.entry.customName || item.entry.description}</span>
                     <span className="text-rose-600 dark:text-rose-400 font-bold whitespace-nowrap">Incomplete</span>
                   </div>
                 ))}
                 {incompleteReviewItems.length > 8 && (
-                  <p className="text-[10px] text-slate-400 text-center pt-1">+{incompleteReviewItems.length - 8} more in Review</p>
+                  <p className="text-[12px] text-slate-400 text-center pt-1">+{incompleteReviewItems.length - 8} more in Review</p>
                 )}
               </div>
             </div>

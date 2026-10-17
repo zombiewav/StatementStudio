@@ -127,14 +127,14 @@ export function Sidebar({
                 <item.icon className={`w-4.5 h-4.5 shrink-0 ${isActive ? 'text-blue-900 dark:text-blue-400' : 'text-slate-400 group-hover:text-blue-900 dark:group-hover:text-blue-400 transition-colors'}`} />
                 {!isCollapsed && <span className="truncate flex-1 text-left">{item.label}</span>}
                 {item.id === 'review' && pendingReviewCount > 0 && !isCollapsed && (
-                  <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${isActive ? 'bg-blue-900 text-white' : 'bg-amber-500 text-white'}`}>
+                  <span className={`text-[11px] font-black px-1.5 py-0.5 rounded-full ${isActive ? 'bg-blue-900 text-white' : 'bg-amber-500 text-white'}`}>
                     {pendingReviewCount}
                   </span>
                 )}
 
                 {/* Tooltip on Collapsed */}
                 {isCollapsed && (
-                  <div className="absolute left-16 bg-slate-900 text-white text-[10px] font-bold px-2 py-1 rounded-md opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity ml-4 z-50 white-space-nowrap shadow-md">
+                  <div className="absolute left-16 bg-slate-900 text-white text-[12px] font-bold px-2 py-1 rounded-md opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity ml-4 z-50 white-space-nowrap shadow-md">
                     {item.label}
                   </div>
                 )}

@@ -41,22 +41,22 @@ export function ReturnOfAdvancesEntry(): React.ReactElement {
 
   return <form onSubmit={submit} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-5">
     <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Return of Advances</h3>
-    <p className="mt-1 text-[10px] font-medium text-slate-500">Record cash an accountable officer gives back from an advance. The amount cannot be more than that officer's remaining advance.</p>
+    <p className="mt-1 text-[12px] font-medium text-slate-500">Record cash an accountable officer gives back from an advance. The amount cannot be more than that officer's remaining advance.</p>
     <div className="mt-4"><OfficerAdvanceSummary rows={summary} formatCurrency={formatCurrency} /></div>
     <div className="mt-4 grid gap-3 sm:grid-cols-2">
-      <label className="text-[10px] font-bold uppercase text-slate-600 sm:col-span-2">Accountable officer
+      <label className="text-[12px] font-bold uppercase text-slate-600 sm:col-span-2">Accountable officer
         <select value={officer} onChange={event => setOfficer(event.target.value)} className={inputClass}>
           <option value="">{withBalance.length ? 'Select an officer…' : 'No officer has a remaining advance'}</option>
           {withBalance.map(row => <option key={row.name} value={row.name}>{row.name} — {formatCurrency(row.balance)} remaining</option>)}
         </select>
       </label>
-      <label className="text-[10px] font-bold uppercase text-slate-600">Amount
+      <label className="text-[12px] font-bold uppercase text-slate-600">Amount
         <input type="number" min="0" step="0.01" value={amount} onChange={event => setAmount(event.target.value)} disabled={!officer} placeholder="0.00" className={inputClass} />
-        {officer && <span className={`mt-1 block text-[10px] normal-case ${value > remaining + 0.005 ? 'text-rose-600' : 'text-slate-500'}`}>Up to {formatCurrency(remaining)} can be returned.</span>}
+        {officer && <span className={`mt-1 block text-[12px] normal-case ${value > remaining + 0.005 ? 'text-rose-600' : 'text-slate-500'}`}>Up to {formatCurrency(remaining)} can be returned.</span>}
       </label>
-      <label className="text-[10px] font-bold uppercase text-slate-600">Date <span className="font-medium normal-case">(optional)</span>
+      <label className="text-[12px] font-bold uppercase text-slate-600">Date <span className="font-medium normal-case">(optional)</span>
         <input type="date" value={date} onChange={event => setDate(event.target.value)} className={inputClass} />
-        <span className="mt-1 block text-[10px] normal-case text-slate-500">If blank, the system uses {postingDate || 'the reporting period date'}.</span>
+        <span className="mt-1 block text-[12px] normal-case text-slate-500">If blank, the system uses {postingDate || 'the reporting period date'}.</span>
       </label>
     </div>
     {error && <p role="alert" className="mt-3 text-xs font-semibold text-rose-600">{error}</p>}{message && <p className="mt-3 text-xs font-semibold text-emerald-600">{message}</p>}

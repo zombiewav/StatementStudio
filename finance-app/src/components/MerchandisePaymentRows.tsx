@@ -24,7 +24,7 @@ export function MerchandisePaymentRows({ label, rows, onChange, currencySymbol, 
 
   return (
     <div className="space-y-3 payment-group">
-      <p className="text-[10px] font-black uppercase tracking-wide text-indigo-900 dark:text-indigo-200">{label}</p>
+      <p className="text-[12px] font-black uppercase tracking-wide text-indigo-900 dark:text-indigo-200">{label}</p>
       <DatedAmountRows
         label="Payment on the Date Merchandise is Received On Hand"
         rows={[first]}
@@ -49,7 +49,7 @@ export function MerchandisePaymentRows({ label, rows, onChange, currencySymbol, 
         blankDateHelp={BLANK_DATE_HELP}
       />
       {maxTotal !== undefined && total > maxTotal && (
-        <p className="text-[10px] font-bold text-rose-700 dark:text-rose-300">Total cannot exceed {currencySymbol}{maxTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.</p>
+        <p className="text-[12px] font-bold text-rose-700 dark:text-rose-300">Total cannot exceed {currencySymbol}{maxTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.</p>
       )}
     </div>
   );

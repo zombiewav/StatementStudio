@@ -342,7 +342,7 @@ export function Settings(): React.ReactElement {
             
             <div className="space-y-3.5 text-xs">
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Organization Name</label>
+                <label className="block text-[12px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Organization Name</label>
                 <input
                   type="text"
                   value={orgName}
@@ -352,7 +352,7 @@ export function Settings(): React.ReactElement {
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Reporting Fiscal Year</label>
+                <label className="block text-[12px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Reporting Fiscal Year</label>
                 <input
                   type="text"
                   value={fyName}
@@ -362,7 +362,7 @@ export function Settings(): React.ReactElement {
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Functional Currency</label>
+                <label className="block text-[12px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Functional Currency</label>
                 <select
                   value={currency}
                   onChange={(e) => setCurrency(e.target.value)}
@@ -390,20 +390,20 @@ export function Settings(): React.ReactElement {
             <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 pb-2.5 flex items-center gap-2">
               <UserIcon className="w-4.5 h-4.5 text-blue-900" /> Organization Password
             </h3>
-            <p className="text-[10px] text-slate-500 dark:text-slate-400 -mt-2">
+            <p className="text-[12px] text-slate-500 dark:text-slate-400 -mt-2">
               Everyone in your organization signs in with this one shared password.
             </p>
 
             {passwordError && (
-              <p className="text-[10px] font-semibold text-rose-600 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">{passwordError}</p>
+              <p className="text-[12px] font-semibold text-rose-600 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 rounded-lg px-3 py-2">{passwordError}</p>
             )}
             {passwordSuccess && (
-              <p className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 rounded-lg px-3 py-2">{passwordSuccess}</p>
+              <p className="text-[12px] font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 rounded-lg px-3 py-2">{passwordSuccess}</p>
             )}
 
             <div className="space-y-3.5 text-xs">
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Current Password</label>
+                <label className="block text-[12px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Current Password</label>
                 <input
                   type="password"
                   value={currentPassword}
@@ -412,7 +412,7 @@ export function Settings(): React.ReactElement {
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">New Password</label>
+                <label className="block text-[12px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">New Password</label>
                 <input
                   type="password"
                   value={newPassword}
@@ -421,7 +421,7 @@ export function Settings(): React.ReactElement {
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Confirm New Password</label>
+                <label className="block text-[12px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Confirm New Password</label>
                 <input
                   type="password"
                   value={confirmNewPassword}
@@ -462,12 +462,12 @@ export function Settings(): React.ReactElement {
               <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">Add Account Ledger Account</h4>
               
               {coaError && (
-                <p className="text-[10px] text-rose-600 font-bold bg-rose-50 p-2 rounded-lg">{coaError}</p>
+                <p className="text-[12px] text-rose-600 font-bold bg-rose-50 p-2 rounded-lg">{coaError}</p>
               )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                 <div>
-                  <label className="block text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Account Code (Unique ID)</label>
+                  <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Account Code (Unique ID)</label>
                   <input
                     type="text"
                     value={code}
@@ -479,7 +479,7 @@ export function Settings(): React.ReactElement {
                 </div>
 
                 <div>
-                  <label className="block text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Account Name</label>
+                  <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Account Name</label>
                   <input
                     type="text"
                     value={name}
@@ -491,7 +491,7 @@ export function Settings(): React.ReactElement {
                 </div>
 
                 <div>
-                  <label className="block text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Classification Category</label>
+                  <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Classification Category</label>
                   <select
                     value={type}
                     onChange={(e) => setType(e.target.value as AccountType)}
@@ -506,7 +506,7 @@ export function Settings(): React.ReactElement {
                 </div>
 
                 <div>
-                  <label className="block text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Normal Book Balance</label>
+                  <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Normal Book Balance</label>
                   <select
                     value={normalBalance}
                     onChange={(e) => setNormalBalance(e.target.value as NormalBalanceType)}
@@ -518,7 +518,7 @@ export function Settings(): React.ReactElement {
                 </div>
 
                 <div className="sm:col-span-2">
-                  <label className="block text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Account Description</label>
+                  <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Account Description</label>
                   <input
                     type="text"
                     value={description}
@@ -551,7 +551,7 @@ export function Settings(): React.ReactElement {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs select-none">
               <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-800 text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 bg-slate-50/50 dark:bg-slate-950/50">
+                <tr className="border-b border-slate-200 dark:border-slate-800 text-[12px] uppercase font-bold text-slate-500 dark:text-slate-400 bg-slate-50/50 dark:bg-slate-950/50">
                   <th className="py-2.5 px-4 w-20">Code</th>
                   <th className="py-2.5 px-4 w-40">Account Name</th>
                   <th className="py-2.5 px-4 max-w-[220px]">Description</th>
@@ -644,7 +644,7 @@ export function Settings(): React.ReactElement {
           </div>
 
           <div className="flex flex-col gap-3 border-t border-slate-200 pt-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+            <p className="text-[12px] font-semibold text-slate-500 dark:text-slate-400">
               Showing {(accountsPage - 1) * accountsPerPage + 1}–{Math.min(accountsPage * accountsPerPage, accounts.length)} of {accounts.length} accounts
             </p>
             <nav className="flex flex-wrap items-center gap-1.5" aria-label="Chart of Accounts pages">
@@ -694,18 +694,18 @@ export function Settings(): React.ReactElement {
           <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 pb-2.5 flex items-center gap-2">
             <Database className="w-4.5 h-4.5 text-blue-900 dark:text-blue-400" /> Data Backup
           </h3>
-          <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+          <p className="text-[12px] text-slate-500 dark:text-slate-400 font-medium">
             Your workspace is saved to your signed-in account, with a recovery copy in this browser. Check the save status before leaving, and export a backup regularly. Unsaved browser changes may be lost if browser data is cleared.
           </p>
 
           {restoreError && (
-            <p className="text-[10px] text-rose-600 dark:text-rose-300 font-bold bg-rose-50 dark:bg-rose-500/10 p-2 rounded-lg">{restoreError}</p>
+            <p className="text-[12px] text-rose-600 dark:text-rose-300 font-bold bg-rose-50 dark:bg-rose-500/10 p-2 rounded-lg">{restoreError}</p>
           )}
           {restoreSuccess && (
-            <p className="text-[10px] text-emerald-700 dark:text-emerald-300 font-bold bg-emerald-50 dark:bg-emerald-500/10 p-2 rounded-lg">{restoreSuccess}</p>
+            <p className="text-[12px] text-emerald-700 dark:text-emerald-300 font-bold bg-emerald-50 dark:bg-emerald-500/10 p-2 rounded-lg">{restoreSuccess}</p>
           )}
           {exportSuccess && (
-            <p className="text-[10px] text-emerald-700 dark:text-emerald-300 font-bold bg-emerald-50 dark:bg-emerald-500/10 p-2 rounded-lg">{exportSuccess}</p>
+            <p className="text-[12px] text-emerald-700 dark:text-emerald-300 font-bold bg-emerald-50 dark:bg-emerald-500/10 p-2 rounded-lg">{exportSuccess}</p>
           )}
 
           <button
@@ -736,11 +736,11 @@ export function Settings(): React.ReactElement {
             <div className="p-3.5 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-xl space-y-2.5">
               <div className="flex items-start gap-2">
                 <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                <p className="text-[11px] font-bold text-amber-800 dark:text-amber-300">
+                <p className="text-[13px] font-bold text-amber-800 dark:text-amber-300">
                   This will replace ALL current data. This cannot be undone.
                 </p>
               </div>
-              <div className="text-[10px] text-amber-700 dark:text-amber-300/80 font-medium space-y-0.5 pl-6">
+              <div className="text-[12px] text-amber-700 dark:text-amber-300/80 font-medium space-y-0.5 pl-6">
                 <p>Organization: <span className="font-bold">{pendingRestore.organizationName}</span></p>
                 <p>Exported: <span className="font-bold">{new Date(pendingRestore.exportedAt).toLocaleString()}</span></p>
                 <p>{pendingRestore.accounts.length} accounts, {pendingRestore.journalEntries.length} journal entries, {pendingRestore.projects?.length || 0} projects</p>
@@ -770,12 +770,12 @@ export function Settings(): React.ReactElement {
           <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 pb-2.5 flex items-center gap-2">
             <AlertTriangle className="w-4.5 h-4.5 text-rose-600 dark:text-rose-400" /> Reset Financial Workspace
           </h3>
-          <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+          <p className="text-[12px] text-slate-500 dark:text-slate-400 font-medium">
             Remove all transactions, receipts, activities/programs, fiscal-year closings, custom transaction types, and audit history. Your organization login, settings, currency, and Chart of Accounts will stay unchanged.
           </p>
 
           {resetSuccess && (
-            <p className="text-[10px] text-emerald-700 dark:text-emerald-300 font-bold bg-emerald-50 dark:bg-emerald-500/10 p-2 rounded-lg">{resetSuccess}</p>
+            <p className="text-[12px] text-emerald-700 dark:text-emerald-300 font-bold bg-emerald-50 dark:bg-emerald-500/10 p-2 rounded-lg">{resetSuccess}</p>
           )}
 
           {!showResetWorkspaceConfirm ? (
@@ -788,7 +788,7 @@ export function Settings(): React.ReactElement {
             </button>
           ) : (
             <div className="p-3.5 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-xl space-y-2.5">
-              <p className="text-[11px] font-bold text-rose-800 dark:text-rose-300">
+              <p className="text-[13px] font-bold text-rose-800 dark:text-rose-300">
                 This permanently removes the financial records listed above. Export a backup first if you may need them later.
               </p>
               <div className="flex gap-2">
@@ -817,21 +817,21 @@ export function Settings(): React.ReactElement {
         <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 pb-2.5 flex items-center gap-2">
           <Wallet className="w-4.5 h-4.5 text-blue-900" /> Beginning Balances
         </h3>
-        <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+        <p className="text-[12px] text-slate-500 dark:text-slate-400 font-medium">
           First-time setup: enter each asset account's opening balance before recording regular transactions. Posts as one balanced entry against General Fund Balance.
         </p>
 
         {beginningBalanceError && (
-          <p className="text-[10px] text-rose-600 font-bold bg-rose-50 dark:bg-rose-500/10 dark:text-rose-300 p-2 rounded-lg">{beginningBalanceError}</p>
+          <p className="text-[12px] text-rose-600 font-bold bg-rose-50 dark:bg-rose-500/10 dark:text-rose-300 p-2 rounded-lg">{beginningBalanceError}</p>
         )}
         {beginningBalanceSuccess && (
-          <div className="flex items-center justify-between gap-2 rounded-lg bg-emerald-50 p-2 text-[10px] font-bold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
+          <div className="flex items-center justify-between gap-2 rounded-lg bg-emerald-50 p-2 text-[12px] font-bold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
             <span>{beginningBalanceSuccess}</span>
             {lastBeginningBalanceEntry && (
               <button
                 type="button"
                 onClick={handleUndoBeginningBalances}
-                className="inline-flex shrink-0 items-center gap-1 rounded-md border border-emerald-200 bg-white/70 px-2 py-1 text-[10px] font-bold transition-colors hover:bg-white dark:border-emerald-500/30 dark:bg-slate-900/40 dark:hover:bg-slate-900"
+                className="inline-flex shrink-0 items-center gap-1 rounded-md border border-emerald-200 bg-white/70 px-2 py-1 text-[12px] font-bold transition-colors hover:bg-white dark:border-emerald-500/30 dark:bg-slate-900/40 dark:hover:bg-slate-900"
                 title="Post a reversing entry for these beginning balances"
               >
                 <Undo2 className="h-3 w-3" /> Undo
@@ -843,7 +843,7 @@ export function Settings(): React.ReactElement {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-x-4 gap-y-3 text-xs">
           {assetAccounts.map(acc => (
             <div key={acc.code}>
-              <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">{acc.name}</label>
+              <label className="block text-[12px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">{acc.name}</label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 dark:text-slate-400">{settings.currencySymbol}</span>
                 <input

@@ -53,45 +53,45 @@ export function RetirementOfPpeEntry(): React.ReactElement {
 
   return <form onSubmit={submit} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-5">
     <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Retirement of PPE</h3>
-    <p className="mt-1 text-[10px] font-medium text-slate-500">Use this transaction when your organization permanently retires or disposes of equipment or furniture and fixtures that it no longer uses.</p>
+    <p className="mt-1 text-[12px] font-medium text-slate-500">Use this transaction when your organization permanently retires or disposes of equipment or furniture and fixtures that it no longer uses.</p>
     <div className="mt-4 grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(300px,0.75fr)]">
     <div className="grid content-start gap-3 sm:grid-cols-2">
-      <label className="text-[10px] font-bold uppercase text-slate-600 sm:col-span-2">Item
+      <label className="text-[12px] font-bold uppercase text-slate-600 sm:col-span-2">Item
         <select value={itemCode} onChange={event => { setItemCode(event.target.value); setReferenceChoice(''); setConfirming(false); }} className={inputClass}>
           <option value="">{itemsWithStock.length ? 'Select an item…' : 'No PPE item has a remaining quantity'}</option>
           {itemsWithStock.map(item => <option key={item.code} value={item.code}>{item.label}</option>)}
         </select>
       </label>
-      {itemCode && <label className="text-[10px] font-bold uppercase text-slate-600 sm:col-span-2">Purchase
+      {itemCode && <label className="text-[12px] font-bold uppercase text-slate-600 sm:col-span-2">Purchase
         <select value={selected?.referenceId || ''} onChange={event => { setReferenceChoice(event.target.value); setConfirming(false); }} className={inputClass}>
           {itemReferences.length > 1 && <option value="">Select which purchase…</option>}
           {itemReferences.map(reference => <option key={reference.referenceId} value={reference.referenceId}>{describePpeReference(reference, formatCurrency)}</option>)}
         </select>
       </label>}
       {selected && <div className="grid grid-cols-2 gap-2 sm:col-span-2 sm:grid-cols-4">
-        <div className="rounded-lg bg-slate-50 p-3 text-[10px] dark:bg-slate-800"><span className="font-bold text-slate-500">Available Quantity</span><p className="mt-1 text-xs font-black text-slate-900 dark:text-slate-100">{selected.quantity}</p></div>
-        <div className="rounded-lg bg-slate-50 p-3 text-[10px] dark:bg-slate-800"><span className="font-bold text-slate-500">Amount per Unit</span><p className="mt-1 text-xs font-black text-slate-900 dark:text-slate-100">{formatCurrency(selected.unitCost)}</p></div>
-        <div className="rounded-lg bg-slate-50 p-3 text-[10px] dark:bg-slate-800"><span className="font-bold text-slate-500">Remaining Original Cost</span><p className="mt-1 text-xs font-black text-slate-900 dark:text-slate-100">{formatCurrency(selected.cost)}</p></div>
-        <div className="rounded-lg bg-slate-50 p-3 text-[10px] dark:bg-slate-800"><span className="font-bold text-slate-500">{accumulatedName} ({selected.item.label} only)</span><p className="mt-1 text-xs font-black text-slate-900 dark:text-slate-100">{formatCurrency(selected.accumulatedDepreciation)}</p></div>
+        <div className="rounded-lg bg-slate-50 p-3 text-[12px] dark:bg-slate-800"><span className="font-bold text-slate-500">Available Quantity</span><p className="mt-1 text-xs font-black text-slate-900 dark:text-slate-100">{selected.quantity}</p></div>
+        <div className="rounded-lg bg-slate-50 p-3 text-[12px] dark:bg-slate-800"><span className="font-bold text-slate-500">Amount per Unit</span><p className="mt-1 text-xs font-black text-slate-900 dark:text-slate-100">{formatCurrency(selected.unitCost)}</p></div>
+        <div className="rounded-lg bg-slate-50 p-3 text-[12px] dark:bg-slate-800"><span className="font-bold text-slate-500">Remaining Original Cost</span><p className="mt-1 text-xs font-black text-slate-900 dark:text-slate-100">{formatCurrency(selected.cost)}</p></div>
+        <div className="rounded-lg bg-slate-50 p-3 text-[12px] dark:bg-slate-800"><span className="font-bold text-slate-500">{accumulatedName} ({selected.item.label} only)</span><p className="mt-1 text-xs font-black text-slate-900 dark:text-slate-100">{formatCurrency(selected.accumulatedDepreciation)}</p></div>
       </div>}
-      <label className="text-[10px] font-bold uppercase text-slate-600">Quantity (to be disposed) <span className="text-rose-600">*required</span>
+      <label className="text-[12px] font-bold uppercase text-slate-600">Quantity (to be disposed) <span className="text-rose-600">*required</span>
         <input type="number" min="1" step="1" value={quantity} onChange={event => { setQuantity(event.target.value); setConfirming(false); }} disabled={!selected} placeholder="Units to dispose of" className={inputClass} />
       </label>
-      <label className="text-[10px] font-bold uppercase text-slate-600">Date <span className="font-medium normal-case">(optional)</span>
+      <label className="text-[12px] font-bold uppercase text-slate-600">Date <span className="font-medium normal-case">(optional)</span>
         <input type="date" value={date} onChange={event => setDate(event.target.value)} className={inputClass} />
-        <span className="mt-1 block text-[10px] normal-case text-slate-500">If blank, the system uses {postingDate || 'the reporting period date'}.</span>
+        <span className="mt-1 block text-[12px] normal-case text-slate-500">If blank, the system uses {postingDate || 'the reporting period date'}.</span>
       </label>
       {selected && plan && !plan.error && <div className="grid grid-cols-2 gap-2 sm:col-span-2 sm:grid-cols-4">
-        <div className="rounded-lg bg-indigo-50 p-3 text-[10px] dark:bg-indigo-500/10"><span className="font-bold text-slate-500">Quantity to be disposed</span><p className="mt-1 text-xs font-black">{plan.quantity}</p></div>
-        <div className="rounded-lg bg-indigo-50 p-3 text-[10px] dark:bg-indigo-500/10"><span className="font-bold text-slate-500">Original cost</span><p className="mt-1 text-xs font-black">{formatCurrency(plan.cost)}</p></div>
-        <div className="rounded-lg bg-indigo-50 p-3 text-[10px] dark:bg-indigo-500/10"><span className="font-bold text-slate-500">Accumulated depreciation</span><p className="mt-1 text-xs font-black">{formatCurrency(plan.accumulatedDepreciation)}</p></div>
-        <div className="rounded-lg bg-indigo-50 p-3 text-[10px] dark:bg-indigo-500/10"><span className="font-bold text-slate-500">Net Book Value</span><p className="mt-1 text-xs font-black">{formatCurrency(plan.netBookValue)}</p></div>
+        <div className="rounded-lg bg-indigo-50 p-3 text-[12px] dark:bg-indigo-500/10"><span className="font-bold text-slate-500">Quantity to be disposed</span><p className="mt-1 text-xs font-black">{plan.quantity}</p></div>
+        <div className="rounded-lg bg-indigo-50 p-3 text-[12px] dark:bg-indigo-500/10"><span className="font-bold text-slate-500">Original cost</span><p className="mt-1 text-xs font-black">{formatCurrency(plan.cost)}</p></div>
+        <div className="rounded-lg bg-indigo-50 p-3 text-[12px] dark:bg-indigo-500/10"><span className="font-bold text-slate-500">Accumulated depreciation</span><p className="mt-1 text-xs font-black">{formatCurrency(plan.accumulatedDepreciation)}</p></div>
+        <div className="rounded-lg bg-indigo-50 p-3 text-[12px] dark:bg-indigo-500/10"><span className="font-bold text-slate-500">Net Book Value</span><p className="mt-1 text-xs font-black">{formatCurrency(plan.netBookValue)}</p></div>
       </div>}
-      {plan?.error && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-[10px] font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300 sm:col-span-2">{plan.error}</p>}
+      {plan?.error && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-[12px] font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300 sm:col-span-2">{plan.error}</p>}
     </div>
     <div className="h-fit"><FinancialPreviewPanels lines={plan && !plan.error ? plan.lines : []} fallbackDate={postingDate} accounts={accounts} accountBalances={accountBalances} formatCurrency={formatCurrency} /></div>
     </div>
-    {confirming && warning && <div role="alertdialog" className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-[11px] font-semibold text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+    {confirming && warning && <div role="alertdialog" className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-[13px] font-semibold text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
       <p>{warning}</p>
       <div className="mt-3 flex gap-2">
         <button type="button" onClick={post} className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-bold text-white">Confirm and retire</button>

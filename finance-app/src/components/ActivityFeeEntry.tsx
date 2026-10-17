@@ -277,12 +277,12 @@ export function ActivityFeeEntry({ defaultOpen = false, draftToResume = null, on
   return (
     <section className="rounded-2xl border border-blue-200 bg-blue-50/60 dark:border-blue-500/20 dark:bg-blue-500/10">
       <button type="button" onClick={() => setOpen(value => !value)} className="flex w-full items-center justify-between gap-3 p-4 text-left">
-        <span><span className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-slate-100"><CalendarDays className="h-4 w-4" /> Activity / Event Fees</span><span className="mt-1 block text-[10px] font-medium text-slate-600 dark:text-slate-400">Record each dated collection and let the event date determine Unearned Fees, Revenue, and Receivables.</span></span>
+        <span><span className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-slate-100"><CalendarDays className="h-4 w-4" /> Activity / Event Fees</span><span className="mt-1 block text-[12px] font-medium text-slate-600 dark:text-slate-400">Record each dated collection and let the event date determine Unearned Fees, Revenue, and Receivables.</span></span>
         {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
       </button>
       {open && (
         <div className="border-t border-blue-200 p-4 dark:border-blue-500/20">
-          <label className="block text-[10px] font-bold uppercase text-slate-500">
+          <label className="block text-[12px] font-bold uppercase text-slate-500">
             Activity Fees Transaction
             <select
               value={transactionType}
@@ -300,36 +300,36 @@ export function ActivityFeeEntry({ defaultOpen = false, draftToResume = null, on
           {transactionType === 'activity-fees' ? (
         <form onSubmit={event => { event.preventDefault(); saveAsDraft(); }} className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2"><ReviewLaterNote /></div>
-          <div className="sm:col-span-2"><label className="mb-1 block text-[10px] font-bold uppercase text-slate-500">Has the event already taken place, or is it scheduled to take place during this reporting period?</label><div className="flex flex-wrap gap-2">{(['yes','no'] as const).map(answer => <button key={answer} type="button" onClick={() => setEventOccursThisPeriod(answer)} className={`rounded-lg px-4 py-2 text-xs font-bold ${eventOccursThisPeriod === answer ? 'bg-blue-700 text-white' : 'border border-slate-300 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'}`}>{answer === 'yes' ? 'Yes — this reporting period' : 'No — a future reporting period'}</button>)}</div></div>
-          <label className="text-[10px] font-bold uppercase text-slate-500">Event Name<input value={eventName} onChange={event => setEventName(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" required /></label>
-          {eventOccursThisPeriod === 'yes' && <label className="text-[10px] font-bold uppercase text-slate-500">Date of Event<input type="date" value={eventDate} onChange={event => setEventDate(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" required /></label>}
+          <div className="sm:col-span-2"><label className="mb-1 block text-[12px] font-bold uppercase text-slate-500">Has the event already taken place, or is it scheduled to take place during this reporting period?</label><div className="flex flex-wrap gap-2">{(['yes','no'] as const).map(answer => <button key={answer} type="button" onClick={() => setEventOccursThisPeriod(answer)} className={`rounded-lg px-4 py-2 text-xs font-bold ${eventOccursThisPeriod === answer ? 'bg-blue-700 text-white' : 'border border-slate-300 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'}`}>{answer === 'yes' ? 'Yes — this reporting period' : 'No — a future reporting period'}</button>)}</div></div>
+          <label className="text-[12px] font-bold uppercase text-slate-500">Event Name<input value={eventName} onChange={event => setEventName(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" required /></label>
+          {eventOccursThisPeriod === 'yes' && <label className="text-[12px] font-bold uppercase text-slate-500">Date of Event<input type="date" value={eventDate} onChange={event => setEventDate(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" required /></label>}
           {eventOccursThisPeriod === 'yes' && <>
-            <label className="text-[10px] font-bold uppercase text-slate-500">What is the total amount of activity fees for this event?<input type="number" min="0.01" step="0.01" value={totalExpected} onChange={event => setTotalExpected(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" required /><span className="mt-1 block normal-case font-medium">Note: Enter the full amount expected to be collected from all participants.</span></label>
-            <label className="text-[10px] font-bold uppercase text-slate-500">Advance Collection of Activity Fees from the Previous Reporting Period/Semester (If applicable)<input type="number" min="0" step="0.01" max={priorPeriodCollectedMax} value={priorPeriodCollected} onChange={event => setPriorPeriodCollected(event.target.value)} placeholder="Precollection" className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-xs text-slate-900 placeholder:italic placeholder:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500" /><span className="mt-1 block normal-case font-medium">Enter only the amount collected in advance for this event during a previous semester. It cannot exceed the {formatCurrency(priorPeriodCollectedMax)} beginning balance of Unearned Activity Fees.</span></label>
+            <label className="text-[12px] font-bold uppercase text-slate-500">What is the total amount of activity fees for this event?<input type="number" min="0.01" step="0.01" value={totalExpected} onChange={event => setTotalExpected(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" required /><span className="mt-1 block normal-case font-medium">Note: Enter the full amount expected to be collected from all participants.</span></label>
+            <label className="text-[12px] font-bold uppercase text-slate-500">Advance Collection of Activity Fees from the Previous Reporting Period/Semester (If applicable)<input type="number" min="0" step="0.01" max={priorPeriodCollectedMax} value={priorPeriodCollected} onChange={event => setPriorPeriodCollected(event.target.value)} placeholder="Precollection" className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-xs text-slate-900 placeholder:italic placeholder:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500" /><span className="mt-1 block normal-case font-medium">Enter only the amount collected in advance for this event during a previous semester. It cannot exceed the {formatCurrency(priorPeriodCollectedMax)} beginning balance of Unearned Activity Fees.</span></label>
           </>}
           <div className="sm:col-span-2 space-y-3 rounded-xl border border-indigo-200 bg-white/70 p-3 dark:border-indigo-500/30 dark:bg-slate-900/40">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Collections during the current reporting period / semester</p>
-              <p className="mt-1 rounded-lg bg-indigo-50 p-2.5 text-[10px] font-semibold text-indigo-800 dark:bg-indigo-500/10 dark:text-indigo-200">Include all current-semester activity-fee collections, including amounts received before the event. Do not include advance collections already reported in a previous semester.</p>
+              <p className="text-[12px] font-black uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Collections during the current reporting period / semester</p>
+              <p className="mt-1 rounded-lg bg-indigo-50 p-2.5 text-[12px] font-semibold text-indigo-800 dark:bg-indigo-500/10 dark:text-indigo-200">Include all current-semester activity-fee collections, including amounts received before the event. Do not include advance collections already reported in a previous semester.</p>
             </div>
             {eventOccursThisPeriod === 'yes' ? <>
               <div className="rounded-lg border border-indigo-100 p-3 dark:border-indigo-500/20">
                 <DatedAmountRows label="Collections before the event" rows={priorEventCollections} onChange={setPriorEventCollections} currencySymbol={settings.currencySymbol} defaultDate={dayBeforeEvent} minDate={periodBounds?.startDate} maxDate={dayBeforeEvent || undefined} addLabel="Add collection before event" allowEmptyAmounts />
-                <p className="mt-2 text-[9px] font-medium text-indigo-700 dark:text-indigo-300">Dates must be earlier than the event date. Collections received on the same date must be combined into one amount.</p>
+                <p className="mt-2 text-[11px] font-medium text-indigo-700 dark:text-indigo-300">Dates must be earlier than the event date. Collections received on the same date must be combined into one amount.</p>
               </div>
               <div className="rounded-lg border border-indigo-100 p-3 dark:border-indigo-500/20">
                 <DatedAmountRows label="Collections on or after the event" rows={onOrAfterEventCollections} onChange={setOnOrAfterEventCollections} currencySymbol={settings.currencySymbol} defaultDate={eventDate} minDate={eventDate || periodBounds?.startDate} maxDate={periodBounds?.endDate} addLabel="Add collection on/after event" allowEmptyAmounts />
-                <p className="mt-2 text-[9px] font-medium text-indigo-700 dark:text-indigo-300">Dates cannot be earlier than the event date. Collections received on the same date must be combined into one amount.</p>
+                <p className="mt-2 text-[11px] font-medium text-indigo-700 dark:text-indigo-300">Dates cannot be earlier than the event date. Collections received on the same date must be combined into one amount.</p>
               </div>
             </> : <DatedAmountRows label="Collections received for the future event" rows={collections} onChange={setCollections} currencySymbol={settings.currencySymbol} defaultDate="" minDate={periodBounds?.startDate} maxDate={periodBounds?.endDate} addLabel="Add collection" allowEmptyAmounts />}
           </div>
-          {excessCollection > 0 && eventOccursThisPeriod === 'yes' && <p className="sm:col-span-2 rounded-lg bg-amber-100 p-2 text-[10px] font-bold text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">Caution: Collections exceed the required activity fees by {formatCurrency(excessCollection)}. The excess will be recorded as Refund Liability - Activity Fees.</p>}
-          {showUnearnedBalanceWarning && <p className="sm:col-span-2 rounded-lg bg-rose-100 p-2 text-[10px] font-bold text-rose-700">Previous-period collections cannot exceed the {formatCurrency(unearnedActivityFeesBalance)} currently on the books as Unearned Activity Fees.</p>}
+          {excessCollection > 0 && eventOccursThisPeriod === 'yes' && <p className="sm:col-span-2 rounded-lg bg-amber-100 p-2 text-[12px] font-bold text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">Caution: Collections exceed the required activity fees by {formatCurrency(excessCollection)}. The excess will be recorded as Refund Liability - Activity Fees.</p>}
+          {showUnearnedBalanceWarning && <p className="sm:col-span-2 rounded-lg bg-rose-100 p-2 text-[12px] font-bold text-rose-700">Previous-period collections cannot exceed the {formatCurrency(unearnedActivityFeesBalance)} currently on the books as Unearned Activity Fees.</p>}
           {preview && preview.postings.length > 0 && (
             <div className="sm:col-span-2 space-y-2.5 rounded-xl border border-indigo-200 bg-white/70 p-3 dark:border-indigo-500/30 dark:bg-slate-900/40">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Journal Entry Preview</p>
+              <p className="text-[12px] font-bold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">Journal Entry Preview</p>
               {preview.postings.map((posting, index) => (
-                <div key={`${posting.date}-${index}`} className="rounded-lg border border-indigo-100 bg-indigo-50/60 p-2.5 text-[10px] dark:border-indigo-500/20 dark:bg-indigo-500/5">
+                <div key={`${posting.date}-${index}`} className="rounded-lg border border-indigo-100 bg-indigo-50/60 p-2.5 text-[12px] dark:border-indigo-500/20 dark:bg-indigo-500/5">
                   <p className="mb-1.5 flex items-center justify-between font-bold text-indigo-900 dark:text-indigo-200"><span>{posting.description}</span><span>{posting.date}</span></p>
                   <div className="space-y-1">
                     {orderLinesDebitsFirst(posting.lines).map((line, lineIndex) => (
@@ -343,8 +343,8 @@ export function ActivityFeeEntry({ defaultOpen = false, draftToResume = null, on
               ))}
             </div>
           )}
-          {error && <p className="sm:col-span-2 rounded-lg bg-rose-100 p-2 text-[10px] font-bold text-rose-700 dark:bg-rose-500/10 dark:text-rose-300">{error}</p>}
-          {message && <p className="sm:col-span-2 rounded-lg bg-emerald-100 p-2 text-[10px] font-bold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">{message}</p>}
+          {error && <p className="sm:col-span-2 rounded-lg bg-rose-100 p-2 text-[12px] font-bold text-rose-700 dark:bg-rose-500/10 dark:text-rose-300">{error}</p>}
+          {message && <p className="sm:col-span-2 rounded-lg bg-emerald-100 p-2 text-[12px] font-bold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">{message}</p>}
           <div className="sm:col-span-2 flex flex-col gap-2 sm:flex-row">
             <button type="submit" className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-3 text-xs font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">Save as Draft</button>
           </div>
@@ -352,10 +352,10 @@ export function ActivityFeeEntry({ defaultOpen = false, draftToResume = null, on
           ) : transactionType === 'receivable' ? (
             <form onSubmit={event => { event.preventDefault(); saveAsDraft(); }} className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="sm:col-span-2"><ReviewLaterNote /></div>
-              <p className="sm:col-span-2 text-[10px] font-medium text-slate-600 dark:text-slate-300">
+              <p className="sm:col-span-2 text-[12px] font-medium text-slate-600 dark:text-slate-300">
                 Use this for unpaid activity fees from an event that was already held or completed in a previous reporting period. Record one collection transaction at a time.
               </p>
-              <label className="sm:col-span-2 text-[10px] font-bold uppercase text-slate-500">
+              <label className="sm:col-span-2 text-[12px] font-bold uppercase text-slate-500">
                 Event with unpaid activity fees
                 <select
                   value={selectedReceivableId}
@@ -370,7 +370,7 @@ export function ActivityFeeEntry({ defaultOpen = false, draftToResume = null, on
                 </select>
               </label>
               {receivableRecords.length === 0 && (
-                <p className="sm:col-span-2 rounded-lg bg-amber-100 p-3 text-[10px] font-semibold text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
+                <p className="sm:col-span-2 rounded-lg bg-amber-100 p-3 text-[12px] font-semibold text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
                   No events currently have an outstanding Activity Fees Receivable balance.
                 </p>
               )}
@@ -386,14 +386,14 @@ export function ActivityFeeEntry({ defaultOpen = false, draftToResume = null, on
                     allowEmptyAmounts
                     allowMultiple={false}
                   />
-                  <div className="mt-3 rounded-lg bg-indigo-50 p-3 text-[10px] dark:bg-indigo-500/10">
+                  <div className="mt-3 rounded-lg bg-indigo-50 p-3 text-[12px] dark:bg-indigo-500/10">
                     <p className="font-bold text-slate-500">Automatic journal entry</p>
                     <p className="mt-1 font-semibold text-indigo-800 dark:text-indigo-200">Debit Cash • Credit Activity Fees Receivable</p>
                   </div>
                 </div>
               )}
-              {error && <p className="sm:col-span-2 rounded-lg bg-rose-100 p-2 text-[10px] font-bold text-rose-700 dark:bg-rose-500/10 dark:text-rose-300">{error}</p>}
-              {message && <p className="sm:col-span-2 rounded-lg bg-emerald-100 p-2 text-[10px] font-bold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">{message}</p>}
+              {error && <p className="sm:col-span-2 rounded-lg bg-rose-100 p-2 text-[12px] font-bold text-rose-700 dark:bg-rose-500/10 dark:text-rose-300">{error}</p>}
+              {message && <p className="sm:col-span-2 rounded-lg bg-emerald-100 p-2 text-[12px] font-bold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">{message}</p>}
               <div className="sm:col-span-2 flex flex-col gap-2 sm:flex-row">
                 <button type="submit" disabled={!selectedReceivable} className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-3 text-xs font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">Save as Draft</button>
               </div>
@@ -401,13 +401,13 @@ export function ActivityFeeEntry({ defaultOpen = false, draftToResume = null, on
           ) : (
             <form onSubmit={event => { event.preventDefault(); saveAsDraft(); }} className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="sm:col-span-2"><ReviewLaterNote /></div>
-              <p className="sm:col-span-2 text-[10px] font-medium text-slate-600 dark:text-slate-300">Use this when collections exceeded the total required activity fees. Resolve the outstanding Refund Liability for the event.</p>
-              <label className="sm:col-span-2 text-[10px] font-bold uppercase text-slate-500">Event with excess activity fees<select value={selectedExcessId} onChange={event => setSelectedExcessId(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-xs font-semibold dark:border-slate-700 dark:bg-slate-900" required><option value="">Select an event…</option>{excessRecords.map(record => <option key={record.id} value={record.id}>{record.eventName} — {formatCurrency(record.refundLiabilityBalance || 0)} refund liability</option>)}</select></label>
-              {excessRecords.length === 0 && <p className="sm:col-span-2 rounded-lg bg-amber-100 p-3 text-[10px] font-semibold text-amber-800">No events currently have an excess Activity Fees Refund Liability.</p>}
-              <label className="sm:col-span-2 text-[10px] font-bold uppercase text-slate-500">How will the excess activity fee be handled?<select value={excessStatus} onChange={event => setExcessStatus(event.target.value as typeof excessStatus)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-xs font-semibold dark:border-slate-700 dark:bg-slate-900"><option value="current">Refunded in the Current Reporting Period</option><option value="next">Will Be Refunded in the Next Reporting Period</option><option value="nonrefundable">Will Not Be Refunded</option></select></label>
-              {excessStatus !== 'next' && <><label className="text-[10px] font-bold uppercase text-slate-500">{excessStatus === 'current' ? 'Amount refunded' : 'Amount not refunded'}<input type="number" min="0.01" step="0.01" max={selectedExcess?.refundLiabilityBalance} value={excessAmount} onChange={event => setExcessAmount(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-xs dark:border-slate-700 dark:bg-slate-900" required /></label><label className="text-[10px] font-bold uppercase text-slate-500">{excessStatus === 'current' ? 'Date of refund (optional)' : 'Date recognized (optional)'}<input type="date" value={excessDate} onChange={event => setExcessDate(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-xs dark:border-slate-700 dark:bg-slate-900" /><span className="mt-1 block normal-case font-medium">Leave blank if unavailable. If entered, it must fall within the selected reporting period.</span></label></>}
-              {excessStatus === 'next' && <p className="sm:col-span-2 rounded-lg bg-indigo-50 p-3 text-[10px] font-semibold text-indigo-800 dark:bg-indigo-500/10 dark:text-indigo-200">No journal entry is posted. The refund liability remains open in Review for the next reporting period.</p>}
-              {error && <p className="sm:col-span-2 rounded-lg bg-rose-100 p-2 text-[10px] font-bold text-rose-700">{error}</p>}{message && <p className="sm:col-span-2 rounded-lg bg-emerald-100 p-2 text-[10px] font-bold text-emerald-700">{message}</p>}
+              <p className="sm:col-span-2 text-[12px] font-medium text-slate-600 dark:text-slate-300">Use this when collections exceeded the total required activity fees. Resolve the outstanding Refund Liability for the event.</p>
+              <label className="sm:col-span-2 text-[12px] font-bold uppercase text-slate-500">Event with excess activity fees<select value={selectedExcessId} onChange={event => setSelectedExcessId(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-xs font-semibold dark:border-slate-700 dark:bg-slate-900" required><option value="">Select an event…</option>{excessRecords.map(record => <option key={record.id} value={record.id}>{record.eventName} — {formatCurrency(record.refundLiabilityBalance || 0)} refund liability</option>)}</select></label>
+              {excessRecords.length === 0 && <p className="sm:col-span-2 rounded-lg bg-amber-100 p-3 text-[12px] font-semibold text-amber-800">No events currently have an excess Activity Fees Refund Liability.</p>}
+              <label className="sm:col-span-2 text-[12px] font-bold uppercase text-slate-500">How will the excess activity fee be handled?<select value={excessStatus} onChange={event => setExcessStatus(event.target.value as typeof excessStatus)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-xs font-semibold dark:border-slate-700 dark:bg-slate-900"><option value="current">Refunded in the Current Reporting Period</option><option value="next">Will Be Refunded in the Next Reporting Period</option><option value="nonrefundable">Will Not Be Refunded</option></select></label>
+              {excessStatus !== 'next' && <><label className="text-[12px] font-bold uppercase text-slate-500">{excessStatus === 'current' ? 'Amount refunded' : 'Amount not refunded'}<input type="number" min="0.01" step="0.01" max={selectedExcess?.refundLiabilityBalance} value={excessAmount} onChange={event => setExcessAmount(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-xs dark:border-slate-700 dark:bg-slate-900" required /></label><label className="text-[12px] font-bold uppercase text-slate-500">{excessStatus === 'current' ? 'Date of refund (optional)' : 'Date recognized (optional)'}<input type="date" value={excessDate} onChange={event => setExcessDate(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-xs dark:border-slate-700 dark:bg-slate-900" /><span className="mt-1 block normal-case font-medium">Leave blank if unavailable. If entered, it must fall within the selected reporting period.</span></label></>}
+              {excessStatus === 'next' && <p className="sm:col-span-2 rounded-lg bg-indigo-50 p-3 text-[12px] font-semibold text-indigo-800 dark:bg-indigo-500/10 dark:text-indigo-200">No journal entry is posted. The refund liability remains open in Review for the next reporting period.</p>}
+              {error && <p className="sm:col-span-2 rounded-lg bg-rose-100 p-2 text-[12px] font-bold text-rose-700">{error}</p>}{message && <p className="sm:col-span-2 rounded-lg bg-emerald-100 p-2 text-[12px] font-bold text-emerald-700">{message}</p>}
               <div className="sm:col-span-2 flex flex-col gap-2 sm:flex-row"><button type="submit" disabled={!selectedExcess} className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-3 text-xs font-bold text-slate-700 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">Save as Draft</button></div>
             </form>
           )}

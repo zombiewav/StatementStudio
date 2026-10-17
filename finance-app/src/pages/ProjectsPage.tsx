@@ -118,7 +118,7 @@ export function ProjectsPage(): React.ReactElement {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2">
-              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Activity Name</label>
+              <label className="block text-[12px] font-bold text-gray-400 uppercase tracking-wider mb-1">Activity Name</label>
               <input
                 type="text"
                 value={projName}
@@ -130,7 +130,7 @@ export function ProjectsPage(): React.ReactElement {
             </div>
             
             <div>
-              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Allocated Budget</label>
+              <label className="block text-[12px] font-bold text-gray-400 uppercase tracking-wider mb-1">Allocated Budget</label>
               <input
                 type="number"
                 value={budget || ''}
@@ -142,7 +142,7 @@ export function ProjectsPage(): React.ReactElement {
             </div>
 
             <div className="sm:col-span-2">
-              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Description</label>
+              <label className="block text-[12px] font-bold text-gray-400 uppercase tracking-wider mb-1">Description</label>
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
@@ -198,13 +198,13 @@ export function ProjectsPage(): React.ReactElement {
                     </div>
                     <div>
                       <h3 id="p5" className="text-xs font-black text-slate-900 dark:text-slate-100">{proj.name}</h3>
-                      <p className="text-[9px] text-slate-500 dark:text-slate-400 font-medium">Objective Fund Code</p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Objective Fund Code</p>
                     </div>
                   </div>
 
                   <button
                     onClick={() => handleStatusChange(proj.id, proj.status)}
-                    className={`text-[9px] font-bold px-2.5 py-0.5 rounded-full border cursor-pointer hover:scale-105 active:scale-95 transition-transform ${statusColors[proj.status]}`}
+                    className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border cursor-pointer hover:scale-105 active:scale-95 transition-transform ${statusColors[proj.status]}`}
 
                     type="button"
                     title="Click to cycle status"
@@ -213,7 +213,7 @@ export function ProjectsPage(): React.ReactElement {
                   </button>
                 </div>
 
-                  <p id="p6" className="text-[11px] text-slate-500 dark:text-slate-400 font-medium leading-relaxed min-h-8">
+                  <p id="p6" className="text-[13px] text-slate-500 dark:text-slate-400 font-medium leading-relaxed min-h-8">
                   {proj.description || 'No description provided.'}
                 </p>
               </div>
@@ -222,7 +222,7 @@ export function ProjectsPage(): React.ReactElement {
               <div className="grid grid-cols-3 gap-3 border-y border-slate-50 dark:border-slate-800 py-4 my-4 text-center">
 
                 <div>
-                  <span id="p7" className="text-[9px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider block mb-0.5">Budget Cap</span>
+                  <span id="p7" className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider block mb-0.5">Budget Cap</span>
                   {editingBudgetId === proj.id ? (
                     <div className="flex items-center justify-center gap-1">
                       <input
@@ -234,7 +234,7 @@ export function ProjectsPage(): React.ReactElement {
                           if (e.key === 'Enter') saveEditingBudget(proj.id);
                           if (e.key === 'Escape') setEditingBudgetId(null);
                         }}
-                        className="w-16 bg-white dark:bg-slate-950 border border-blue-900 dark:border-blue-500 rounded text-[11px] font-bold text-slate-900 dark:text-slate-100 p-0.5 outline-none text-center"
+                        className="w-16 bg-white dark:bg-slate-950 border border-blue-900 dark:border-blue-500 rounded text-[13px] font-bold text-slate-900 dark:text-slate-100 p-0.5 outline-none text-center"
                       />
                       <button type="button" onClick={() => saveEditingBudget(proj.id)} className="text-emerald-600 hover:text-emerald-700" title="Save">
                         <Check className="w-3 h-3" />
@@ -247,7 +247,7 @@ export function ProjectsPage(): React.ReactElement {
                     <button
                       type="button"
                       onClick={() => startEditingBudget(proj)}
-                      className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-900 dark:text-slate-100 hover:text-blue-900 dark:hover:text-blue-300 group"
+                      className="inline-flex items-center gap-1 text-[13px] font-bold text-slate-900 dark:text-slate-100 hover:text-blue-900 dark:hover:text-blue-300 group"
                       title="Edit budget"
                     >
                       {formatCurrency(proj.budget)}
@@ -256,12 +256,12 @@ export function ProjectsPage(): React.ReactElement {
                   )}
                 </div>
                 <div>
-                  <span className="text-[9px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider block mb-0.5">Actual Cost</span>
-                  <span className="text-[11px] font-bold text-slate-900 dark:text-slate-100">{formatCurrency(metrics.expenses)}</span>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider block mb-0.5">Actual Cost</span>
+                  <span className="text-[13px] font-bold text-slate-900 dark:text-slate-100">{formatCurrency(metrics.expenses)}</span>
                 </div>
                 <div>
-                  <span className="text-[9px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider block mb-0.5">Margin</span>
-                  <span className={`text-[11px] font-bold ${netMargin >= 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-rose-500 dark:text-rose-300'}`}>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider block mb-0.5">Margin</span>
+                  <span className={`text-[13px] font-bold ${netMargin >= 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-rose-500 dark:text-rose-300'}`}>
                     {formatCurrency(netMargin)}
                   </span>
                 </div>
@@ -269,7 +269,7 @@ export function ProjectsPage(): React.ReactElement {
 
               {/* Budget Progress Bar */}
               <div className="space-y-1.5">
-                <div className="flex justify-between items-center text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                <div className="flex justify-between items-center text-[12px] font-semibold text-slate-500 dark:text-slate-400">
                   <span>Budget Burn Rate</span>
                   <span className={spendingRatio > 100 ? 'text-rose-600 dark:text-rose-300 font-bold' : spendingRatio > 85 ? 'text-amber-500 dark:text-amber-300 font-bold' : 'text-slate-700 dark:text-slate-300'}>
 

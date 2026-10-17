@@ -12,6 +12,12 @@
   --font-serif: "Instrument Serif", "Iowan Old Style", Georgia, serif;
   --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
+  /* Client survey (Oct 2026): slightly larger text everywhere. */
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.25rem;
+  --text-sm: 0.9375rem;
+  --text-sm--line-height: 1.375rem;
+
   /* Neutrals: ink to paper. 950 = Ink, 900 = Surface, 800 = Line (dark);
      50 = Paper, 100 = Text (dark). */
   --color-slate-50: #f4f1ea;
