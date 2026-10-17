@@ -273,6 +273,12 @@ login flag. This is still local-browser authentication, not secure multi-device 
   while any draft transaction exists (`pendingDraftLabels` in `lib/statementReadiness.ts`: Review's drafts plus orphan draft entries). A note on the page always says all
   transactions must be posted first.
 
+- **Financial Statements readability (client survey, Oct 2026)**: the statements use the sans font with tabular numbers at a larger size
+  (15px lines, 13px totals/headings, 20px organization name) instead of 10-12px monospace. The Statement of Financial Position lists every
+  Equipment item (1500-1516), Furniture and Fixtures item (1651-1653) and both accumulated depreciation accounts under Property and Equipment
+  (`isPropertyAndEquipmentAccount`, accounts 1500-1699); before, only 1500/1550/1660 were grouped there and items such as Microphone or Chairs
+  fell under Other Assets. Survey suggestions not done yet: scroll to the type list after picking a transaction category, and a larger font app-wide.
+
 ## Known bugs / gaps, not yet fixed (flagged, intentionally left alone)
 
 - **Activities & Programs**: budget is now editable inline (click the Budget Cap figure), but

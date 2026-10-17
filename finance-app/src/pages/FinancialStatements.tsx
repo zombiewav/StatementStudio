@@ -14,6 +14,7 @@ import { computeTransactionReviewStates } from '../lib/reviewEngine';
 import { buildCashFlowStatement, EQUIPMENT_PURCHASE_LABEL, FURNITURE_PURCHASE_LABEL, netCashLabel } from '../lib/cashFlowStatement';
 import { CASH_ACCOUNT_CODES } from '../lib/cashAccounts';
 import { accumulatedNetPosition } from '../lib/fundBalancePresentation';
+import { isPropertyAndEquipmentAccount } from '../lib/propertyEquipmentAccounts';
 import { excludeClosingEntries } from '../lib/closingEntries';
 import { periodEndedLabel, periodForSemester, reportingPeriodBounds } from '../lib/reportingPeriod';
 import { combineOpeningAndPeriodBalances } from '../lib/reportingPeriodBalances';
@@ -180,7 +181,7 @@ export function FinancialStatements(): React.ReactElement {
   const isGated = incompleteReviewItems.length > 0 || negativeBalanceAccounts.length > 0 || pendingDrafts.length > 0;
   const positionAssetGroups = useMemo(() => {
     const groups: Array<[string, string[]]> = [
-      ['Cash and Cash Equivalents', ['1010', '1015']], ['Receivables', ['1200', '1300', '1310', '1330', '1360', '1370']], ['Advances and Dues', ['1250', '1270', '1320']], ['Inventories', ['1700']], ['Prepaid Expenses and Other Assets', ['1260', '1280', '1285', '1295', '1298']], ['Property and Equipment', ['1500', '1550', '1660']],
+      ['Cash and Cash Equivalents', ['1010', '1015']], ['Receivables', ['1200', '1300', '1310', '1330', '1360', '1370']], ['Advances and Dues', ['1250', '1270', '1320']], ['Inventories', ['1700']], ['Prepaid Expenses and Other Assets', ['1260', '1280', '1285', '1295', '1298']], ['Property and Equipment', accounts.filter(isPropertyAndEquipmentAccount).map(account => account.code)],
     ];
     const assigned = new Set(groups.flatMap(([, codes]) => codes));
     // Accounts with a zero balance are left off the statement, and a heading with no accounts left goes with them.
@@ -433,38 +434,38 @@ export function FinancialStatements(): React.ReactElement {
             <>
           {/* Report Header */}
           <div className="text-center border-b-2 border-slate-200 dark:border-slate-700 pb-5 mb-8">
-            <h1 className="text-base font-black uppercase text-slate-900 dark:text-slate-100 tracking-widest">{settings.organizationName}</h1>
-            <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 mt-1 uppercase tracking-wider">
+            <h1 className="text-xl font-bold uppercase text-slate-900 dark:text-slate-100 tracking-wide">{settings.organizationName}</h1>
+            <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 mt-1.5 uppercase tracking-wide">
               {activeTab === 'position' && 'Statement of Financial Position'}
               {activeTab === 'activities' && 'Statement of Activities (Income Statement)'}
               {activeTab === 'functional' && 'Statement of Functional Expenses'}
               {activeTab === 'cashflow' && 'Statement of Cash Flows (Direct Method)'}
             </h2>
-            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold mt-1">
+            <p className="text-sm text-slate-600 dark:text-slate-300 font-medium mt-1.5">
               {activeTab === 'position' 
                 ? `As of ${new Date(endDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`
                 : periodEndedLabel(endDate)
               }
             </p>
-            <p className="text-[9px] text-slate-500 dark:text-slate-400 font-bold uppercase mt-1">Figures in {settings.currencyCode} ({settings.currencySymbol})</p>
+            <p className="text-xs text-slate-600 dark:text-slate-300 font-semibold uppercase mt-1">Figures in {settings.currencyCode} ({settings.currencySymbol})</p>
           </div>
 
           {/* Statement Layouts */}
-          <div className="text-xs text-slate-900 dark:text-slate-100 leading-relaxed font-mono">
+          <div className="text-[15px] text-slate-900 dark:text-slate-100 leading-relaxed font-sans tabular-nums">
             {/* 1. Statement of Financial Position (Balance Sheet) */}
             {activeTab === 'position' && (
               <div className="space-y-6">
                 {/* ASSETS SECTION */}
                 <div>
-                  <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wider text-[10px]">Assets</h3>
+                  <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wide text-[13px]">Assets</h3>
                   <div className="space-y-1">
                     {positionAssetGroups.map(([group, groupAccounts]) => <React.Fragment key={group}>
-                    <p className="px-2 pt-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">{group}</p>
+                    <p className="px-2 pt-2 text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-400">{group}</p>
                     {groupAccounts.map(acc => {
                       const bal = cumulativeToEndBalances[acc.code] || 0;
                       const isContra = isContraAccount(acc);
                       return (
-                        <div key={acc.code} className="flex justify-between py-1 px-4 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                        <div key={acc.code} className="flex justify-between py-1.5 px-4 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
                           <span>{isContra ? `Less: ${acc.name}` : acc.name}</span>
                           <span className="font-bold">{formatCurrency(isContra ? -bal : bal)}</span>
                         </div>
@@ -473,21 +474,21 @@ export function FinancialStatements(): React.ReactElement {
                     </React.Fragment>)}
                   </div>
                   <div className="flex justify-between py-2 border-t border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-slate-100 mt-2 px-2">
-                    <span className="uppercase text-[10px] tracking-wider">Total Assets</span>
+                    <span className="uppercase text-[13px] tracking-wide">Total Assets</span>
                     <span className="border-b-4 border-double border-slate-200 dark:border-slate-700">{formatCurrency(cumulativeToEndTotals.Assets)}</span>
                   </div>
                 </div>
 
                 {/* LIABILITIES SECTION */}
                 <div>
-                  <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wider text-[10px]">Liabilities</h3>
+                  <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wide text-[13px]">Liabilities</h3>
                   <div className="space-y-1">
                     {positionLiabilityGroups.map(([group, groupAccounts]) => <React.Fragment key={group}>
-                    <p className="px-2 pt-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">{group}</p>
+                    <p className="px-2 pt-2 text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-400">{group}</p>
                     {groupAccounts.map(acc => {
                       const bal = cumulativeToEndBalances[acc.code] || 0;
                       return (
-                        <div key={acc.code} className="flex justify-between py-1 px-4 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                        <div key={acc.code} className="flex justify-between py-1.5 px-4 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
                           <span>{acc.name}</span>
                           <span className="font-bold">{formatCurrency(bal)}</span>
                         </div>
@@ -496,19 +497,19 @@ export function FinancialStatements(): React.ReactElement {
                     </React.Fragment>)}
                   </div>
                   <div className="flex justify-between py-2 border-t border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-slate-100 mt-2 px-2">
-                    <span className="uppercase text-[10px] tracking-wider">Total Liabilities</span>
+                    <span className="uppercase text-[13px] tracking-wide">Total Liabilities</span>
                     <span className="border-b border-slate-200 dark:border-slate-700">{formatCurrency(cumulativeToEndTotals.Liabilities)}</span>
                   </div>
                 </div>
 
                 {/* FUND BALANCE SECTION */}
                 <div>
-                  <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wider text-[10px]">Net Assets</h3>
+                  <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wide text-[13px]">Net Assets</h3>
                   <div className="space-y-1">
                     {positionFundBalanceAccounts.map(acc => {
                       const bal = cumulativeToEndBalances[acc.code] || 0;
                       return (
-                        <div key={acc.code} className="flex justify-between py-1 px-4 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                        <div key={acc.code} className="flex justify-between py-1.5 px-4 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
                           <span>{acc.name}</span>
                           <span className="font-bold">{formatCurrency(bal)}</span>
                         </div>
@@ -520,15 +521,15 @@ export function FinancialStatements(): React.ReactElement {
                     </div>
                   </div>
                   <div className="flex justify-between py-2 border-t border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-slate-100 mt-2 px-2">
-                    <span className="uppercase text-[10px] tracking-wider">Total Fund Balance</span>
+                    <span className="uppercase text-[13px] tracking-wide">Total Fund Balance</span>
                     <span className="border-b border-slate-200 dark:border-slate-700">{formatCurrency(fEndingFundBalance)}</span>
                   </div>
                 </div>
 
                 {/* LIABILITIES & FUND BALANCE GRAND TOTAL */}
                 <div className="pt-4 border-t-2 border-slate-200 dark:border-slate-700">
-                  <div className="flex justify-between font-black text-slate-900 dark:text-slate-100 text-sm px-2">
-                    <span className="uppercase tracking-wider text-[10px]">Total Liabilities & Fund Balance</span>
+                  <div className="flex justify-between font-bold text-slate-900 dark:text-slate-100 text-base px-2">
+                    <span className="uppercase tracking-wide text-[13px]">Total Liabilities & Fund Balance</span>
                     <span className="border-b-4 border-double border-slate-200 dark:border-slate-700">{formatCurrency(fTotalLiabilitiesAndFund)}</span>
                   </div>
                 </div>
@@ -540,12 +541,12 @@ export function FinancialStatements(): React.ReactElement {
               <div className="space-y-6">
                 {/* REVENUE */}
                 <div>
-                  <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wider text-[10px]">Revenues & Contributions</h3>
+                  <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wide text-[13px]">Revenues & Contributions</h3>
                   <div className="space-y-1">
                     {activitiesRevenueAccounts.map(acc => {
                       const bal = filteredBalances[acc.code] || 0;
                       return (
-                        <div key={acc.code} className="flex justify-between py-1 px-4 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                        <div key={acc.code} className="flex justify-between py-1.5 px-4 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
                           <span>{acc.name}</span>
                           <span className="font-bold">{formatCurrency(bal)}</span>
                         </div>
@@ -553,32 +554,32 @@ export function FinancialStatements(): React.ReactElement {
                     })}
                   </div>
                   <div className="flex justify-between py-2 border-t border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-slate-100 mt-2 px-2">
-                    <span className="uppercase text-[10px] tracking-wider">Total Revenue & Inflows</span>
+                    <span className="uppercase text-[13px] tracking-wide">Total Revenue & Inflows</span>
                     <span className="border-b border-slate-200 dark:border-slate-700">{formatCurrency(filteredTotals.Revenue)}</span>
                   </div>
                 </div>
 
                 {/* Program Services is deliberately a single linked amount: its detail belongs in the Statement of Functional Expenses. */}
                 <div>
-                  <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wider text-[10px]">Program-Related Expenses</h3>
-                  <div className="flex justify-between py-1 px-4 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                  <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wide text-[13px]">Program-Related Expenses</h3>
+                  <div className="flex justify-between py-1.5 px-4 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
                     <span>Program Services — see Statement of Functional Expenses</span>
                     <span className="font-bold">{formatCurrency(activitiesExpenseBreakdown.eventRelatedTotal)}</span>
                   </div>
                   <div className="flex justify-between py-2 border-t border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-slate-100 mt-2 px-2">
-                    <span className="uppercase text-[10px] tracking-wider">Total Program-Related Expenses</span>
+                    <span className="uppercase text-[13px] tracking-wide">Total Program-Related Expenses</span>
                     <span className="border-b border-slate-200 dark:border-slate-700">{formatCurrency(activitiesExpenseBreakdown.eventRelatedTotal)}</span>
                   </div>
                 </div>
 
                 {/* SUPPORTING SERVICES — journal entries without an event name */}
                 <div>
-                  <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wider text-[10px]">General & Administrative Expenses</h3>
+                  <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wide text-[13px]">General & Administrative Expenses</h3>
                   <div className="space-y-1">
                     {activitiesGeneralAdminAccounts.map(acc => {
                       const bal = activitiesExpenseBreakdown.generalAdminByAccount[acc.code] || 0;
                       return (
-                        <div key={acc.code} className="flex justify-between py-1 px-4 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                        <div key={acc.code} className="flex justify-between py-1.5 px-4 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
                           <span>{acc.name}</span>
                           <span className="font-bold">{formatCurrency(bal)}</span>
                         </div>
@@ -586,20 +587,20 @@ export function FinancialStatements(): React.ReactElement {
                     })}
                   </div>
                   <div className="flex justify-between py-2 border-t border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-slate-100 mt-2 px-2">
-                    <span className="uppercase text-[10px] tracking-wider">Total General & Administrative</span>
+                    <span className="uppercase text-[13px] tracking-wide">Total General & Administrative</span>
                     <span className="border-b border-slate-200 dark:border-slate-700">{formatCurrency(activitiesExpenseBreakdown.generalAdminTotal)}</span>
                   </div>
                 </div>
 
                 <div className="flex justify-between py-2 border-t-2 border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-slate-100 mt-2 px-2">
-                  <span className="uppercase text-[10px] tracking-wider">Total Expenses & Outflows</span>
+                  <span className="uppercase text-[13px] tracking-wide">Total Expenses & Outflows</span>
                   <span className="border-b border-slate-200 dark:border-slate-700">{formatCurrency(filteredTotals.Expenses)}</span>
                 </div>
 
                 {/* NET EXCESS */}
                 <div className="pt-4 border-t-2 border-slate-200 dark:border-slate-700">
-                  <div className="flex justify-between font-black text-sm px-2 text-slate-900 dark:text-slate-100">
-                    <span className="uppercase tracking-wider text-[10px]">Net Surplus (Deficit) for Period</span>
+                  <div className="flex justify-between font-bold text-base px-2 text-slate-900 dark:text-slate-100">
+                    <span className="uppercase tracking-wide text-[13px]">Net Surplus (Deficit) for Period</span>
                     <span className={`border-b-4 border-double border-slate-200 dark:border-slate-700 ${fNetIncome >= 0 ? 'text-slate-900 dark:text-slate-100' : 'text-rose-600 dark:text-rose-400 font-bold'}`}>
                       {formatCurrency(fNetIncome)}
                     </span>
@@ -611,11 +612,11 @@ export function FinancialStatements(): React.ReactElement {
             {/* 3. Statement of Functional Expenses */}
             {activeTab === 'functional' && (
               <div className="space-y-4">
-                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-sans">
+                <p className="text-xs text-slate-600 dark:text-slate-400 font-sans">
                   Program Services are expenses posted with an event name. Supporting Services are expenses posted without an event name.
                 </p>
                 <div className="overflow-x-auto border border-slate-200 dark:border-slate-700 rounded-lg">
-                  <table className="min-w-full text-[10px]">
+                  <table className="min-w-full text-[13px]">
                     <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
                       <tr>
                         <th className="sticky left-0 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-left font-bold">Expense Category</th>
@@ -663,7 +664,7 @@ export function FinancialStatements(): React.ReactElement {
               <div className="space-y-6">
                 {/* OPERATING ACTIVITIES */}
                 <div>
-                  <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wider text-[10px]">Cash Flows from Operating Activities</h3>
+                  <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wide text-[13px]">Cash Flows from Operating Activities</h3>
                   <div className="space-y-1 px-4">
                     <p className="font-semibold">Receipts from:</p>
                     {cashFlowDetails.receipts.length === 0 && <p className="pl-4 text-slate-400">No cash receipts in this period.</p>}
@@ -690,7 +691,7 @@ export function FinancialStatements(): React.ReactElement {
 
                 {/* INVESTING ACTIVITIES */}
                 <div>
-                  <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wider text-[10px]">Cash Flows from Investing Activities</h3>
+                  <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wide text-[13px]">Cash Flows from Investing Activities</h3>
                   <div className="space-y-1 px-4">
                     <div className="flex justify-between rounded-md pl-4 hover:bg-slate-50 dark:hover:bg-slate-800/50">
                       <span>{EQUIPMENT_PURCHASE_LABEL}</span>
@@ -717,14 +718,14 @@ export function FinancialStatements(): React.ReactElement {
                     <span>Cash and cash equivalents at beginning of year</span>
                     <span>{formatCurrency(cashFlowDetails.beginningCash)}</span>
                   </div>
-                  <div className="flex justify-between font-black text-sm px-2 text-slate-900 dark:text-slate-100 border-t border-slate-200 dark:border-slate-700 pt-2">
+                  <div className="flex justify-between font-bold text-base px-2 text-slate-900 dark:text-slate-100 border-t border-slate-200 dark:border-slate-700 pt-2">
                     <span>Cash and cash equivalents at end of year</span>
                     <span className="border-b-4 border-double border-slate-200 dark:border-slate-700">{formatCurrency(cashFlowDetails.endingCash)}</span>
                   </div>
                   {cashFlowDetails.reconcilesToLedger ? (
-                    <p className="px-2 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">Ending cash agrees with the General Ledger cash balance of {formatCurrency(cashFlowDetails.ledgerCash)}.</p>
+                    <p className="px-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300">Ending cash agrees with the General Ledger cash balance of {formatCurrency(cashFlowDetails.ledgerCash)}.</p>
                   ) : (
-                    <p role="alert" className="px-2 text-[10px] font-bold text-rose-700 dark:text-rose-300">Ending cash does not agree with the General Ledger cash balance of {formatCurrency(cashFlowDetails.ledgerCash)}. Check the journal entries that touch Cash on Hand.</p>
+                    <p role="alert" className="px-2 text-xs font-bold text-rose-700 dark:text-rose-300">Ending cash does not agree with the General Ledger cash balance of {formatCurrency(cashFlowDetails.ledgerCash)}. Check the journal entries that touch Cash on Hand.</p>
                   )}
                 </div>
               </div>
