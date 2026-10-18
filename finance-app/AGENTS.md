@@ -251,7 +251,7 @@ login flag. This is still local-browser authentication, not secure multi-device 
   otherwise it starts a new one; the choice is stored on the entry as `ppeReferenceId` (+ `ppeQuantity`, `ppeUnitCost`).
   Purchases saved before this get one reference each (unit cost = cost / quantity); depreciation saved without a reference goes to
   the item's oldest reference; an opening balance with no carried detail is one single-unit reference. **Depreciation**: the type
-  list always shows every depreciable item (never empty, client Oct 2026); an item with no purchase left to depreciate shows a notice and cannot be posted; the user then selects which purchase (auto when only one), sees its
+  list shows items that have a reference with Net Book Value > 0; the user then selects which purchase (auto when only one), sees its
   Available Quantity, Amount per Unit, Remaining Original Cost and its own accumulated depreciation, and the amount cannot exceed that
   reference's Net Book Value; the entry stores `ppeReferenceId`. New semesters carry every held reference forward as a zero-line
   "Beginning Balances — PPE detail" entry (`carryForwardPpeItems`).
