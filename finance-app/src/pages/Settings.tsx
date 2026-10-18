@@ -8,12 +8,10 @@ import {
   ToggleRight,
   Edit3,
   Check,
-  Wallet,
   Database,
   Download,
   Upload,
   AlertTriangle,
-  Undo2,
   ChevronLeft,
   ChevronRight
 } from 'lucide-react';
@@ -21,6 +19,7 @@ import { useFinance } from '../context/FinanceContext';
 import { Account, AccountType, NormalBalanceType, BackupPayload } from '../types';
 import { validateBackupPayload } from '../lib/backupValidation';
 import { CustomTransactionTypesManager } from '../components/CustomTransactionTypesManager';
+import { BeginningBalancesForm } from '../components/BeginningBalancesForm';
 
 export function Settings(): React.ReactElement {
   const {
@@ -29,9 +28,6 @@ export function Settings(): React.ReactElement {
     updateAccount,
     settings,
     updateSettings,
-    addJournalEntry,
-    reverseJournalEntry,
-    formatCurrency,
     exportBackupData,
     restoreBackupData,
     resetFinancialWorkspace
@@ -74,62 +70,6 @@ export function Settings(): React.ReactElement {
   const [passwordError, setPasswordError] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState('');
 
-
-  // Beginning Balances (Sheet3 of the working paper: opening figures a
-  // first-time user fills in before recording regular transactions). Posts
-  // as one ordinary balanced journal entry — a debit line per asset account
-  // with a nonzero opening amount, credited in total to General Fund
-  // Balance — so every existing ledger, trial balance, and statement
-  // calculation picks it up with no new logic anywhere else in the app.
-  const assetAccounts = accounts.filter(a => a.type === 'Assets' && a.isActive);
-  const [beginningBalances, setBeginningBalances] = useState<Record<string, string>>({});
-  const [beginningBalanceError, setBeginningBalanceError] = useState('');
-  const [beginningBalanceSuccess, setBeginningBalanceSuccess] = useState('');
-  const [lastBeginningBalanceEntry, setLastBeginningBalanceEntry] = useState<{ id: string; reference: string } | null>(null);
-
-  const handlePostBeginningBalances = (e: React.FormEvent) => {
-    e.preventDefault();
-    setBeginningBalanceError('');
-    setBeginningBalanceSuccess('');
-    setLastBeginningBalanceEntry(null);
-
-    const lines: { accountCode: string; debit: number; credit: number }[] = [];
-    let total = 0;
-
-    assetAccounts.forEach(acc => {
-      const amount = Number(beginningBalances[acc.code] || 0);
-      if (amount > 0) {
-        lines.push({ accountCode: acc.code, debit: amount, credit: 0 });
-        total += amount;
-      }
-    });
-
-    if (total <= 0) {
-      setBeginningBalanceError('Enter at least one beginning balance greater than zero.');
-      return;
-    }
-
-    lines.push({ accountCode: '3010', debit: 0, credit: total });
-
-    const date = new Date().toISOString().split('T')[0];
-    const entry = addJournalEntry(date, 'Beginning Balances', 'General Fund Operations', lines);
-
-    setBeginningBalances({});
-    setBeginningBalanceSuccess(`Posted beginning balances totaling ${formatCurrency(total)}.`);
-    setLastBeginningBalanceEntry({ id: entry.id, reference: entry.reference });
-    setTimeout(() => {
-      setBeginningBalanceSuccess('');
-      setLastBeginningBalanceEntry(null);
-    }, 5000);
-  };
-
-  const handleUndoBeginningBalances = () => {
-    if (!lastBeginningBalanceEntry) return;
-    reverseJournalEntry(lastBeginningBalanceEntry.id);
-    setBeginningBalanceSuccess(`${lastBeginningBalanceEntry.reference} was undone with a reversing entry.`);
-    setLastBeginningBalanceEntry(null);
-    setTimeout(() => setBeginningBalanceSuccess(''), 5000);
-  };
 
   // Data Backup — this app persists only to this browser's localStorage,
   // with no server and no sync. Export bundles everything into one JSON
@@ -813,60 +753,7 @@ export function Settings(): React.ReactElement {
       </div>
 
       {/* Beginning Balances */}
-      <form onSubmit={handlePostBeginningBalances} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
-        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 pb-2.5 flex items-center gap-2">
-          <Wallet className="w-4.5 h-4.5 text-blue-900" /> Beginning Balances
-        </h3>
-        <p className="text-[12px] text-slate-500 dark:text-slate-400 font-medium">
-          First-time setup: enter each asset account's opening balance before recording regular transactions. Posts as one balanced entry against General Fund Balance.
-        </p>
-
-        {beginningBalanceError && (
-          <p className="text-[12px] text-rose-600 font-bold bg-rose-50 dark:bg-rose-500/10 dark:text-rose-300 p-2 rounded-lg">{beginningBalanceError}</p>
-        )}
-        {beginningBalanceSuccess && (
-          <div className="flex items-center justify-between gap-2 rounded-lg bg-emerald-50 p-2 text-[12px] font-bold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
-            <span>{beginningBalanceSuccess}</span>
-            {lastBeginningBalanceEntry && (
-              <button
-                type="button"
-                onClick={handleUndoBeginningBalances}
-                className="inline-flex shrink-0 items-center gap-1 rounded-md border border-emerald-200 bg-white/70 px-2 py-1 text-[12px] font-bold transition-colors hover:bg-white dark:border-emerald-500/30 dark:bg-slate-900/40 dark:hover:bg-slate-900"
-                title="Post a reversing entry for these beginning balances"
-              >
-                <Undo2 className="h-3 w-3" /> Undo
-              </button>
-            )}
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-x-4 gap-y-3 text-xs">
-          {assetAccounts.map(acc => (
-            <div key={acc.code}>
-              <label className="block text-[12px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">{acc.name}</label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 dark:text-slate-400">{settings.currencySymbol}</span>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={beginningBalances[acc.code] || ''}
-                  onChange={(e) => setBeginningBalances(prev => ({ ...prev, [acc.code]: e.target.value }))}
-                  placeholder="0.00"
-                  className="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl font-semibold text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 p-2.5 pl-7 outline-none focus:border-blue-900 dark:focus:border-blue-500 transition-colors"
-                />
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <button
-          type="submit"
-          className="w-full bg-blue-900 hover:bg-blue-950 text-white font-bold text-xs p-2.5 rounded-xl transition-all shadow-md shadow-blue-900/10 cursor-pointer"
-        >
-          Post Beginning Balances
-        </button>
-      </form>
+      <BeginningBalancesForm />
     </div>
   );
 }

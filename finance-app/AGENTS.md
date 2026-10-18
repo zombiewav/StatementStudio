@@ -279,6 +279,12 @@ login flag. This is still local-browser authentication, not secure multi-device 
   (`isPropertyAndEquipmentAccount`, accounts 1500-1699); before, only 1500/1550/1660 were grouped there and items such as Microphone or Chairs
   fell under Other Assets. Survey follow-ups, also done: Transactions scrolls smoothly to the type list / form after a category is clicked (`categoryContentRef`), and text is larger app-wide (`--text-xs`/`--text-sm` raised in the index.css theme; the arbitrary `text-[9-11px]` sizes were each moved up 2px).
 
+- **Beginning Balances on first sign-in (client, Oct 2026)**: a brand-new organization sees a "Welcome! Set up your Beginning Balances" dialog once
+  (`BeginningBalancesPrompt`, mounted in App.tsx). It is shown only while the workspace has loaded, `settings.beginningBalancesPrompted` is unset and no
+  semester has any journal entries (`shouldPromptBeginningBalances`). Posting or "Skip for now" sets that flag in the synced workspace settings, so it never
+  returns on any device; after posting it stays open (Undo reachable) until Continue. The form itself is `BeginningBalancesForm`, shared with the Settings card,
+  which stays available for later.
+
 ## Known bugs / gaps, not yet fixed (flagged, intentionally left alone)
 
 - **Activities & Programs**: budget is now editable inline (click the Budget Cap figure), but

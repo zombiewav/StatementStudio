@@ -197,6 +197,8 @@ export interface AppSettings {
   // Drives which semester-restricted classification rules are selectable
   // (see availableInSemester on ClassificationRuleWithWorkflow).
   semester?: '1st Semester' | '2nd Semester' | '';
+  // Set once the first-sign-in Beginning Balances dialog was answered (posted or skipped), so it never shows again.
+  beginningBalancesPrompted?: boolean;
   // The starting calendar year set alongside semester (e.g. 2021 for
   // "FY 2021-2022"). Both are set once, together, via the Navbar's fiscal
   // year picker, and every transaction now inherits them automatically

@@ -12,6 +12,7 @@ import { JournalEntries } from './pages/JournalEntries';
 import { GeneralLedger } from './pages/GeneralLedger';
 import { TrialBalance } from './pages/TrialBalance';
 import { FinancialStatements } from './pages/FinancialStatements';
+import { BeginningBalancesPrompt } from './components/BeginningBalancesPrompt';
 import { Analytics } from './pages/Analytics';
 import { ProjectsPage } from './pages/ProjectsPage';
 import { Settings } from './pages/Settings';
@@ -115,6 +116,8 @@ function DashboardLayout() {
           onSearchSubmit={() => setActivePage('journals')}
           onOpenSettings={() => setActivePage('settings')}
         />
+
+        <BeginningBalancesPrompt />
 
         {/* Scrollable Content Container */}
         <WorkspaceSyncStatus />
