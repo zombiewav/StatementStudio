@@ -357,7 +357,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   // since they're the same category under two different trigger words).
   // Items still held and not fully written down: only these can be depreciated.
   const ppeReferences = useMemo(() => buildPpeReferences(journalEntries, openingBalances), [journalEntries, openingBalances]);
-  const depreciableTypes = useMemo(() => new Set(ppeReferences.filter(reference => reference.netBookValue > 0.005).map(reference => reference.item.depreciationType)), [ppeReferences]);
   const transactionTypeOptions = useMemo(() => {
     if (!selectedCategory || selectedCategory === 'activity-fees') return [];
     if (selectedCategory === 'expense-transactions') {
@@ -366,13 +365,13 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     return Array.from(new Set(
       classificationRules
         .filter(rule => categorizeTransactionRule(rule) === selectedCategory && isRuleAvailable(rule)
-          && (selectedCategory !== 'depreciation' || (isDepreciationPickerTypeVisible(rule.description) && depreciableTypes.has(rule.description)))
+          && (selectedCategory !== 'depreciation' || isDepreciationPickerTypeVisible(rule.description))
           && !(selectedCategory === 'other' && MISC_TYPES_HIDDEN_FROM_PICKER.has(rule.description))
           && !(selectedCategory === 'merchandise' && isRetiredMerchandisePickerType(rule.description))
           && (selectedCategory !== 'ppe-transactions' || ((rule.description === 'Purchase Chairs' || rule.description.toLowerCase().startsWith('purchase of ')) && !isRetiredAssetPickerType(rule.description))))
         .map(rule => rule.description)
     )).sort();
-  }, [classificationRules, selectedCategory, isRuleAvailable, depreciableTypes]);
+  }, [classificationRules, selectedCategory, isRuleAvailable]);
   const filteredTxTypeOptions = txName.trim()
     ? transactionTypeOptions.filter(d => d.toLowerCase().includes(txName.trim().toLowerCase()))
     : transactionTypeOptions;
@@ -1716,7 +1715,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               ? null
               : category.id === 'expense-transactions' ? EXPENSE_ITEMS.length
               : new Set(classificationRules.filter(rule => categorizeTransactionRule(rule) === category.id
-                && (category.id !== 'depreciation' || (isDepreciationPickerTypeVisible(rule.description) && depreciableTypes.has(rule.description)))
+                && (category.id !== 'depreciation' || isDepreciationPickerTypeVisible(rule.description))
                 && !(category.id === 'other' && MISC_TYPES_HIDDEN_FROM_PICKER.has(rule.description))
                 && !(category.id === 'merchandise' && isRetiredMerchandisePickerType(rule.description))
                 && (category.id !== 'ppe-transactions' || ((rule.description === 'Purchase Chairs' || rule.description.toLowerCase().startsWith('purchase of ')) && !isRetiredAssetPickerType(rule.description)))
@@ -1865,7 +1864,9 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                     ))
                   ) : (
                     <div className="px-3 py-2.5 text-[13px] text-slate-500 dark:text-slate-400 font-medium">
-                      No matching type. Select a known type so the accounts remain automatic.
+                      {transactionTypeOptions.length === 0
+                        ? 'No transaction types are available in this category yet.'
+                        : 'No matching type. Select a known type so the accounts remain automatic.'}
                     </div>
                   )}
                 </div>
@@ -2446,6 +2447,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
             {isDepreciationEntry && <div className="sm:col-span-2 space-y-2">
               <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-[12px] font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">Note: Compute depreciation based on your organization’s depreciation policy and include the depreciation for the entire semester.</p>
               <p className="rounded-lg bg-slate-50 p-3 text-[12px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">Event: General and Administrative (automatic classification)</p>
+              {depreciableReferences.length === 0 && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[12px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">There is no purchase of this item with a balance left to depreciate yet. Record the purchase in PPE Transactions first, then come back to depreciate it.</p>}
               {depreciableReferences.length > 0 && <div className="space-y-2">
                 <p className="text-[12px] font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">Select the purchase to depreciate</p>
                 {depreciableReferences.map(reference => {
