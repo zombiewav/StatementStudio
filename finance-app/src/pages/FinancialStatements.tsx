@@ -181,7 +181,7 @@ export function FinancialStatements(): React.ReactElement {
   const isGated = incompleteReviewItems.length > 0 || negativeBalanceAccounts.length > 0 || pendingDrafts.length > 0;
   const positionAssetGroups = useMemo(() => {
     const groups: Array<[string, string[]]> = [
-      ['Cash and Cash Equivalents', ['1010', '1015']], ['Receivables', ['1200', '1300', '1310', '1330', '1360', '1370']], ['Advances and Dues', ['1250', '1270', '1320']], ['Inventories', ['1700']], ['Prepaid Expenses and Other Assets', ['1260', '1280', '1285', '1295', '1298']], ['Property and Equipment', accounts.filter(isPropertyAndEquipmentAccount).map(account => account.code)],
+      ['Cash and Cash Equivalents', ['1010', '1015']], ['Receivables', ['1200', '1300', '1310', '1330', '1360', '1370']], ['Advances and Dues', ['1250', '1270', '1275', '1320']], ['Inventories', ['1700']], ['Prepaid Expenses and Other Assets', ['1260', '1280', '1285', '1295', '1298']], ['Property and Equipment', accounts.filter(isPropertyAndEquipmentAccount).map(account => account.code)],
     ];
     const assigned = new Set(groups.flatMap(([, codes]) => codes));
     // Accounts with a zero balance are left off the statement, and a heading with no accounts left goes with them.

@@ -66,13 +66,13 @@ const isRetiredAccountRow = (account: Account) =>
 // that an older workspace never had.
 export function restoreSavedAccounts(saved: Account[]): Account[] {
   const active = saved.filter(account => !isRetiredAccountRow(account)).map(account => {
-    const current = INITIAL_ACCOUNTS.find(defaultAccount => defaultAccount.code === account.code && ['1200', '1270', '1360', '2010', '2020', '2140', '2150', '3010', '5080', '5180', '5200', '1504', '1653', '1660', '2030', '2040', '2061', '2062', '2063', '2064', '4055', '5095', '5120', '5320'].includes(account.code));
+    const current = INITIAL_ACCOUNTS.find(defaultAccount => defaultAccount.code === account.code && ['1200', '1270', '1275', '1360', '2010', '2020', '2140', '2150', '3010', '5080', '5180', '5200', '1504', '1653', '1660', '2030', '2040', '2061', '2062', '2063', '2064', '4055', '5095', '5120', '5320'].includes(account.code));
     return current ? { ...account, name: current.name, description: current.description } : account;
   });
   return [...active, ...INITIAL_ACCOUNTS.filter(a => BACKFILLED_DEFAULT_ACCOUNT_CODES.has(a.code) && !active.some(existing => existing.code === a.code))];
 }
 const BACKFILLED_DEFAULT_ACCOUNT_CODES = new Set([
-  '1270', '1280', '1285', '1295', '1298', '1330', '1360', '1370',
+  '1270', '1275', '1280', '1285', '1295', '1298', '1330', '1360', '1370',
   '5020', '5120', '5180', '5290', '5330', '5340', '5350', '5360',
   '1501', '1502', '1503', '1504', '1505', '1506', '1507', '1508', '1509', '1510', '1511', '1512', '1513', '1514', '1515', '1516',
   '1651', '1652', '1653', '2020', '2030', '2040', '2061', '2062', '2063', '2064', '2070', '2080', '2140', '2150', '4100', '4110', '5300', '5370',
@@ -80,23 +80,34 @@ const BACKFILLED_DEFAULT_ACCOUNT_CODES = new Set([
 
 // Retired accounts are removed from the COA, while historical journals and
 // carried balances are reclassified so prior data remains balanced and visible.
+// Client (Oct 2026): supplier advances split in two. Prepaid Rent / Clothing-Uniform downpayments used to post to 1270,
+// which is now Advances to Suppliers - Merchandise only; the prepaid ones move to 1275 (Others).
+const PREPAID_DEPOSIT_CATEGORIES = new Set(['rent', 'uniform']);
+function movePrepaidDepositLines(entry: JournalEntry): JournalEntry {
+  if (!PREPAID_DEPOSIT_CATEGORIES.has(String(entry.transactionDetails?.prepaidAssetCategory || ''))) return entry;
+  if (!entry.lines.some(line => line.accountCode === '1270')) return entry;
+  return { ...entry, lines: entry.lines.map(line => line.accountCode === '1270' ? { ...line, accountCode: '1275' } : line) };
+}
+
 export function migrateRetiredAccountLines(entries: JournalEntry[]): JournalEntry[] {
-  return entries.map(entry => {
-    if (!entry.lines.some(line => RETIRED_ACCOUNT_CODES.has(line.accountCode))) return entry;
-    const prepaidCategory = String(entry.transactionDetails?.prepaidAssetCategory || '');
-    const retiredPayableCode = prepaidCategory === 'awards' ? '2061'
-      : prepaidCategory === 'supplies' ? '2062'
-        : prepaidCategory === 'rent' ? '2063'
-          : prepaidCategory === 'uniform' ? '2064'
-            : '2010';
-    return {
-      ...entry,
-      lines: entry.lines.map(line => {
-        const replacement = line.accountCode === '2060' ? retiredPayableCode : RETIRED_REPLACEMENTS[line.accountCode] || null;
-        return replacement ? { ...line, accountCode: replacement } : line;
-      }),
-    };
-  });
+  return entries.map(entry => movePrepaidDepositLines(replaceRetiredLines(entry)));
+}
+
+function replaceRetiredLines(entry: JournalEntry): JournalEntry {
+  if (!entry.lines.some(line => RETIRED_ACCOUNT_CODES.has(line.accountCode))) return entry;
+  const prepaidCategory = String(entry.transactionDetails?.prepaidAssetCategory || '');
+  const retiredPayableCode = prepaidCategory === 'awards' ? '2061'
+    : prepaidCategory === 'supplies' ? '2062'
+      : prepaidCategory === 'rent' ? '2063'
+        : prepaidCategory === 'uniform' ? '2064'
+          : '2010';
+  return {
+    ...entry,
+    lines: entry.lines.map(line => {
+      const replacement = line.accountCode === '2060' ? retiredPayableCode : RETIRED_REPLACEMENTS[line.accountCode] || null;
+      return replacement ? { ...line, accountCode: replacement } : line;
+    }),
+  };
 }
 
 export function migrateRetiredOpeningBalances(balances: OpeningBalances): OpeningBalances {
@@ -202,7 +213,8 @@ export const INITIAL_ACCOUNTS: Account[] = [
   // instead of being expensed immediately, and REVIEW (src/lib/reviewEngine.ts)
   // reclassifies it into the real expense account once it's actually used.
   { code: '1260', name: 'Prepaid Expenses', type: 'Assets', normalBalance: 'Debit', description: 'Cash paid for goods/services not yet used, consumed, or benefited from this period', isActive: true },
-  { code: '1270', name: 'Advances to Suppliers', type: 'Assets', normalBalance: 'Debit', description: 'Downpayments and advances made to suppliers before related goods, services, or other assets are received', isActive: true },
+  { code: '1270', name: 'Advances to Suppliers - Merchandise', type: 'Assets', normalBalance: 'Debit', description: 'Downpayments made to suppliers for pre-ordered merchandise, before the goods are received', isActive: true },
+  { code: '1275', name: 'Advances to Suppliers - Others', type: 'Assets', normalBalance: 'Debit', description: 'Downpayments made to suppliers for prepaid rent and clothing/uniform, before the related asset is received', isActive: true },
   { code: '1280', name: 'Awards and Prizes', type: 'Assets', normalBalance: 'Debit', description: 'Awards and prizes purchased in advance and still unused or undistributed', isActive: true },
   { code: '1285', name: 'Supplies and Materials', type: 'Assets', normalBalance: 'Debit', description: 'Event and operating supplies purchased in advance and still unused', isActive: true },
   { code: '1295', name: 'Prepaid Rent', type: 'Assets', normalBalance: 'Debit', description: 'Rental rights paid for before the related event or rental period', isActive: true },
@@ -618,6 +630,8 @@ export const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   // Former title, kept (hidden from the picker) so saved entries and drafts still resolve.
   { keyword: 'downpayment for pre-ordered merchandise', debitAccountCode: '1270', creditAccountCode: '1010', description: 'Downpayment for Pre-ordered Merchandise' },
   { keyword: 'payment for unpaid merchandise', debitAccountCode: '2020', creditAccountCode: '1010', description: 'Payment for Unpaid Merchandise Purchased and Received in Previous Period/Semester' },
+  { keyword: 'collections from suppliers', debitAccountCode: '1010', creditAccountCode: '1360', description: 'Collections from Suppliers - Merchandise' },
+  // Former name (client, Oct 2026): kept so saved drafts still resolve; not offered in the picker.
   { keyword: 'collection of receivables from suppliers', debitAccountCode: '1010', creditAccountCode: '1360', description: 'Collection of Receivables from Suppliers' },
   { keyword: 'collection of receivables from officers', debitAccountCode: '1010', creditAccountCode: '1320', description: 'Collection of Receivables from Officers - Merchandise' },
   { keyword: 'collection of unpaid sold merchandise', debitAccountCode: '1010', creditAccountCode: '1200', description: 'Collection of Unpaid Sold Merchandise' },
@@ -802,7 +816,7 @@ export const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   // new/additional members (accrual, 2nd Semester).
   { keyword: 'other income', debitAccountCode: '1010', creditAccountCode: '4050', description: 'Other Income Received' },
   { keyword: 'interest', debitAccountCode: '1010', creditAccountCode: '4050', description: 'Interest Income Received' },
-  { keyword: 'sale of merchandise', debitAccountCode: '1010', creditAccountCode: '4070', description: 'Sale of Merchandise' },
+  { keyword: 'sale of merchandise', debitAccountCode: '1010', creditAccountCode: '4070', description: 'Sale of Merchandise / Delivery of Merchandise to Buyers (paid or unpaid)' },
   { keyword: 'excess merchandise collection', debitAccountCode: '2150', creditAccountCode: '1010', description: 'Excess Merchandise Collection - Status' },
   // Entrance ticket sales groups into Miscellaneous Income with printing-
   // services and rental income (see the dedicated section near the top of

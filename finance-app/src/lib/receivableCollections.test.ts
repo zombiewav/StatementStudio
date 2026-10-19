@@ -7,7 +7,7 @@ const kind = (code: string) => receivableCollectionKind('1010', code)!;
 describe('receivable collections in Merchandise Transactions', () => {
   it('recognises the three collection types by their accounts', () => {
     expect(RECEIVABLE_COLLECTION_KINDS.map(item => item.title)).toEqual([
-      'Collection of Receivables from Suppliers', 'Collection of Receivables from Officers - Merchandise', 'Collection of Unpaid Sold Merchandise',
+      'Collections from Suppliers - Merchandise', 'Collection of Receivables from Officers - Merchandise', 'Collection of Unpaid Sold Merchandise',
     ]);
     expect(receivableCollectionKind('1010', '1320')?.accountLabel).toBe('Due from Officers');
     expect(receivableCollectionKind('1010', '1200')?.accountLabel).toBe('Accounts Receivable - Merchandise');

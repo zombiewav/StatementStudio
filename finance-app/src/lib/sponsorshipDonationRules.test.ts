@@ -32,7 +32,17 @@ describe('sponsorships and donations workbook rules', () => {
       transactionDetails: { eventRelated: false, receiptAttachmentIds: [], prepaidAssetCategory: 'rent' },
       lines: [{ accountCode: '1340', debit: 200, credit: 0 }, { accountCode: '2060', debit: 0, credit: 200 }],
     }]);
-    expect(entry.lines).toEqual([{ accountCode: '1270', debit: 200, credit: 0 }, { accountCode: '2063', debit: 0, credit: 200 }]);
+    expect(entry.lines).toEqual([{ accountCode: '1275', debit: 200, credit: 0 }, { accountCode: '2063', debit: 0, credit: 200 }]);
     expect(migrateRetiredOpeningBalances({ '1290': 50, '1340': 100, '1345': 150, '2060': 300 })).toEqual({ '1260': 50, '1270': 250, '2010': 300 });
+  });
+
+  it('moves earlier Prepaid Rent / Clothing-Uniform downpayments off Advances to Suppliers - Merchandise', () => {
+    const base = { id: 'e', reference: 'JE-3', date: '2026-01-01', description: 'Downpayment', project: 'General Fund Operations' };
+    const [prepaid, merchandise] = migrateRetiredAccountLines([
+      { ...base, transactionDetails: { eventRelated: false, receiptAttachmentIds: [], prepaidAssetCategory: 'uniform' }, lines: [{ accountCode: '1270', debit: 100, credit: 0 }, { accountCode: '1010', debit: 0, credit: 100 }] },
+      { ...base, id: 'm', transactionDetails: { eventRelated: false, receiptAttachmentIds: [] }, lines: [{ accountCode: '1270', debit: 100, credit: 0 }, { accountCode: '1010', debit: 0, credit: 100 }] },
+    ]);
+    expect(prepaid.lines[0].accountCode).toBe('1275');
+    expect(merchandise.lines[0].accountCode).toBe('1270');
   });
 });

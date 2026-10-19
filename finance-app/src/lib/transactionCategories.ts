@@ -58,7 +58,8 @@ export function isRetiredAssetPickerType(description: string): boolean {
 // balance is tracked. The rule stays so older entries and drafts still resolve.
 export function isRetiredMerchandisePickerType(description: string): boolean {
   return description === 'Payment for Unpaid Merchandise Purchased and Received in Previous Period/Semester'
-    || description === 'Downpayment for Pre-ordered Merchandise';
+    || description === 'Downpayment for Pre-ordered Merchandise'
+    || description === 'Collection of Receivables from Suppliers';
 }
 
 export function isDepreciationPickerTypeVisible(description: string): boolean {

@@ -285,6 +285,14 @@ login flag. This is still local-browser authentication, not secure multi-device 
   returns on any device; after posting it stays open (Undo reachable) until Continue. The form itself is `BeginningBalancesForm`, shared with the Settings card,
   which stays available for later.
 
+- **Revisions file "NEW REVISIONS_ADDITIONS" (client, Oct 19 2026)**: Sale of Merchandise is now "Sale of Merchandise / Delivery of Merchandise to Buyers (paid or unpaid)" and
+  "Collection of Receivables from Suppliers" is "Collections from Suppliers - Merchandise" (the old rule stays, hidden, so saved drafts resolve). Supplier advances are two accounts:
+  1270 "Advances to Suppliers - Merchandise" (merchandise downpayments) and the new 1275 "Advances to Suppliers - Others" (Prepaid Rent / Clothing-Uniform downpayments;
+  earlier prepaid downpayment lines move from 1270 to 1275 in `migrateRetiredAccountLines`). Event/Program Expenses has no Transaction Type field (the single type is selected
+  for the user; only Amount, Event Name and Date are asked). Transactions has a "Search all transaction types" box above the category picker (`lib/transactionSearch.ts`) that
+  opens the right category / Activity Fees choice; a "Receivables carried forward - still to collect" card (`lib/carriedReceivables.ts`) lists 1200/1300/1310/1320/1360 balances that
+  came in as opening balances until they reach zero. Logout offers "Log out anyway" when the workspace cannot be saved (save conflict): the browser copy stays and is offered at the next sign-in.
+
 ## Known bugs / gaps, not yet fixed (flagged, intentionally left alone)
 
 - **Activities & Programs**: budget is now editable inline (click the Budget Cap figure), but

@@ -21,6 +21,8 @@ const previousDate = (date: string): string => {
 
 interface ActivityFeeEntryProps {
   defaultOpen?: boolean;
+  // Set by the Transactions search to open one of the dropdown choices; a new nonce re-applies it.
+  requestedType?: { value: 'activity-fees' | 'receivable' | 'excess-refund'; nonce: number };
   draftToResume?: TransactionDraft | null;
   onDraftResumed?: () => void;
   onDraftSaved?: () => void;
@@ -29,10 +31,11 @@ interface ActivityFeeEntryProps {
   onDraftPosted?: (message: string) => void;
 }
 
-export function ActivityFeeEntry({ defaultOpen = false, draftToResume = null, onDraftResumed, onDraftSaved, autoPostDraft = false, onDraftPosted }: ActivityFeeEntryProps): React.ReactElement {
+export function ActivityFeeEntry({ defaultOpen = false, requestedType, draftToResume = null, onDraftResumed, onDraftSaved, autoPostDraft = false, onDraftPosted }: ActivityFeeEntryProps): React.ReactElement {
   const { createActivityFeeRecord, collectActivityFeeReceivable, updateActivityFeeRecord, activityFeeRecords, saveDraftTransaction, deleteDraftTransaction, settings, formatCurrency, accounts, journalEntries } = useFinance();
   const [open, setOpen] = useState(defaultOpen);
-  const [transactionType, setTransactionType] = useState<'activity-fees' | 'receivable' | 'excess-refund'>('activity-fees');
+  const [transactionType, setTransactionType] = useState<'activity-fees' | 'receivable' | 'excess-refund'>(requestedType?.value ?? 'activity-fees');
+  useEffect(() => { if (requestedType) setTransactionType(requestedType.value); }, [requestedType?.nonce]);
   const [eventName, setEventName] = useState('');
   const [totalExpected, setTotalExpected] = useState('');
   const [priorPeriodCollected, setPriorPeriodCollected] = useState('');

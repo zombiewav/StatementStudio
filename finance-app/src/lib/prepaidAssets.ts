@@ -8,8 +8,8 @@ interface PrepaidAssetCategoryConfig { label: string; assetCode: string; expense
 export const PREPAID_ASSET_CATEGORIES: Record<PrepaidAssetCategory, PrepaidAssetCategoryConfig> = {
   awards: { label: 'Awards and Prizes', assetCode: '1280', expenseCode: '5120', payableCode: '2061' },
   supplies: { label: 'Supplies and Materials', assetCode: '1285', expenseCode: '5290', payableCode: '2062' },
-  rent: { label: 'Prepaid Rent', assetCode: '1295', expenseCode: '5020', payableCode: '2063', depositCode: '1270' },
-  uniform: { label: 'Clothing/Uniform', assetCode: '1298', expenseCode: '5180', payableCode: '2064', depositCode: '1270' },
+  rent: { label: 'Prepaid Rent', assetCode: '1295', expenseCode: '5020', payableCode: '2063', depositCode: '1275' },
+  uniform: { label: 'Clothing/Uniform', assetCode: '1298', expenseCode: '5180', payableCode: '2064', depositCode: '1275' },
 } as const;
 
 export const PREPAID_ASSET_ACCOUNT_CODES: string[] = Object.values(PREPAID_ASSET_CATEGORIES).map(category => category.assetCode);

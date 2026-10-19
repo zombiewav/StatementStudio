@@ -43,7 +43,7 @@ describe('prepaid assets', () => {
   it('applies rent deposits, records supplier overpayments, and rejects unavailable advances', () => {
     const posting = buildPrepaidAssetPurchasePosting({ category: 'rent', purchasePrice: 500, purchaseDate: '2026-10-03', paymentMethod: 'organization-funds', organizationPayments: [{ date: '', amount: 300 }], downpaymentAmount: 200, availableCash: 300 });
     expect(posting.payable).toBe(0);
-    expect(posting.lines).toContainEqual(expect.objectContaining({ accountCode: '1270', credit: 200 }));
+    expect(posting.lines).toContainEqual(expect.objectContaining({ accountCode: '1275', credit: 200 }));
     expect(() => buildPrepaidAssetPurchasePosting({ category: 'supplies', purchasePrice: 100, purchaseDate: '2026-10-03', paymentMethod: 'officer-advance', advancePayments: [{ date: '', amount: 100 }], availableAdvance: 50 })).toThrow(/advance balance/i);
     const overpayment = buildPrepaidAssetPurchasePosting({ category: 'awards', purchasePrice: 100, purchaseDate: '2026-10-03', paymentMethod: 'organization-funds', organizationPayments: [{ date: '', amount: 101 }], availableCash: 101 });
     expect(overpayment.receivableFromSupplier).toBe(1);
@@ -66,7 +66,7 @@ describe('prepaid assets', () => {
 
   it('posts deposits and consumption to the category-specific accounts', () => {
     expect(buildPrepaidAssetDownpaymentPosting('uniform', 100, '2026-10-03')).toEqual([
-      { accountCode: '1270', debit: 100, credit: 0, date: '2026-10-03' },
+      { accountCode: '1275', debit: 100, credit: 0, date: '2026-10-03' },
       { accountCode: '1010', debit: 0, credit: 100, date: '2026-10-03' },
     ]);
     expect(buildPrepaidAssetConsumptionPosting('awards', 75, '2026-10-04')).toEqual([
@@ -75,9 +75,9 @@ describe('prepaid assets', () => {
     ]);
   });
 
-  it('uses Advances to Suppliers for both allowed downpayment categories', () => {
-    expect(PREPAID_ASSET_CATEGORIES.rent.depositCode).toBe('1270');
-    expect(PREPAID_ASSET_CATEGORIES.uniform.depositCode).toBe('1270');
+  it('uses Advances to Suppliers - Others for both allowed downpayment categories', () => {
+    expect(PREPAID_ASSET_CATEGORIES.rent.depositCode).toBe('1275');
+    expect(PREPAID_ASSET_CATEGORIES.uniform.depositCode).toBe('1275');
   });
 });
 

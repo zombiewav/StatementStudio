@@ -54,6 +54,30 @@ export function Navbar({ onMenuToggle, searchTerm, setSearchTerm, onSearchSubmit
   const { settings, auditLogs, reportingPeriodWorkspaces, switchReportingPeriod, flushWorkspace } = useFinance();
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState('');
+  const [logoutBlockedBySave, setLogoutBlockedBySave] = useState(false);
+
+  // Unsaved changes stay in this browser's recovery copy and are offered again at the next sign-in,
+  // so a failed save (or a save conflict) must never trap the user signed in: "Log out anyway" skips the save.
+  const handleLogout = async (skipSave: boolean) => {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    setLogoutError('');
+    setLogoutBlockedBySave(false);
+    try {
+      if (!skipSave && !await flushWorkspace()) {
+        setLogoutError('Logout paused because your changes could not be saved. Retry saving, export a backup, or log out anyway: your changes stay in this browser and are offered again when you sign back in.');
+        setLogoutBlockedBySave(true);
+        return;
+      }
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      navigate('/login');
+    } catch (error) {
+      setLogoutError(error instanceof Error ? error.message : 'Could not log out. Try again.');
+    } finally {
+      setLoggingOut(false);
+    }
+  };
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false);
   const [seenNotificationId, setSeenNotificationId] = useState<string | null>(() => {
     try { return localStorage.getItem(NOTIFICATIONS_SEEN_KEY); } catch { return null; }
@@ -242,30 +266,22 @@ export function Navbar({ onMenuToggle, searchTerm, setSearchTerm, onSearchSubmit
 
         <NavActionButton
           variant="ghost"
-          onClick={async () => {
-            if (loggingOut) return;
-            setLoggingOut(true);
-            setLogoutError('');
-            try {
-              if (!await flushWorkspace()) {
-                setLogoutError('Logout paused because your changes could not be saved. Retry saving or export a backup.');
-                return;
-              }
-              const { error } = await supabase.auth.signOut();
-              if (error) throw error;
-              navigate('/login');
-            } catch (error) {
-              setLogoutError(error instanceof Error ? error.message : 'Could not log out. Try again.');
-            } finally {
-              setLoggingOut(false);
-            }
-          }}
+          onClick={() => void handleLogout(false)}
           ariaLabel="Logout"
         >
           <LogOut className="w-3.5 h-3.5" />
           <span>{loggingOut ? 'Saving before logout…' : 'Logout'}</span>
         </NavActionButton>
-        {logoutError && <p role="alert" className="max-w-64 text-xs text-rose-700 dark:text-rose-300">{logoutError}</p>}
+        {logoutError && (
+          <div role="alert" className="max-w-64 text-xs text-rose-700 dark:text-rose-300">
+            <p>{logoutError}</p>
+            {logoutBlockedBySave && (
+              <button type="button" onClick={() => void handleLogout(true)} disabled={loggingOut} className="mt-1 font-bold underline">
+                Log out anyway
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Notifications Dropdown */}
         <div className="relative">

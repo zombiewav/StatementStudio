@@ -14,11 +14,14 @@ import {
   ShoppingBag,
   Users,
   ShoppingCart,
-  LayoutGrid
+  LayoutGrid,
+  Search
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { searchTransactionTypes, TransactionSearchEntry } from '../lib/transactionSearch';
+import { carriedReceivableRows } from '../lib/carriedReceivables';
 import { useFinance, PurposeOption } from '../context/FinanceContext';
-import { JournalLine, ReceiptAttachmentDraft, TransactionDraft } from '../types';
+import { ClassificationRule, JournalLine, ReceiptAttachmentDraft, TransactionDraft } from '../types';
 import { FUNDING_SOURCE_OPTIONS, buildJournalLines, buildCompoundJournalLines, projectJournalLineImpacts, computeStatementImpact, orderLinesDebitsFirst } from '../lib/journalEngine';
 import { PREPAID_EXPENSE_CODE } from '../lib/reviewEngine';
 import { formatReceiptSize, prepareReceiptAttachment, validateReceiptCount } from '../lib/receiptAttachments';
@@ -142,6 +145,7 @@ interface TransactionFormSnapshot {
   additionalEvents: EventExpenseRow[];
 }
 
+const EVENT_PROGRAM_EXPENSE_TYPE = 'Event/Program Expense';
 // Event/Program Expense: each line is one event with its own amount and date. The first line
 // uses the form's own amount / event name / date; "+ Add Event" adds more lines here.
 interface EventExpenseRow {
@@ -188,6 +192,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   // Form State
   const [txName, setTxName] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<TransactionCategoryId | null>(null);
+  const [typeSearch, setTypeSearch] = useState('');
+  const [activityFeeRequest, setActivityFeeRequest] = useState<{ value: 'activity-fees' | 'receivable' | 'excess-refund'; nonce: number } | undefined>(undefined);
   const categoryContentRef = useRef<HTMLDivElement>(null);
   // Transaction Name search dropdown: open while the field has focus,
   // filtered live as you type. Selecting an option fills txName with its
@@ -383,15 +389,53 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     setSelectedCategory(category);
     // Client survey: bring the transaction type list / form into view once a category is picked.
     if (typeof window !== 'undefined') window.requestAnimationFrame?.(() => categoryContentRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }));
+    // Event/Program Expenses has a single type, so it is chosen for the user (client: only Amount and Date are asked).
     const fixedOfficerType = category === 'advances-to-officers'
       ? 'Advances to Officers'
-      : category === 'reimbursements-to-officers' ? 'Reimbursement to Officer' : '';
+      : category === 'reimbursements-to-officers' ? 'Reimbursement to Officer'
+        : category === 'event-program-expenses' ? EVENT_PROGRAM_EXPENSE_TYPE : '';
     const matchingRule = fixedOfficerType
       ? classificationRules.find(rule => rule.description === fixedOfficerType && categorizeTransactionRule(rule) === category && isRuleAvailable(rule))
       : undefined;
     setTxName(matchingRule?.description || '');
     setShowTxDropdown(false);
     setErrorMessage('');
+  };
+
+  // Transaction types a category's picker offers (same rules as the per-category list).
+  const isCategoryPickerRule = (categoryId: TransactionCategoryId, rule: ClassificationRule) => categorizeTransactionRule(rule) === categoryId
+    && (categoryId !== 'depreciation' || (isDepreciationPickerTypeVisible(rule.description) && depreciableTypes.has(rule.description)))
+    && !(categoryId === 'other' && MISC_TYPES_HIDDEN_FROM_PICKER.has(rule.description))
+    && !(categoryId === 'merchandise' && isRetiredMerchandisePickerType(rule.description))
+    && (categoryId !== 'ppe-transactions' || ((rule.description === 'Purchase Chairs' || rule.description.toLowerCase().startsWith('purchase of ')) && !isRetiredAssetPickerType(rule.description)))
+    && isRuleAvailable(rule);
+
+  // Client: one search above the categories that reaches every dropdown choice.
+  const typeSearchEntries = useMemo<TransactionSearchEntry[]>(() => TRANSACTION_CATEGORIES.flatMap(category => {
+    const base = { categoryId: category.id, categoryLabel: category.label };
+    const own: TransactionSearchEntry = { ...base, label: category.label };
+    if (category.id === 'activity-fees') {
+      return [
+        own,
+        { ...base, label: 'Collection of Activity / Event Fees', activityFeeChoice: 'activity-fees' as const },
+        { ...base, label: 'Collection of Activity Fees Receivable', activityFeeChoice: 'receivable' as const },
+        { ...base, label: 'Excess Activity Fees - Refund Status', activityFeeChoice: 'excess-refund' as const },
+      ];
+    }
+    if (category.id === 'expense-transactions') return [own, ...EXPENSE_ITEMS.map(item => ({ ...base, label: item.label, typeName: item.label }))];
+    const guided = ['prepaid-assets', 'payables', 'retirement-of-ppe', 'return-of-advances', 'advances-to-officers', 'reimbursements-to-officers', 'event-program-expenses'].includes(category.id);
+    if (guided) return [own];
+    const descriptions = Array.from(new Set(classificationRules.filter(rule => isCategoryPickerRule(category.id, rule)).map(rule => rule.description)));
+    return [own, ...descriptions.map(description => ({ ...base, label: description, typeName: description }))];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [classificationRules, depreciableTypes, isRuleAvailable]);
+  const typeSearchResults = useMemo(() => searchTransactionTypes(typeSearch, typeSearchEntries), [typeSearch, typeSearchEntries]);
+
+  const openSearchResult = (entry: TransactionSearchEntry) => {
+    selectCategory(entry.categoryId);
+    if (entry.typeName) setTxName(entry.typeName);
+    if (entry.activityFeeChoice) setActivityFeeRequest({ value: entry.activityFeeChoice, nonce: Date.now() });
+    setTypeSearch('');
   };
 
   // The funding-source question only makes sense while the credit side is
@@ -702,6 +746,9 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     () => ledgerWithoutDraftEntry(operatingJournalEntries, resumedDraftEntryId, accounts, openingBalances, accountBalances),
     [operatingJournalEntries, resumedDraftEntryId, accounts, openingBalances, accountBalances]
   );
+  // Client: receivables carried in from an earlier semester stay listed here until they are collected down to zero.
+  const carriedReceivables = useMemo(() => carriedReceivableRows(openingBalances, ledgerBalances, accounts), [openingBalances, ledgerBalances, accounts]);
+
   const advancesOutstanding = ledgerBalances['1250'] || 0;
   const cashAvailable = Math.max(0, ledgerBalances['1010'] || 0);
   // Dates are optional everywhere: a blank date is dated today, kept inside the reporting period.
@@ -1685,6 +1732,61 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
         </div>
       )}
 
+      {carriedReceivables.length > 0 && (
+        <section aria-label="Receivables still to collect" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm dark:border-amber-500/30 dark:bg-amber-500/10 sm:p-5">
+          <h3 className="text-sm font-bold text-amber-900 dark:text-amber-200">Receivables carried forward - still to collect</h3>
+          <p className="mt-1 text-[12px] font-medium text-amber-800 dark:text-amber-300">These balances came from an earlier semester. They stay here until they are collected down to zero.</p>
+          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {carriedReceivables.map(row => (
+              <button
+                key={row.code}
+                type="button"
+                onClick={() => openSearchResult({ label: row.collectionLabel, categoryId: row.categoryId, categoryLabel: TRANSACTION_CATEGORIES.find(category => category.id === row.categoryId)?.label || '', typeName: row.typeName, activityFeeChoice: row.activityFeeChoice })}
+                className="rounded-xl border border-amber-200 bg-white p-3 text-left transition-colors hover:border-amber-400 dark:border-amber-500/30 dark:bg-slate-900"
+              >
+                <span className="block text-[12px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">{row.name}</span>
+                <span className="mt-1 block text-sm font-black text-slate-900 dark:text-slate-100">{formatCurrency(row.balance)}</span>
+                <span className="mt-1 block text-[12px] font-semibold text-blue-700 dark:text-blue-300">Record collection: {row.collectionLabel}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section aria-label="Search transaction types" className="relative rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-5">
+        <label className="block text-[13px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300" htmlFor="transaction-type-search">Search all transaction types</label>
+        <div className="relative mt-1.5">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            id="transaction-type-search"
+            type="text"
+            value={typeSearch}
+            onChange={event => setTypeSearch(event.target.value)}
+            onKeyDown={event => { if (event.key === 'Enter' && typeSearchResults.length > 0) { event.preventDefault(); openSearchResult(typeSearchResults[0]); } }}
+            placeholder="e.g. Collection of Activity Fees Receivable, Purchase of Pins..."
+            autoComplete="off"
+            className="w-full rounded-xl border border-slate-200 bg-white p-3 pl-9 text-xs font-semibold text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-900 focus:ring-blue-900/10 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-500"
+          />
+        </div>
+        {typeSearch.trim() && (
+          <div role="listbox" aria-label="Matching transaction types" className="absolute left-4 right-4 z-20 mt-1 max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800 sm:left-5 sm:right-5">
+            {typeSearchResults.length > 0 ? typeSearchResults.map(entry => (
+              <button
+                key={`${entry.categoryId}|${entry.label}`}
+                type="button"
+                role="option"
+                aria-selected={false}
+                onClick={() => openSearchResult(entry)}
+                className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-xs font-semibold text-slate-700 transition-colors hover:bg-blue-50 dark:text-slate-200 dark:hover:bg-slate-700"
+              >
+                <span>{entry.label}</span>
+                <span className="shrink-0 text-[11px] font-bold uppercase tracking-wide text-blue-700 dark:text-blue-300">{entry.categoryLabel}</span>
+              </button>
+            )) : <div className="px-3 py-2.5 text-[13px] font-medium text-slate-500 dark:text-slate-400">No transaction type matches your search.</div>}
+          </div>
+        )}
+      </section>
+
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-5">
         <div className="mb-4">
           <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Choose a transaction category</h3>
@@ -1710,7 +1812,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                         ? ArrowRightLeft
                     : LayoutGrid;
             const selected = selectedCategory === category.id;
-            const optionCount = category.id === 'activity-fees' || category.id === 'prepaid-assets' || category.id === 'payables'
+            const optionCount = category.id === 'activity-fees' || category.id === 'prepaid-assets' || category.id === 'payables' || category.id === 'event-program-expenses'
               || category.id === 'retirement-of-ppe' || category.id === 'return-of-advances'
               || category.id === 'advances-to-officers' || category.id === 'reimbursements-to-officers'
               ? null
@@ -1752,7 +1854,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
         </div>
       )}
 
-      {selectedCategory === 'activity-fees' && <ActivityFeeEntry defaultOpen draftToResume={draftToResume} onDraftResumed={onDraftResumed} onDraftSaved={onDraftSaved} autoPostDraft={autoPostDraft} onDraftPosted={onDraftPosted} />}
+      {selectedCategory === 'activity-fees' && <ActivityFeeEntry defaultOpen requestedType={activityFeeRequest} draftToResume={draftToResume} onDraftResumed={onDraftResumed} onDraftSaved={onDraftSaved} autoPostDraft={autoPostDraft} onDraftPosted={onDraftPosted} />}
       {selectedCategory === 'prepaid-assets' && <PrepaidAssetEntry draftToResume={draftToResume} onDraftResumed={onDraftResumed} onDraftSaved={onDraftSaved} autoPostDraft={autoPostDraft} onDraftPosted={onDraftPosted} />}
       {selectedCategory === 'payables' && <PayablesEntry />}
       {selectedCategory === 'retirement-of-ppe' && <RetirementOfPpeEntry />}
@@ -1807,8 +1909,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
           {/* Form Fields */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2 relative">
-              <label className="block text-[13px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Transaction Type</label>
-              {isFixedOfficerTransactionType ? (
+              {selectedCategory !== 'event-program-expenses' && <label className="block text-[13px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Transaction Type</label>}
+              {selectedCategory === 'event-program-expenses' ? null : isFixedOfficerTransactionType ? (
                 <div className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
                   {txName}
                 </div>
@@ -1875,7 +1977,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               </>}
               <div className="mt-2"><ReviewLaterNote /></div>
 
-              {isSmartMatched && (
+              {isSmartMatched && selectedCategory !== 'event-program-expenses' && (
                 <div className="mt-2 text-xs font-semibold text-emerald-600">
                   Auto-classification applied successfully.
                 </div>
