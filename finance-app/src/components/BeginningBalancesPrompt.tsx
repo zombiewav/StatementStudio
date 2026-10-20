@@ -20,9 +20,9 @@ export function BeginningBalancesPrompt(): React.ReactElement | null {
 
   if (!visible) return null;
   return (
-    <div className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto bg-slate-950/60 p-4 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="beginning-balances-title">
-      <div className="my-4 w-full max-w-4xl space-y-4 rounded-3xl border border-slate-200 bg-slate-50 p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-950 sm:p-7">
-        <div className="flex items-start gap-3">
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="beginning-balances-title">
+      <div className="flex max-h-[85vh] w-full max-w-2xl flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-900 sm:p-6">
+        <div className="flex shrink-0 items-start gap-3">
           <span className="rounded-xl bg-blue-900 p-2.5 text-white"><Wallet className="h-5 w-5" /></span>
           <div>
             <h2 id="beginning-balances-title" className="text-lg font-bold text-slate-900 dark:text-slate-100">Welcome! Set up your Beginning Balances</h2>
@@ -31,7 +31,7 @@ export function BeginningBalancesPrompt(): React.ReactElement | null {
             </p>
           </div>
         </div>
-        <BeginningBalancesForm heading={false} onPosted={markAnswered}>
+        <BeginningBalancesForm heading={false} compact onPosted={markAnswered}>
           <button
             type="button"
             onClick={close}

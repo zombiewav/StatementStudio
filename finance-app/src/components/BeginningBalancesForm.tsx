@@ -6,9 +6,11 @@ import { buildBeginningBalancePosting, BEGINNING_BALANCES_DESCRIPTION } from '..
 // Beginning Balances (Sheet3 of the working paper): the opening figures a first-time user fills in before recording
 // regular transactions. Posts as one ordinary balanced journal entry (a debit line per asset account with an opening
 // amount, credited in total to Fund Balance), so every ledger, trial balance and statement picks it up unchanged.
-export function BeginningBalancesForm({ onPosted, heading = true, children }: {
+export function BeginningBalancesForm({ onPosted, heading = true, compact = false, children }: {
   onPosted?: () => void;
   heading?: boolean;
+  // Inside the first-sign-in dialog: no inner card, the account fields scroll and the buttons stay in view.
+  compact?: boolean;
   children?: React.ReactNode;
 }): React.ReactElement {
   const { accounts, settings, addJournalEntry, reverseJournalEntry, formatCurrency } = useFinance();
@@ -46,7 +48,7 @@ export function BeginningBalancesForm({ onPosted, heading = true, children }: {
   };
 
   return (
-    <form onSubmit={handlePost} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
+    <form onSubmit={handlePost} className={compact ? 'flex min-h-0 flex-1 flex-col gap-4' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm space-y-4'}>
       {heading && (
         <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 pb-2.5 flex items-center gap-2">
           <Wallet className="w-4.5 h-4.5 text-blue-900" /> Beginning Balances
@@ -73,7 +75,7 @@ export function BeginningBalancesForm({ onPosted, heading = true, children }: {
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-x-4 gap-y-3 text-xs">
+      <div className={`grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 text-xs ${compact ? 'min-h-0 flex-1 content-start overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-3 custom-scrollbar dark:border-slate-800 dark:bg-slate-950' : 'lg:grid-cols-3 2xl:grid-cols-4'}`}>
         {assetAccounts.map(account => (
           <div key={account.code}>
             <label className="block text-[12px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">{account.name}</label>
@@ -93,6 +95,7 @@ export function BeginningBalancesForm({ onPosted, heading = true, children }: {
         ))}
       </div>
 
+      <div className={compact ? 'shrink-0 space-y-3' : 'space-y-4'}>
       <button
         type="submit"
         className="w-full bg-blue-900 hover:bg-blue-950 text-white font-bold text-xs p-2.5 rounded-xl transition-all shadow-md shadow-blue-900/10 cursor-pointer"
@@ -100,6 +103,7 @@ export function BeginningBalancesForm({ onPosted, heading = true, children }: {
         Post Beginning Balances
       </button>
       {children}
+      </div>
     </form>
   );
 }
