@@ -305,6 +305,9 @@ login flag. This is still local-browser authentication, not secure multi-device 
   collection drafts lower the remaining balance, excess drafts do the same for the excess list, and advance collections in other drafts use up the Unearned Activity Fees beginning balance. The draft being
   edited never counts against itself. A collection drafted against a draft event posts only after that event is posted (it follows the event by name; otherwise it says to post the event first).
 
+- **Merchandise Transactions dropdowns (client, Oct 20 2026)**: like PPE's PPE/F&F pair, the type picker is two selects: **Purchase** (Acquisition of Merchandise for Sale, Collections from Suppliers - Merchandise,
+  Downpayment to Suppliers for Pre-Ordered Merchandise: `MERCHANDISE_PURCHASE_TYPES`) and **Sales** (every remaining merchandise type). Picking from one clears the other.
+
 ## Known bugs / gaps, not yet fixed (flagged, intentionally left alone)
 
 - **Activities & Programs**: budget is now editable inline (click the Budget Cap figure), but

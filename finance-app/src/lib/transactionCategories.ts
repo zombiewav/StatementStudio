@@ -62,6 +62,16 @@ export function isRetiredMerchandisePickerType(description: string): boolean {
     || description === 'Collection of Receivables from Suppliers';
 }
 
+// Client (Oct 2026): Merchandise Transactions has two dropdowns, like PPE has its PPE and F&F dropdowns:
+// Purchase (these three types) and Sales (every remaining merchandise type).
+export const MERCHANDISE_PURCHASE_TYPES = [
+  'Acquisition of Merchandise for Sale - Goods Received and On Hand',
+  'Collections from Suppliers - Merchandise',
+  'Downpayment to Suppliers for Pre-Ordered Merchandise',
+];
+
+export const isMerchandisePurchaseType = (description: string): boolean => MERCHANDISE_PURCHASE_TYPES.includes(description);
+
 export function isDepreciationPickerTypeVisible(description: string): boolean {
   return description !== 'Depreciation Expense - Equipment' && !isRetiredAssetPickerType(description);
 }

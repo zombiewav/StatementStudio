@@ -50,8 +50,8 @@ describe('Search all transaction types', () => {
     const result = renderer.root.findAll(node => node.props.role === 'option').find(option => text(option).includes('Collections from Suppliers - Merchandise'))!;
     expect(result).toBeDefined();
     act(() => { result.props.onClick(); });
-    const typeInput = renderer.root.findAllByType('input').find(item => item.props.placeholder === 'Search a transaction type...')!;
-    expect(typeInput.props.value).toBe('Collections from Suppliers - Merchandise');
+    const purchase = renderer.root.findAllByType('select').find(item => item.props['aria-label'] === 'Purchase Dropdown')!;
+    expect(purchase.props.value).toBe('Collections from Suppliers - Merchandise');
     expect(text(renderer.root)).toContain('Outstanding receivable');
   });
 });
@@ -84,5 +84,37 @@ describe('Final revisions (Oct 2026)', () => {
     expect(shown).toContain('Yes - current semester');
     expect(shown).toContain('No - next semester');
     expect(shown.split(noteText).length - 1).toBe(1);
+  });
+});
+
+describe('Merchandise Transactions dropdowns', () => {
+  const selectNamed = (label: string) => renderer.root.findAllByType('select').find(item => item.props['aria-label'] === label)!;
+  const optionLabels = (select: any) => select.findAllByType('option').map((option: any) => text(option)).filter((label: string) => label && !label.startsWith('Select'));
+
+  it('has a Purchase dropdown and a Sales dropdown with the remaining types', () => {
+    mount();
+    act(() => { button('Merchandise Transactions').props.onClick(); });
+    expect(text(renderer.root)).not.toContain('Search a transaction type');
+    expect(optionLabels(selectNamed('Purchase Dropdown'))).toEqual([
+      'Acquisition of Merchandise for Sale - Goods Received and On Hand',
+      'Collections from Suppliers - Merchandise',
+      'Downpayment to Suppliers for Pre-Ordered Merchandise',
+    ]);
+    const sales = optionLabels(selectNamed('Sales Dropdown'));
+    expect(sales.length).toBeGreaterThan(0);
+    expect(sales).toContain('Sale of Merchandise / Delivery of Merchandise to Buyers (paid or unpaid)');
+    expect(sales).not.toContain('Collections from Suppliers - Merchandise');
+  });
+
+  it('choosing from one dropdown applies that type and clears the other', () => {
+    mount();
+    act(() => { button('Merchandise Transactions').props.onClick(); });
+    act(() => { selectNamed('Purchase Dropdown').props.onChange({ target: { value: 'Collections from Suppliers - Merchandise' } }); });
+    expect(selectNamed('Purchase Dropdown').props.value).toBe('Collections from Suppliers - Merchandise');
+    expect(selectNamed('Sales Dropdown').props.value).toBe('');
+    expect(text(renderer.root)).toContain('Outstanding receivable');
+    act(() => { selectNamed('Sales Dropdown').props.onChange({ target: { value: 'Collection of Unpaid Sold Merchandise' } }); });
+    expect(selectNamed('Purchase Dropdown').props.value).toBe('');
+    expect(selectNamed('Sales Dropdown').props.value).toBe('Collection of Unpaid Sold Merchandise');
   });
 });

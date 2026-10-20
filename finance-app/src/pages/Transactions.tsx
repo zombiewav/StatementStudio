@@ -41,7 +41,7 @@ import { PrepaidAssetEntry } from '../components/PrepaidAssetEntry';
 import { PayablesEntry } from '../components/PayablesEntry';
 import { RetirementOfPpeEntry } from '../components/RetirementOfPpeEntry';
 import { ReturnOfAdvancesEntry } from '../components/ReturnOfAdvancesEntry';
-import { isDepreciationPickerTypeVisible, isRetiredAssetPickerType, isRetiredMerchandisePickerType, categorizeTransactionRule, TRANSACTION_CATEGORIES, TransactionCategoryId } from '../lib/transactionCategories';
+import { isDepreciationPickerTypeVisible, isMerchandisePurchaseType, isRetiredAssetPickerType, isRetiredMerchandisePickerType, categorizeTransactionRule, TRANSACTION_CATEGORIES, TransactionCategoryId } from '../lib/transactionCategories';
 import { merchandiseSaleCostError } from '../lib/transactionHistory';
 import {
   buildMerchandiseAcquisitionPosting,
@@ -1916,6 +1916,18 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               {selectedCategory === 'event-program-expenses' ? null : isFixedOfficerTransactionType ? (
                 <div className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
                   {txName}
+                </div>
+              ) : selectedCategory === 'merchandise' ? (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {([['Purchase Dropdown', 'Select a purchase transaction', transactionTypeOptions.filter(isMerchandisePurchaseType)], ['Sales Dropdown', 'Select a sales transaction', transactionTypeOptions.filter(option => !isMerchandisePurchaseType(option))]] as const).map(([label, placeholder, options]) => (
+                    <div key={label}>
+                      <label className="block text-[12px] font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">{label}</label>
+                      <select aria-label={label} value={options.includes(txName) ? txName : ''} onChange={event => { setTxName(event.target.value); setShowTxDropdown(false); }} className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white p-3 text-xs font-semibold text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
+                        <option value="">{placeholder}</option>
+                        {options.map(option => <option key={option} value={option}>{option}</option>)}
+                      </select>
+                    </div>
+                  ))}
                 </div>
               ) : selectedCategory === 'ppe-transactions' ? (
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
