@@ -60,6 +60,7 @@ import {
   buildCurrentMembershipFeePosting,
   buildMembershipRefundResolution,
   buildPriorMembershipCollectionPosting,
+  remainingBeginningMembershipReceivable,
   MEMBERSHIP_REFUND_LIABILITY_CODE,
   MembershipRefundStatus,
 } from '../lib/membershipFees';
@@ -798,7 +799,9 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   // receivable requires that receivable to actually exist first — the
   // fee must have been billed (via the current-school-year accrual
   // question) before there's anything to collect.
-  const membershipReceivableOutstanding = ledgerBalances[MEMBERSHIP_DUES_RECEIVABLE_CODE] || 0;
+  // Only used by Collection of Unpaid Membership Fees from Previous Period: the beginning balance (client, Oct 2026), not the ledger balance.
+  const membershipBeginningBalance = Math.max(0, openingBalances[MEMBERSHIP_DUES_RECEIVABLE_CODE] || 0);
+  const membershipReceivableOutstanding = remainingBeginningMembershipReceivable(membershipBeginningBalance, ledgerEntries);
   const excessRefundLiabilityOutstanding = Math.max(0, ledgerBalances[isMerchandiseRefundStatus ? '2150' : MEMBERSHIP_REFUND_LIABILITY_CODE] || 0);
   const membershipCollectionTotal = sumDatedAmounts(membershipCollections);
   const showMembershipReceivableWarning = isPriorMembershipCollection && membershipCollectionTotal > membershipReceivableOutstanding;
@@ -1365,7 +1368,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       return;
     }
     if (showMembershipReceivableWarning) {
-      setErrorMessage('Caution: this exceeds the Membership Dues Receivable currently on the books — make sure the fee was billed this school year (via the accrual question) before collecting it.');
+      setErrorMessage(`The amount entered exceeds the beginning balance of ${formatCurrency(membershipBeginningBalance)} in Membership Dues Receivable. Please review the amount entered. Make sure the fee was recorded and accrued in the previous reporting period/semester.`);
       return;
     }
     if (isMerchandiseSale) {
@@ -1975,7 +1978,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
 
               <p className="text-[12px] text-slate-500 mt-1 font-medium dark:text-slate-400">Select a known type. Its accounting rule determines the accounts automatically.</p>
               </>}
-              <div className="mt-2"><ReviewLaterNote /></div>
 
               {isSmartMatched && selectedCategory !== 'event-program-expenses' && (
                 <div className="mt-2 text-xs font-semibold text-emerald-600">
@@ -2294,7 +2296,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                   <div className="rounded-lg bg-white/80 p-3 dark:bg-slate-900/60"><span className="text-[11px] font-bold text-slate-500">STILL RECEIVABLE</span><p className="mt-1 text-xs font-black text-rose-700 dark:text-rose-300">{formatCurrency(membershipPostingResult.posting?.amountStillReceivable || 0)}</p></div>
                   <div className="rounded-lg bg-white/80 p-3 dark:bg-slate-900/60"><span className="text-[11px] font-bold text-slate-500">REFUND LIABILITY</span><p className="mt-1 text-xs font-black text-amber-700 dark:text-amber-300">{formatCurrency(membershipPostingResult.posting?.refundLiability || 0)}</p></div>
                 </div>
-                <p className="text-[12px] text-amber-700 dark:text-amber-400 font-medium">Use dates within {reportingPeriod} {settings.semester === '1st Semester' ? settings.reportingYear : (settings.reportingYear || 0) + 1}. The full fee is recognized on Date 1. Later collections clear Membership Fees Receivable first; any collection above the total fees is recorded separately as Refund Liability - Membership Fees.</p>
+                {amount > 0 && amount > membershipCollectionTotal && <p className="rounded-lg bg-amber-100 p-2.5 text-[13px] font-bold text-amber-900 dark:bg-amber-500/15 dark:text-amber-100">Total membership fees collected are less than the total membership fees due. The uncollected balance will be recognized as Membership Fee Receivable.</p>}
+                {amount > 0 && membershipCollectionTotal > amount && <p className="rounded-lg bg-amber-100 p-2.5 text-[13px] font-bold text-amber-900 dark:bg-amber-500/15 dark:text-amber-100">Total membership fees collected exceed the total membership fees due. The excess amount is recognized as Refund Liability &ndash; Membership Fee. At the end of the reporting period, update the status under Excess Membership Fee Collection &ndash; Status if the amount has been refunded or will no longer be refunded.</p>}
                 {membershipPostingResult.error && <p className="text-[12px] font-bold text-rose-700 dark:text-rose-300">{membershipPostingResult.error}</p>}
               </div>
             )}
@@ -2315,6 +2318,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                   addLabel="Add collection"
                   allowMultiple={false}
                 />
+                <div className="rounded-lg bg-white/80 p-3 text-[12px] dark:bg-slate-900/60"><span className="font-bold text-slate-500">Beginning balance of Membership Dues Receivable still to collect</span><p className="mt-1 font-black text-indigo-800 dark:text-indigo-200">{formatCurrency(membershipReceivableOutstanding)}</p></div>
+                {membershipReceivableOutstanding <= 0 && <p className="text-[12px] font-bold text-amber-700 dark:text-amber-300">There is no beginning balance of Membership Dues Receivable left to collect.</p>}
                 <div className="rounded-lg bg-white/80 p-3 text-[12px] dark:bg-slate-900/60"><span className="font-bold text-slate-500">Receivable remaining after these collections</span><p className="mt-1 font-black text-indigo-800 dark:text-indigo-200">{formatCurrency(Math.max(0, membershipReceivableOutstanding - membershipCollectionTotal))}</p></div>
                 {membershipPostingResult.error && <p className="text-[12px] font-bold text-rose-700 dark:text-rose-300">{membershipPostingResult.error}</p>}
               </div>
@@ -2398,7 +2403,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
 
             {showMembershipReceivableWarning && (
               <div className="sm:col-span-2 p-3 bg-rose-50 border border-rose-100 text-rose-700 text-[13px] font-semibold rounded-xl dark:bg-rose-500/10 dark:border-rose-500/20 dark:text-rose-300">
-                Caution: this exceeds the {formatCurrency(membershipReceivableOutstanding)} currently on the books as Membership Dues Receivable. Make sure the fee was accrued and recorded as a receivable in the previous reporting period/semester.
+                Caution: The amount entered exceeds the beginning balance of {formatCurrency(membershipBeginningBalance)} in Membership Dues Receivable. Please review the amount entered. Make sure the fee was recorded and accrued in the previous reporting period/semester.
               </div>
             )}
 
@@ -2730,6 +2735,8 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
             </div>
 
           </div>
+
+          <ReviewLaterNote />
 
           <div className="mt-2 flex flex-col gap-2 sm:flex-row">
             <button

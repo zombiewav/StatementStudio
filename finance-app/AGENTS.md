@@ -293,6 +293,18 @@ login flag. This is still local-browser authentication, not secure multi-device 
   opens the right category / Activity Fees choice; a "Receivables carried forward - still to collect" card (`lib/carriedReceivables.ts`) lists 1200/1300/1310/1320/1360 balances that
   came in as opening balances until they reach zero. Logout offers "Log out anyway" when the workspace cannot be saved (save conflict): the browser copy stays and is offered at the next sign-in.
 
+- **FINAL REVISIONS paper (client, Oct 20 2026)**: Membership Fees is the first category card, then Activity Fees. The Review-later note (`ReviewLaterNote`) has the new
+  "Save this transaction as a draft and do not post it yet until all collections and payments made within the reporting period have been updated..." text, is large, and sits directly
+  above Save as Draft in every form (general, Activity Fees, Prepaid, Customer Order), not under the type field. The Membership accrual form shows the "collected is less than / exceeds
+  the fees due" notes (nothing when equal). **Collection of Unpaid Membership Fees from Previous Period** is capped by the *beginning balance* of Membership Dues Receivable (opening balance
+  1300 less earlier Dr Cash / Cr 1300 collections, `remainingBeginningMembershipReceivable`), like Payables, with the "exceeds the beginning balance of PX" caution; no beginning balance means
+  nothing to collect. Activity Fees buttons read "Yes - current semester" / "No - next semester".
+
+- **Activity Fees drafts are linked (client, Oct 20 2026)**: an Activity Fees draft stores form fields only, so before this nothing linked to it until Review posted it. `lib/activityFeeDrafts.ts`
+  (`activityFeeDraftEffects`) derives, from the saved drafts, what ActivityFeeEntry shows: an event saved as a draft appears in "Event with unpaid activity fees" (marked "saved draft") with its receivable,
+  collection drafts lower the remaining balance, excess drafts do the same for the excess list, and advance collections in other drafts use up the Unearned Activity Fees beginning balance. The draft being
+  edited never counts against itself. A collection drafted against a draft event posts only after that event is posted (it follows the event by name; otherwise it says to post the event first).
+
 ## Known bugs / gaps, not yet fixed (flagged, intentionally left alone)
 
 - **Activities & Programs**: budget is now editable inline (click the Budget Cap figure), but

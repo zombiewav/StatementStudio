@@ -4,6 +4,7 @@ import { CalendarDays, ChevronDown, ChevronUp } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import { computeAccountBalances } from '../lib/accountTotals';
 import { ACTIVITY_FEE_RECEIVABLE_CODE, ACTIVITY_FEE_REFUND_LIABILITY_CODE, ACTIVITY_FEE_REVENUE_CODE, buildInitialActivityFeeSchedule, CASH_CODE, UNEARNED_ACTIVITY_FEE_CODE } from '../lib/activityFees';
+import { activityFeeDraftEffects, isDraftRecordId } from '../lib/activityFeeDrafts';
 import { reportingPeriodBounds } from '../lib/reportingPeriod';
 import { buildAccountPeriodHistory } from '../lib/transactionHistory';
 import { JournalLine, TransactionDraft } from '../types';
@@ -32,7 +33,7 @@ interface ActivityFeeEntryProps {
 }
 
 export function ActivityFeeEntry({ defaultOpen = false, requestedType, draftToResume = null, onDraftResumed, onDraftSaved, autoPostDraft = false, onDraftPosted }: ActivityFeeEntryProps): React.ReactElement {
-  const { createActivityFeeRecord, collectActivityFeeReceivable, updateActivityFeeRecord, activityFeeRecords, saveDraftTransaction, deleteDraftTransaction, settings, formatCurrency, accounts, journalEntries } = useFinance();
+  const { createActivityFeeRecord, collectActivityFeeReceivable, updateActivityFeeRecord, activityFeeRecords, draftTransactions, saveDraftTransaction, deleteDraftTransaction, settings, formatCurrency, accounts, journalEntries } = useFinance();
   const [open, setOpen] = useState(defaultOpen);
   const [transactionType, setTransactionType] = useState<'activity-fees' | 'receivable' | 'excess-refund'>(requestedType?.value ?? 'activity-fees');
   useEffect(() => { if (requestedType) setTransactionType(requestedType.value); }, [requestedType?.nonce]);
@@ -54,13 +55,33 @@ export function ActivityFeeEntry({ defaultOpen = false, requestedType, draftToRe
   const [excessDate, setExcessDate] = useState('');
   const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
   const [pendingAutoPost, setPendingAutoPost] = useState(false);
-  const receivableRecords = useMemo(
-    () => activityFeeRecords.filter(record => record.status === 'receivable' && record.receivableBalance > 0),
-    [activityFeeRecords]
+  // Saved drafts are linked too (client, Oct 2026): an event or collection that is only a draft already shows up and
+  // lowers the balances below. The draft being edited does not count against itself.
+  const draftEffects = useMemo(
+    () => activityFeeDraftEffects(draftTransactions, activityFeeRecords, editingDraftId || undefined),
+    [draftTransactions, activityFeeRecords, editingDraftId]
   );
+  const receivableRecords = draftEffects.receivableRecords;
   const selectedReceivable = receivableRecords.find(record => record.id === selectedReceivableId);
-  const excessRecords = useMemo(() => activityFeeRecords.filter(record => (record.refundLiabilityBalance || 0) > 0), [activityFeeRecords]);
+  const excessRecords = draftEffects.excessRecords;
   const selectedExcess = excessRecords.find(record => record.id === selectedExcessId);
+  // A draft event becomes a real record once Review posts it: follow the saved choice over to that record.
+  const [pickedReceivableName, setPickedReceivableName] = useState('');
+  const [pickedExcessName, setPickedExcessName] = useState('');
+  useEffect(() => {
+    if (selectedReceivable) setPickedReceivableName(selectedReceivable.eventName);
+    else if (isDraftRecordId(selectedReceivableId) && pickedReceivableName) {
+      const posted = receivableRecords.find(record => !isDraftRecordId(record.id) && record.eventName === pickedReceivableName);
+      if (posted) setSelectedReceivableId(posted.id);
+    }
+  }, [selectedReceivable, selectedReceivableId, pickedReceivableName, receivableRecords]);
+  useEffect(() => {
+    if (selectedExcess) setPickedExcessName(selectedExcess.eventName);
+    else if (isDraftRecordId(selectedExcessId) && pickedExcessName) {
+      const posted = excessRecords.find(record => !isDraftRecordId(record.id) && record.eventName === pickedExcessName);
+      if (posted) setSelectedExcessId(posted.id);
+    }
+  }, [selectedExcess, selectedExcessId, pickedExcessName, excessRecords]);
 
   useEffect(() => {
     if (!draftToResume || draftToResume.category !== 'activity-fees') return;
@@ -87,8 +108,10 @@ export function ActivityFeeEntry({ defaultOpen = false, requestedType, draftToRe
         ? savedCollections.filter(row => !row.date || row.date >= savedEventDate)
         : firstRow());
     setSelectedReceivableId(typeof snapshot.selectedReceivableId === 'string' ? snapshot.selectedReceivableId : '');
+    setPickedReceivableName(typeof snapshot.selectedReceivableEventName === 'string' ? snapshot.selectedReceivableEventName : '');
     setReceivableCollection(Array.isArray(snapshot.receivableCollection) && snapshot.receivableCollection.length ? snapshot.receivableCollection as DatedAmountInputRow[] : firstRow());
     setSelectedExcessId(typeof snapshot.selectedExcessId === 'string' ? snapshot.selectedExcessId : '');
+    setPickedExcessName(typeof snapshot.selectedExcessEventName === 'string' ? snapshot.selectedExcessEventName : '');
     setExcessStatus(snapshot.excessStatus === 'next' || snapshot.excessStatus === 'nonrefundable' ? snapshot.excessStatus : 'current');
     setExcessAmount(typeof snapshot.excessAmount === 'string' ? snapshot.excessAmount : '');
     setExcessDate(typeof snapshot.excessDate === 'string' ? snapshot.excessDate : '');
@@ -119,8 +142,10 @@ export function ActivityFeeEntry({ defaultOpen = false, requestedType, draftToRe
     const { startDate, endDate } = reportingPeriodBounds(settings.semester, settings.reportingYear);
     return buildAccountPeriodHistory(account, journalEntries, startDate, endDate).beginningBalance;
   }, [journalEntries, accounts, settings.semester, settings.reportingYear]);
-  const priorPeriodCollectedMax = Math.max(0, unearnedActivityFeesBalance);
-  const showUnearnedBalanceWarning = eventOccursThisPeriod === 'yes' && Number(priorPeriodCollected || 0) > unearnedActivityFeesBalance;
+  // Advance collections already entered in other saved drafts use up the same balance.
+  const availableUnearnedBalance = Math.max(0, Math.round((unearnedActivityFeesBalance - draftEffects.reservedPriorPeriodCollected) * 100) / 100);
+  const priorPeriodCollectedMax = availableUnearnedBalance;
+  const showUnearnedBalanceWarning = eventOccursThisPeriod === 'yes' && Number(priorPeriodCollected || 0) > availableUnearnedBalance;
   const excessCollection = Math.max(0, Number(priorPeriodCollected || 0) + collectionTotal - Number(totalExpected || 0));
 
   // Live preview of the actual journal lines this will post, using the same
@@ -165,7 +190,7 @@ export function ActivityFeeEntry({ defaultOpen = false, requestedType, draftToRe
   const submit = (event?: React.FormEvent) => {
     event?.preventDefault(); setError(''); setMessage('');
     if (showUnearnedBalanceWarning) {
-      setError(`Activity fees collected in a previous reporting period cannot exceed the ${formatCurrency(unearnedActivityFeesBalance)} currently on the books as Unearned Activity Fees.`);
+      setError(`Activity fees collected in a previous reporting period cannot exceed the ${formatCurrency(availableUnearnedBalance)} available from the beginning balance of Unearned Activity Fees (after other saved drafts).`);
       return;
     }
     try {
@@ -192,9 +217,16 @@ export function ActivityFeeEntry({ defaultOpen = false, requestedType, draftToRe
       setError('Select an event with an outstanding Activity Fees Receivable balance.');
       return;
     }
+    const receivableTarget = isDraftRecordId(selectedReceivable.id)
+      ? activityFeeRecords.find(record => record.eventName === selectedReceivable.eventName && record.status === 'receivable')
+      : selectedReceivable;
+    if (!receivableTarget) {
+      setError(`"${selectedReceivable.eventName}" is still a draft. Post that event from Review first, then post this collection.`);
+      return;
+    }
     try {
       const updated = collectActivityFeeReceivable(
-        selectedReceivable.id,
+        receivableTarget.id,
         receivableCollection
           .filter(row => Number(row.amount) > 0)
           .map(row => ({ date: row.date, amount: Number(row.amount) })),
@@ -212,9 +244,13 @@ export function ActivityFeeEntry({ defaultOpen = false, requestedType, draftToRe
   const submitExcessResolution = (event?: React.FormEvent) => {
     event?.preventDefault(); setError(''); setMessage('');
     if (!selectedExcess) { setError('Select an event with an outstanding refund liability.'); return; }
+    const excessTarget = isDraftRecordId(selectedExcess.id)
+      ? activityFeeRecords.find(record => record.eventName === selectedExcess.eventName && (record.refundLiabilityBalance || 0) > 0)
+      : selectedExcess;
+    if (!excessTarget) { setError(`"${selectedExcess.eventName}" is still a draft. Post that event from Review first, then update its excess.`); return; }
     try {
       if (excessStatus === 'next') {
-        updateActivityFeeRecord(selectedExcess.id, { type: 'defer-excess-refund' }, new Date().toISOString().slice(0, 10), settings.fiscalYear);
+        updateActivityFeeRecord(excessTarget.id, { type: 'defer-excess-refund' }, new Date().toISOString().slice(0, 10), settings.fiscalYear);
       } else {
         const amount = Number(excessAmount || 0);
         if (excessDate && settings.reportingYear && settings.semester) {
@@ -225,7 +261,7 @@ export function ActivityFeeEntry({ defaultOpen = false, requestedType, draftToRe
             throw new Error(`Date must be within ${settings.semester === '1st Semester' ? 'August to December' : 'January to May'} ${expectedYear}.`);
           }
         }
-        updateActivityFeeRecord(selectedExcess.id, { type: excessStatus === 'current' ? 'refund-excess' : 'recognize-excess', amount }, excessDate, settings.fiscalYear);
+        updateActivityFeeRecord(excessTarget.id, { type: excessStatus === 'current' ? 'refund-excess' : 'recognize-excess', amount }, excessDate, settings.fiscalYear);
       }
       setMessage(excessStatus === 'current' ? 'Excess activity fee refund recorded.' : excessStatus === 'next' ? 'Refund remains payable for the next reporting period.' : 'Non-refundable excess recognized as Activity Fees Revenue.');
       setExcessAmount(''); setExcessDate('');
@@ -266,8 +302,10 @@ export function ActivityFeeEntry({ defaultOpen = false, requestedType, draftToRe
         priorEventCollections,
         onOrAfterEventCollections,
         selectedReceivableId,
+        selectedReceivableEventName: selectedReceivable?.eventName || pickedReceivableName,
         receivableCollection,
         selectedExcessId,
+        selectedExcessEventName: selectedExcess?.eventName || pickedExcessName,
         excessStatus,
         excessAmount,
         excessDate,
@@ -302,8 +340,7 @@ export function ActivityFeeEntry({ defaultOpen = false, requestedType, draftToRe
           <div className="xl:col-span-7">
           {transactionType === 'activity-fees' ? (
         <form onSubmit={event => { event.preventDefault(); saveAsDraft(); }} className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="sm:col-span-2"><ReviewLaterNote /></div>
-          <div className="sm:col-span-2"><label className="mb-1 block text-[12px] font-bold uppercase text-slate-500">Has the event already taken place, or is it scheduled to take place during this reporting period?</label><div className="flex flex-wrap gap-2">{(['yes','no'] as const).map(answer => <button key={answer} type="button" onClick={() => setEventOccursThisPeriod(answer)} className={`rounded-lg px-4 py-2 text-xs font-bold ${eventOccursThisPeriod === answer ? 'bg-blue-700 text-white' : 'border border-slate-300 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'}`}>{answer === 'yes' ? 'Yes — this reporting period' : 'No — a future reporting period'}</button>)}</div></div>
+          <div className="sm:col-span-2"><label className="mb-1 block text-[12px] font-bold uppercase text-slate-500">Has the event already taken place, or is it scheduled to take place during this reporting period?</label><div className="flex flex-wrap gap-2">{(['yes','no'] as const).map(answer => <button key={answer} type="button" onClick={() => setEventOccursThisPeriod(answer)} className={`rounded-lg px-4 py-2 text-xs font-bold ${eventOccursThisPeriod === answer ? 'bg-blue-700 text-white' : 'border border-slate-300 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'}`}>{answer === 'yes' ? 'Yes - current semester' : 'No - next semester'}</button>)}</div></div>
           <label className="text-[12px] font-bold uppercase text-slate-500">Event Name<input value={eventName} onChange={event => setEventName(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" required /></label>
           {eventOccursThisPeriod === 'yes' && <label className="text-[12px] font-bold uppercase text-slate-500">Date of Event<input type="date" value={eventDate} onChange={event => setEventDate(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" required /></label>}
           {eventOccursThisPeriod === 'yes' && <>
@@ -348,13 +385,13 @@ export function ActivityFeeEntry({ defaultOpen = false, requestedType, draftToRe
           )}
           {error && <p className="sm:col-span-2 rounded-lg bg-rose-100 p-2 text-[12px] font-bold text-rose-700 dark:bg-rose-500/10 dark:text-rose-300">{error}</p>}
           {message && <p className="sm:col-span-2 rounded-lg bg-emerald-100 p-2 text-[12px] font-bold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">{message}</p>}
+          <div className="sm:col-span-2"><ReviewLaterNote /></div>
           <div className="sm:col-span-2 flex flex-col gap-2 sm:flex-row">
             <button type="submit" className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-3 text-xs font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">Save as Draft</button>
           </div>
         </form>
           ) : transactionType === 'receivable' ? (
             <form onSubmit={event => { event.preventDefault(); saveAsDraft(); }} className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="sm:col-span-2"><ReviewLaterNote /></div>
               <p className="sm:col-span-2 text-[12px] font-medium text-slate-600 dark:text-slate-300">
                 Use this for unpaid activity fees from an event that was already held or completed in a previous reporting period. Record one collection transaction at a time.
               </p>
@@ -368,7 +405,7 @@ export function ActivityFeeEntry({ defaultOpen = false, requestedType, draftToRe
                 >
                   <option value="">Select an event…</option>
                   {receivableRecords.map(record => (
-                    <option key={record.id} value={record.id}>{record.eventName} — {formatCurrency(record.receivableBalance)} remaining</option>
+                    <option key={record.id} value={record.id}>{record.eventName}{isDraftRecordId(record.id) ? ' (saved draft)' : ''} — {formatCurrency(record.receivableBalance)} remaining</option>
                   ))}
                 </select>
               </label>
@@ -397,20 +434,21 @@ export function ActivityFeeEntry({ defaultOpen = false, requestedType, draftToRe
               )}
               {error && <p className="sm:col-span-2 rounded-lg bg-rose-100 p-2 text-[12px] font-bold text-rose-700 dark:bg-rose-500/10 dark:text-rose-300">{error}</p>}
               {message && <p className="sm:col-span-2 rounded-lg bg-emerald-100 p-2 text-[12px] font-bold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">{message}</p>}
+              <div className="sm:col-span-2"><ReviewLaterNote /></div>
               <div className="sm:col-span-2 flex flex-col gap-2 sm:flex-row">
                 <button type="submit" disabled={!selectedReceivable} className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-3 text-xs font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">Save as Draft</button>
               </div>
             </form>
           ) : (
             <form onSubmit={event => { event.preventDefault(); saveAsDraft(); }} className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="sm:col-span-2"><ReviewLaterNote /></div>
               <p className="sm:col-span-2 text-[12px] font-medium text-slate-600 dark:text-slate-300">Use this when collections exceeded the total required activity fees. Resolve the outstanding Refund Liability for the event.</p>
-              <label className="sm:col-span-2 text-[12px] font-bold uppercase text-slate-500">Event with excess activity fees<select value={selectedExcessId} onChange={event => setSelectedExcessId(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-xs font-semibold dark:border-slate-700 dark:bg-slate-900" required><option value="">Select an event…</option>{excessRecords.map(record => <option key={record.id} value={record.id}>{record.eventName} — {formatCurrency(record.refundLiabilityBalance || 0)} refund liability</option>)}</select></label>
+              <label className="sm:col-span-2 text-[12px] font-bold uppercase text-slate-500">Event with excess activity fees<select value={selectedExcessId} onChange={event => setSelectedExcessId(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-xs font-semibold dark:border-slate-700 dark:bg-slate-900" required><option value="">Select an event…</option>{excessRecords.map(record => <option key={record.id} value={record.id}>{record.eventName}{isDraftRecordId(record.id) ? ' (saved draft)' : ''} — {formatCurrency(record.refundLiabilityBalance || 0)} refund liability</option>)}</select></label>
               {excessRecords.length === 0 && <p className="sm:col-span-2 rounded-lg bg-amber-100 p-3 text-[12px] font-semibold text-amber-800">No events currently have an excess Activity Fees Refund Liability.</p>}
               <label className="sm:col-span-2 text-[12px] font-bold uppercase text-slate-500">How will the excess activity fee be handled?<select value={excessStatus} onChange={event => setExcessStatus(event.target.value as typeof excessStatus)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-xs font-semibold dark:border-slate-700 dark:bg-slate-900"><option value="current">Refunded in the Current Reporting Period</option><option value="next">Will Be Refunded in the Next Reporting Period</option><option value="nonrefundable">Will Not Be Refunded</option></select></label>
               {excessStatus !== 'next' && <><label className="text-[12px] font-bold uppercase text-slate-500">{excessStatus === 'current' ? 'Amount refunded' : 'Amount not refunded'}<input type="number" min="0.01" step="0.01" max={selectedExcess?.refundLiabilityBalance} value={excessAmount} onChange={event => setExcessAmount(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-xs dark:border-slate-700 dark:bg-slate-900" required /></label><label className="text-[12px] font-bold uppercase text-slate-500">{excessStatus === 'current' ? 'Date of refund (optional)' : 'Date recognized (optional)'}<input type="date" value={excessDate} onChange={event => setExcessDate(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-xs dark:border-slate-700 dark:bg-slate-900" /><span className="mt-1 block normal-case font-medium">Leave blank if unavailable. If entered, it must fall within the selected reporting period.</span></label></>}
               {excessStatus === 'next' && <p className="sm:col-span-2 rounded-lg bg-indigo-50 p-3 text-[12px] font-semibold text-indigo-800 dark:bg-indigo-500/10 dark:text-indigo-200">No journal entry is posted. The refund liability remains open in Review for the next reporting period.</p>}
               {error && <p className="sm:col-span-2 rounded-lg bg-rose-100 p-2 text-[12px] font-bold text-rose-700">{error}</p>}{message && <p className="sm:col-span-2 rounded-lg bg-emerald-100 p-2 text-[12px] font-bold text-emerald-700">{message}</p>}
+              <div className="sm:col-span-2"><ReviewLaterNote /></div>
               <div className="sm:col-span-2 flex flex-col gap-2 sm:flex-row"><button type="submit" disabled={!selectedExcess} className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-3 text-xs font-bold text-slate-700 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">Save as Draft</button></div>
             </form>
           )}

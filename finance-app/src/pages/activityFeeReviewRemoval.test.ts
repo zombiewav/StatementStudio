@@ -54,7 +54,7 @@ describe('Activity fee caution for a future event', () => {
     Page = () => createElement(ActivityFeeEntry, { defaultOpen: true } as never);
     act(() => { renderer = create(createElement(FinanceProvider, null, createElement(Probe))); });
     act(() => { finance.updateSettings({ semester: '1st Semester', reportingYear: 2026 } as never); });
-    answer('No — a future reporting period');
+    answer('No - next semester');
     collect('1000');
     expect(flat(text(renderer.root))).not.toContain('Collections exceed the required activity fees');
   });

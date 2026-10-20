@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { ReviewLaterNote } from './ReviewLaterNote';
 import { useFinance } from '../context/FinanceContext';
 import { counterpartyBalance, counterpartyBalances } from '../lib/counterpartyBalances';
 import { computePendingObligations } from '../lib/reviewEngine';
@@ -273,6 +274,7 @@ export function PrepaidAssetEntry({ draftToResume = null, onDraftResumed, onDraf
     <div className="h-fit"><FinancialPreviewPanels lines={previewLines} fallbackDate={date || automaticPostingDate} accounts={accounts} accountBalances={accountBalances} formatCurrency={formatCurrency} /></div>
     </div>
     {error && <p className="mt-3 text-xs font-semibold text-rose-600">{error}</p>}{message && <p className="mt-3 text-xs font-semibold text-emerald-600">{message}</p>}
+    <div className="mt-4"><ReviewLaterNote /></div>
     <button type="submit" className="mt-4 rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-xs font-bold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">Save as Draft</button>
   </form>;
 }

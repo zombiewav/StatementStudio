@@ -23,9 +23,9 @@ export interface TransactionCategory {
 }
 
 export const TRANSACTION_CATEGORIES: TransactionCategory[] = [
+  { id: 'membership-fees', label: 'Membership Fees', description: 'Current and prior-period member collections.' },
   { id: 'activity-fees', label: 'Activity Fees', description: 'Collections for events, including future or postponed events.' },
   { id: 'merchandise', label: 'Merchandise Transactions', description: 'Buy inventory or record merchandise sales.' },
-  { id: 'membership-fees', label: 'Membership Fees', description: 'Current and prior-period member collections.' },
   { id: 'expense-transactions', label: 'Expense Transactions', description: 'Operating, event, and administrative expenses.' },
   { id: 'event-program-expenses', label: 'Event/Program Expenses', description: 'Record event and program expenses under the Event Expense account.' },
   { id: 'depreciation', label: 'Depreciation', description: 'Non-cash depreciation of equipment and furniture.' },

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { ReviewLaterNote } from './ReviewLaterNote';
 import { useFinance } from '../context/FinanceContext';
 import { JournalEntry, TransactionDraft } from '../types';
 import { buildCustomerOrderPosting, buildProvisionalCustomerOrderPosting, customerOrderFinalizationIssues, customerOrderState, sameMerchandise } from '../lib/customerOrders';
@@ -157,6 +158,7 @@ export function CustomerOrderEntry({ orderId, editOriginal = false, draftToResum
       <p className="text-xs text-slate-500 dark:text-slate-400">Deposits remain unearned until delivery. Later payments settle unpaid sales first. Payments exceeding the entire order are refundable.</p>
     </>}
     {message && <p role="status" className="rounded-lg bg-blue-50 p-3 text-xs font-semibold text-blue-900 dark:bg-blue-900/30 dark:text-blue-200">{message}</p>}
+    <ReviewLaterNote />
     <div className="flex flex-wrap gap-3"><button type="submit" className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-bold text-white">{editOriginal ? 'Save Changes' : 'Save as Draft'}</button></div>
   </form>;
 }

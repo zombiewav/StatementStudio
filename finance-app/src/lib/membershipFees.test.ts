@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildCurrentMembershipFeePosting, buildMembershipRefundResolution, buildPriorMembershipCollectionPosting } from './membershipFees';
+import { buildCurrentMembershipFeePosting, buildMembershipRefundResolution, buildPriorMembershipCollectionPosting, remainingBeginningMembershipReceivable } from './membershipFees';
 
 describe('membership fee postings', () => {
   it('posts a full same-day collection directly to cash and revenue', () => {
@@ -88,5 +88,36 @@ describe('excess collection resolution for another refund liability', () => {
   it('keeps the membership defaults', () => {
     expect(buildMembershipRefundResolution({ availableLiability: 300, status: 'nonrefundable', amount: 100 }).map(line => line.accountCode)).toEqual(['2130', '4050']);
     expect(() => buildMembershipRefundResolution({ availableLiability: 50, status: 'nonrefundable', amount: 100 })).toThrow('Amount cannot exceed Refund Liability - Membership Fees.');
+  });
+});
+
+describe('remainingBeginningMembershipReceivable (Collection of Unpaid Membership Fees from Previous Period)', () => {
+  const entry = (id: string, lines: { accountCode: string; debit: number; credit: number }[], extra: Record<string, unknown> = {}) =>
+    ({ id, reference: id, date: '2026-01-10', description: id, project: 'General Fund Operations', lines, ...extra }) as never;
+  const collection = (id: string, amount: number, extra: Record<string, unknown> = {}) => entry(id, [{ accountCode: '1010', debit: amount, credit: 0 }, { accountCode: '1300', debit: 0, credit: amount }], extra);
+
+  it('starts at the beginning balance, not at the ledger balance', () => {
+    expect(remainingBeginningMembershipReceivable(5000, [])).toBe(5000);
+    expect(remainingBeginningMembershipReceivable(0, [])).toBe(0);
+  });
+
+  it('subtracts what earlier collections already took from the beginning balance', () => {
+    expect(remainingBeginningMembershipReceivable(5000, [collection('c1', 1500), collection('c2', 500)])).toBe(3000);
+  });
+
+  it('ignores this semester\'s own accrual entries, which also debit the receivable', () => {
+    const accrual = entry('accrual', [{ accountCode: '1300', debit: 800, credit: 0 }, { accountCode: '4040', debit: 0, credit: 800 }, { accountCode: '1010', debit: 300, credit: 0 }, { accountCode: '1300', debit: 0, credit: 300 }]);
+    expect(remainingBeginningMembershipReceivable(5000, [accrual])).toBe(5000);
+  });
+
+  it('gives the amount back when a collection was reversed, and never goes below zero', () => {
+    const reversed = collection('c1', 2000, { reversedByEntryId: 'r1' });
+    const reversal = entry('r1', [{ accountCode: '1300', debit: 2000, credit: 0 }, { accountCode: '1010', debit: 0, credit: 2000 }], { reversalOfEntryId: 'c1' });
+    expect(remainingBeginningMembershipReceivable(5000, [reversed, reversal])).toBe(5000);
+    expect(remainingBeginningMembershipReceivable(1000, [collection('c1', 1500)])).toBe(0);
+  });
+
+  it('rejects a collection above what is available with the beginning-balance wording', () => {
+    expect(() => buildPriorMembershipCollectionPosting({ availableReceivable: 5000, collections: [{ date: '2026-01-05', amount: 6000 }] })).toThrow('beginning balance of Membership Dues Receivable');
   });
 });

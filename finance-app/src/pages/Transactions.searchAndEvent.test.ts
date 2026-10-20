@@ -55,3 +55,34 @@ describe('Search all transaction types', () => {
     expect(text(renderer.root)).toContain('Outstanding receivable');
   });
 });
+
+describe('Final revisions (Oct 2026)', () => {
+  const noteText = 'Save this transaction as a draft and do not post it yet until all collections and payments made within the reporting period have been updated.';
+
+  it('lists Membership Fees first, then Activity Fees', () => {
+    mount();
+    const shown = text(renderer.root);
+    expect(shown.indexOf('Membership Fees Current')).toBeGreaterThan(0);
+    expect(shown.indexOf('Membership Fees Current')).toBeLessThan(shown.indexOf('Activity Fees Collections'));
+    expect(shown.indexOf('Activity Fees Collections')).toBeLessThan(shown.indexOf('Merchandise Transactions Buy'));
+  });
+
+  it('shows the new note between the account boxes and Save as Draft, not under the type field', () => {
+    mount();
+    act(() => { button('Miscellaneous Transactions').props.onClick(); });
+    const shown = text(renderer.root);
+    expect(shown.split(noteText).length - 1).toBe(1);
+    expect(shown.indexOf('Credit Account')).toBeLessThan(shown.indexOf(noteText));
+    expect(shown.indexOf(noteText)).toBeLessThan(shown.indexOf('Save as Draft'));
+    expect(shown).not.toContain('If information is not yet complete');
+  });
+
+  it('Activity Fees asks "Yes - current semester" / "No - next semester"', () => {
+    mount();
+    act(() => { button('Activity Fees').props.onClick(); });
+    const shown = text(renderer.root);
+    expect(shown).toContain('Yes - current semester');
+    expect(shown).toContain('No - next semester');
+    expect(shown.split(noteText).length - 1).toBe(1);
+  });
+});

@@ -1,4 +1,4 @@
-import { DatedAmountRecord, JournalLine } from '../types';
+import { DatedAmountRecord, JournalEntry, JournalLine } from '../types';
 
 export const MEMBERSHIP_CASH_CODE = '1010';
 export const MEMBERSHIP_RECEIVABLE_CODE = '1300';
@@ -73,6 +73,25 @@ export function buildCurrentMembershipFeePosting(input: {
   return { lines, collections, totalCollected, amountStillReceivable, refundLiability };
 }
 
+/**
+ * Client (Oct 2026): "Collection of Unpaid Membership Fees from Previous Period" is limited by the beginning balance of
+ * Membership Dues Receivable (what the previous semester carried in), the same way Payables are limited by their beginning
+ * balances, not by the ledger balance that also contains this semester's own accruals.
+ *
+ * What was already collected against it is every entry that only credits the receivable (Dr Cash / Cr Membership Dues
+ * Receivable). Accrual entries debit the receivable too, and a reversal debits it, so neither counts; an entry that was
+ * reversed is skipped, which gives its amount back.
+ */
+export function remainingBeginningMembershipReceivable(openingBalance: number, entries: JournalEntry[]): number {
+  const collected = entries.reduce((sum, entry) => {
+    if (entry.reversedByEntryId || entry.reversalOfEntryId) return sum;
+    const onReceivable = entry.lines.filter(line => line.accountCode === MEMBERSHIP_RECEIVABLE_CODE);
+    if (onReceivable.some(line => line.debit > 0)) return sum;
+    return sum + onReceivable.reduce((total, line) => total + line.credit, 0);
+  }, 0);
+  return Math.max(0, money(Number(openingBalance || 0) - collected));
+}
+
 export function buildPriorMembershipCollectionPosting(input: {
   availableReceivable: number;
   collections: DatedAmountRecord[];
@@ -86,7 +105,7 @@ export function buildPriorMembershipCollectionPosting(input: {
   }
   const totalCollected = money(collections.reduce((sum, collection) => sum + collection.amount, 0));
   if (totalCollected <= 0) throw new Error('Add at least one membership-fee collection greater than zero.');
-  if (totalCollected > availableReceivable) throw new Error('Total collections cannot exceed Membership Dues Receivable.');
+  if (totalCollected > availableReceivable) throw new Error('Total collections cannot exceed the beginning balance of Membership Dues Receivable.');
 
   const lines = collections.flatMap<JournalLine>(collection => [
     { accountCode: MEMBERSHIP_CASH_CODE, debit: collection.amount, credit: 0, date: collection.date },
