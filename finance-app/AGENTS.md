@@ -229,7 +229,7 @@ login flag. This is still local-browser authentication, not secure multi-device 
 
 - **Draft workflow (client design)**: every transaction form only ever offers **Save as Draft**. The
   general Transactions form writes a real draft journal entry to the ledger and re-saving replaces
-  that same entry (never a duplicate); Prepaid, Activity Fee and Customer Order drafts store form
+  that same entry (never a duplicate); Activity Fee and Customer Order drafts store form
   state only. Review's draft card has **Continue / Post / Delete**: Post opens the draft and runs
   the form's own validation and posting (`autoPostDraft`), then returns to Review and removes the card.
   Because a saved draft is already in the ledger, the form reads every limit (officer payable,
@@ -238,6 +238,8 @@ login flag. This is still local-browser authentication, not secure multi-device 
   are kept out of Transaction Review. Reimbursement to Officer is limited by the **named officer's own** balance in
   Due to Officers and the name must be in the Amount Payable to Officers table, also for drafts (client, Oct 20 2026: `lib/officerReimbursement.ts`; before, it was the total balance). Journal lines are *displayed* debits
   first (`orderLinesDebitsFirst`); stored order is unchanged because batch splitting relies on it.
+
+- **Prepaid Expenses and Other Assets drafts (client, Oct 22 2026)**: Save as Draft on Purchase, Downpayment and Consumption now writes one real draft ledger entry (all lines, dated payment batches are only split on Post) and re-saving replaces it; Post (form or Review) replaces the same entry id, so nothing doubles, and a draft purchase keeps `prepaidSemesterFinalized`. Limits (cash, advances, downpayments, purchases) read `ledgerWithoutDraftEntry`. `prepaidAdjustmentItems` counts drafts, so Other Adjustments > Consumption asks about a purchase before it is posted; a consumption is only finalized for the semester when posted.
 
 - **No negative balances after the fact**: besides the posting check, deleting a posted entry, deleting a saved draft,
   reversing an entry and editing an entry are refused when they would push an account below zero because of later

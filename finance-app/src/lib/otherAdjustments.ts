@@ -123,7 +123,9 @@ export interface PrepaidAdjustmentItem {
 export function prepaidAdjustmentItems(
   entries: JournalEntry[], accounts: Account[], accountBalances: Record<string, number>, semesterKey: string, record?: SemesterAdjustments,
 ): PrepaidAdjustmentItem[] {
-  const posted = entries.filter(entry => !entry.isDraft);
+  // Saved drafts count too (client, Oct 22 2026): a prepaid purchase or consumption saved as a draft already sits in the ledger,
+  // so its consumption question shows up before it is posted.
+  const posted = entries;
   const prepaidCodes = [PREPAID_EXPENSE_CODE, ...PREPAID_ASSET_ACCOUNT_CODES];
   const obligations = computePendingObligations(posted, accounts).filter(obligation => prepaidCodes.includes(obligation.accountCode));
   const items: PrepaidAdjustmentItem[] = obligations.map(obligation => {

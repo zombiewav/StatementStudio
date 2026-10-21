@@ -131,8 +131,17 @@ describe('prepaid assets in Other Adjustments', () => {
     expect(prepaidAdjustmentItems([purchase], accounts, { '1285': 350 }, key, { prepaidCarried: { '1285': true } }).find(item => item.key === 'carried-1285')?.updated).toBe(true);
   });
 
-  it('ignores draft entries and accounts with no balance', () => {
-    expect(prepaidAdjustmentItems([{ ...purchase, isDraft: true }], accounts, {}, key)).toEqual([]);
+  it('counts a saved draft purchase and a saved draft consumption, so the question shows before posting', () => {
+    const draftPurchase = { ...purchase, isDraft: true };
+    expect(prepaidAdjustmentItems([draftPurchase], accounts, { '1285': 100 }, key)).toEqual([expect.objectContaining({ entryId: 'staples', remaining: 100 })]);
+    const draftUse = { ...entry('use', 'Consumption of Prepaid Assets', [['5290', 40, 0], ['1285', 0, 40]], {}, { settlesEntryId: 'staples' }), isDraft: true };
+    const items = prepaidAdjustmentItems([draftPurchase, draftUse], accounts, { '1285': 60 }, key);
+    expect(items).toHaveLength(1);
+    expect(items[0].remaining).toBe(60);
+  });
+
+  it('lists nothing for accounts with no balance', () => {
+    expect(prepaidAdjustmentItems([], accounts, {}, key)).toEqual([]);
   });
 });
 

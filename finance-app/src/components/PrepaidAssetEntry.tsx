@@ -14,11 +14,12 @@ import {
   PrepaidAssetPaymentMethod,
   sortPrepaidItems,
 } from '../lib/prepaidAssets';
-import { DatedAmountRecord, TransactionDraft } from '../types';
+import { DatedAmountRecord, JournalEntry, TransactionDraft } from '../types';
 import { automaticPostingDate as resolveAutomaticPostingDate, isDateWithinReportingPeriod } from '../lib/reportingPeriod';
 import { splitBalancedJournalLinesByDate } from '../lib/outrightExpense';
 import { paymentShortfallCaution } from '../lib/paymentCautions';
 import { FinancialPreviewPanels } from './FinancialPreviewPanels';
+import { ledgerWithoutDraftEntry } from '../lib/draftLedger';
 
 type Mode = 'purchase' | 'consumption' | 'downpayment';
 const GENERAL_FUND = 'General Fund Operations';
@@ -49,7 +50,7 @@ function PaymentRows({ label, rows, setRows, defaultDate }: { label: string; row
 interface PrepaidAssetEntryProps { draftToResume?: TransactionDraft | null; onDraftResumed?: () => void; onDraftSaved?: () => void; autoPostDraft?: boolean; onDraftPosted?: (message: string) => void }
 
 export function PrepaidAssetEntry({ draftToResume = null, onDraftResumed, onDraftSaved, autoPostDraft = false, onDraftPosted }: PrepaidAssetEntryProps): React.ReactElement {
-  const { accounts, journalEntries, addJournalEntry, accountBalances, formatCurrency, settings, finalizePrepaidAssetForSemester, saveDraftTransaction, deleteDraftTransaction } = useFinance();
+  const { accounts, journalEntries, openingBalances, draftTransactions, addJournalEntry, accountBalances, formatCurrency, settings, finalizePrepaidAssetForSemester, saveDraftTransaction, deleteDraftTransaction } = useFinance();
   const [mode, setMode] = useState<Mode>('purchase');
   const [item, setItem] = useState('');
   const [category, setCategory] = useState<PrepaidAssetCategory | ''>('');
@@ -96,43 +97,41 @@ export function PrepaidAssetEntry({ draftToResume = null, onDraftResumed, onDraf
     onDraftResumed?.();
   }, [draftToResume, onDraftResumed]);
 
-  const saveAsDraft = () => {
-    const id = saveDraftTransaction({ id: editingDraftId || undefined, category: 'prepaid-assets', label: `${mode === 'consumption' ? 'Consumption' : mode === 'downpayment' ? 'Downpayment' : 'Purchase'} of ${item || 'Prepaid Asset'}`, formState: { mode, item, categoryValue: category, date, amount, quantity, purpose, eventName, paymentMethod, officer, organizationPayments, officerPayments, advancePayments, selectedDownpaymentId, selectedPurchaseId, semesterFinal } });
-    setEditingDraftId(id);
-    setMessage('Saved as a draft. Continue or Post it from Review when ready.');
-    setError('');
-    onDraftSaved?.();
-  };
-
+  // A saved draft is already in the ledger, so while it is being edited its own entry must not count against its limits.
+  const draftEntryId = editingDraftId ? draftTransactions.find(draft => draft.id === editingDraftId)?.journalEntryId : undefined;
+  const ledger = useMemo(
+    () => ledgerWithoutDraftEntry(journalEntries, draftEntryId, accounts, openingBalances, accountBalances),
+    [journalEntries, draftEntryId, accounts, openingBalances, accountBalances],
+  );
   const allowedCategories = item ? PREPAID_ASSET_ITEMS[item] || [] : [];
   const availableItems = sortPrepaidItems(Object.keys(PREPAID_ASSET_ITEMS).filter(value => mode !== 'downpayment' || PREPAID_ASSET_ITEMS[value].some(category => category === 'rent' || category === 'uniform')));
-  const officerAdvances = useMemo(() => counterpartyBalances(journalEntries, '1250', 'Debit'), [journalEntries]);
-  const availableAdvance = officer ? counterpartyBalance(journalEntries, '1250', 'Debit', officer) : 0;
-  const availableCash = Math.max(0, accountBalances['1010'] || 0);
+  const officerAdvances = useMemo(() => counterpartyBalances(ledger.entries, '1250', 'Debit'), [ledger.entries]);
+  const availableAdvance = officer ? counterpartyBalance(ledger.entries, '1250', 'Debit', officer) : 0;
+  const availableCash = Math.max(0, ledger.balances['1010'] || 0);
   const config = category ? PREPAID_ASSET_CATEGORIES[category] : null;
   const automaticPostingDate = useMemo(
     () => resolveAutomaticPostingDate(settings.semester, settings.reportingYear),
     [settings.reportingYear, settings.semester],
   );
 
-  const downpayments = useMemo(() => journalEntries.flatMap(entry => {
+  const downpayments = useMemo(() => ledger.entries.flatMap(entry => {
     const entryCategory = entry.transactionDetails?.prepaidAssetCategory;
     if (!entryCategory || !['rent', 'uniform'].includes(entryCategory)) return [];
     const depositCode = PREPAID_ASSET_CATEGORIES[entryCategory].depositCode;
     const original = entry.lines.filter(line => line.accountCode === depositCode).reduce((sum, line) => sum + line.debit - line.credit, 0);
     if (original <= 0) return [];
-    const applied = journalEntries.filter(candidate => candidate.transactionDetails?.prepaidAssetDownpaymentEntryId === entry.id)
+    const applied = ledger.entries.filter(candidate => candidate.transactionDetails?.prepaidAssetDownpaymentEntryId === entry.id)
       .reduce((sum, candidate) => sum + Number(candidate.transactionDetails?.prepaidAssetDownpaymentAmount || 0), 0);
     const remaining = Math.round((original - applied) * 100) / 100;
     return remaining > 0 ? [{ id: entry.id, category: entryCategory, item: entry.transactionDetails?.prepaidAssetItem || entry.description, remaining, reference: entry.reference }] : [];
-  }), [journalEntries]);
+  }), [ledger.entries]);
   const matchingDownpayments = downpayments.filter(record => record.category === category && (!item || record.item === item));
   const selectedDownpayment = matchingDownpayments.find(record => record.id === selectedDownpaymentId);
 
-  const prepaidPurchases = useMemo(() => computePendingObligations(journalEntries, accounts)
+  const prepaidPurchases = useMemo(() => computePendingObligations(ledger.entries, accounts)
     .filter(obligation => PREPAID_ASSET_ACCOUNT_CODES.includes(obligation.accountCode))
-    .map(obligation => ({ obligation, entry: journalEntries.find(entry => entry.id === obligation.entryId) }))
-    .filter(record => !!record.entry), [accounts, journalEntries]);
+    .map(obligation => ({ obligation, entry: ledger.entries.find(entry => entry.id === obligation.entryId) }))
+    .filter(record => !!record.entry), [accounts, ledger.entries]);
   const selectedPurchase = prepaidPurchases.find(record => record.obligation.entryId === selectedPurchaseId);
 
   const chooseItem = (nextItem: string) => {
@@ -148,13 +147,16 @@ export function PrepaidAssetEntry({ draftToResume = null, onDraftResumed, onDraf
     setSelectedDownpaymentId(''); setSelectedPurchaseId(''); setSemesterFinal('');
   };
 
-  const submit = (event?: React.FormEvent) => {
-    event?.preventDefault(); setError(''); setMessage('');
+  // Saving as a draft writes the whole posting to the ledger as one draft entry; Post (here or from Review) replaces that same entry,
+  // so nothing is recorded twice.
+  const record = (asDraft: boolean) => {
+    setError(''); setMessage('');
     if (!settings.semester || !settings.reportingYear) return setError('Set the organization Semester and Year before posting.');
     const semester = settings.semester;
     const reportingYear = settings.reportingYear;
     // A blank date is dated automatically (today, kept inside the reporting period).
     const entryDate = date || automaticPostingDate;
+    let savedEntry: JournalEntry | undefined;
     try {
       if (mode === 'consumption') {
         if (!selectedPurchase?.entry) throw new Error('Select a prepaid-asset purchase with an unused balance.');
@@ -166,18 +168,19 @@ export function PrepaidAssetEntry({ draftToResume = null, onDraftResumed, onDraf
         const value = money(amount);
         if (value > selectedPurchase.obligation.remainingAmount) throw new Error('Consumption cannot exceed the remaining prepaid-asset balance.');
         const postingDate = date || automaticPostingDate;
-        addJournalEntry(postingDate, `Consumption of ${details.prepaidAssetItem || 'Prepaid Asset'}`, GENERAL_FUND, buildPrepaidAssetConsumptionPosting(selectedCategory, value, postingDate), purpose === 'event' ? eventName.trim() : undefined, selectedPurchase.entry.id, {
+        savedEntry = addJournalEntry(postingDate, `Consumption of ${details.prepaidAssetItem || 'Prepaid Asset'}`, GENERAL_FUND, buildPrepaidAssetConsumptionPosting(selectedCategory, value, postingDate), purpose === 'event' ? eventName.trim() : undefined, selectedPurchase.entry.id, {
           transactionType: 'Consumption of Prepaid Assets', details: { eventRelated: purpose === 'event', receiptAttachmentIds: [], prepaidAssetCategory: selectedCategory, prepaidAssetItem: details.prepaidAssetItem, prepaidAssetExpenseAccountCode: PREPAID_ASSET_CATEGORIES[selectedCategory].expenseCode, prepaidAssetPurpose: purpose },
-        });
-        if (semesterFinal === 'yes') finalizePrepaidAssetForSemester(selectedPurchase.entry.id, `${settings.reportingYear}::${settings.semester}`);
+        }, asDraft, editingDraftId || undefined, draftEntryId);
+        // The purchase is only finalized for the semester once the consumption is posted, not while it is a draft.
+        if (!asDraft && semesterFinal === 'yes') finalizePrepaidAssetForSemester(selectedPurchase.entry.id, `${settings.reportingYear}::${settings.semester}`);
       } else {
         if (!item || !category) throw new Error('Select an item and its category.');
         const value = money(amount);
         if (mode === 'downpayment') {
           if (value > availableCash) throw new Error('Downpayment cannot exceed the available cash balance.');
-          addJournalEntry(entryDate, `Downpayment for ${item}`, GENERAL_FUND, buildPrepaidAssetDownpaymentPosting(category, value, entryDate), purpose === 'event' ? eventName : undefined, undefined, {
+          savedEntry = addJournalEntry(entryDate, `Downpayment for ${item}`, GENERAL_FUND, buildPrepaidAssetDownpaymentPosting(category, value, entryDate), purpose === 'event' ? eventName : undefined, undefined, {
             transactionType: 'Downpayment of Prepaid Assets', details: { eventRelated: purpose === 'event', receiptAttachmentIds: [], prepaidAssetCategory: category, prepaidAssetItem: item, prepaidAssetPurpose: purpose, counterpartyName: item },
-          });
+          }, asDraft, editingDraftId || undefined, draftEntryId);
         } else {
           if (purpose === 'event' && !eventName.trim()) throw new Error('Enter the event name.');
           if (quantity && (!Number.isInteger(money(quantity)) || money(quantity) <= 0)) throw new Error('If entered, quantity must be a whole number greater than zero.');
@@ -190,10 +193,13 @@ export function PrepaidAssetEntry({ draftToResume = null, onDraftResumed, onDraf
           if (batches.some(batch => !isDateWithinReportingPeriod(batch.date, semester, reportingYear))) {
             throw new Error('All payment dates must be within the active reporting period.');
           }
-          const purchase = addJournalEntry(purchaseBatch.date, `Purchase of ${item}`, GENERAL_FUND, purchaseBatch.lines, purpose === 'event' ? eventName : undefined, undefined, {
-            transactionType: 'Purchase of Prepaid Assets', details: { eventRelated: purpose === 'event', receiptAttachmentIds: [], prepaidAssetCategory: category, prepaidAssetItem: item, prepaidAssetQuantity: quantity ? money(quantity) : undefined, prepaidAssetPurchasePrice: value, prepaidAssetPaymentMethod: paymentMethod, prepaidAssetExpenseAccountCode: config?.expenseCode, prepaidAssetDownpaymentEntryId: selectedDownpayment?.id, prepaidAssetDownpaymentAmount: selectedDownpayment?.remaining, prepaidAssetPayableAmount: posting.payable, prepaidAssetPurpose: purpose, counterpartyName: officer.trim() || item },
-          });
-          batches.filter(batch => batch !== purchaseBatch).forEach((batch, index) => addJournalEntry(
+          // A draft keeps the whole purchase in one entry; posting splits it into its dated payment batches.
+          const keptFinalized = draftEntryId ? journalEntries.find(entry => entry.id === draftEntryId)?.transactionDetails?.prepaidSemesterFinalized : undefined;
+          const purchase = addJournalEntry(asDraft ? entryDate : purchaseBatch.date, `Purchase of ${item}`, GENERAL_FUND, asDraft ? posting.lines : purchaseBatch.lines, purpose === 'event' ? eventName : undefined, undefined, {
+            transactionType: 'Purchase of Prepaid Assets', details: { eventRelated: purpose === 'event', receiptAttachmentIds: [], prepaidAssetCategory: category, prepaidAssetItem: item, prepaidAssetQuantity: quantity ? money(quantity) : undefined, prepaidAssetPurchasePrice: value, prepaidAssetPaymentMethod: paymentMethod, prepaidAssetExpenseAccountCode: config?.expenseCode, prepaidAssetDownpaymentEntryId: selectedDownpayment?.id, prepaidAssetDownpaymentAmount: selectedDownpayment?.remaining, prepaidAssetPayableAmount: posting.payable, prepaidAssetPurpose: purpose, counterpartyName: officer.trim() || item, ...(keptFinalized ? { prepaidSemesterFinalized: keptFinalized } : {}) },
+          }, asDraft, editingDraftId || undefined, draftEntryId);
+          savedEntry = purchase;
+          if (!asDraft) batches.filter(batch => batch !== purchaseBatch).forEach((batch, index) => addJournalEntry(
             batch.date, `Payment for ${item} - Batch ${index + 2}`, GENERAL_FUND, batch.lines,
             purpose === 'event' ? eventName : undefined, purchase.id, {
               transactionType: 'Prepaid Asset Payment Batch',
@@ -202,9 +208,17 @@ export function PrepaidAssetEntry({ draftToResume = null, onDraftResumed, onDraf
           ));
         }
       }
+      if (asDraft && savedEntry) {
+        const draftItem = (mode === 'consumption' ? selectedPurchase?.entry?.transactionDetails?.prepaidAssetItem : item) || item || 'Prepaid Asset';
+        const id = saveDraftTransaction({ id: editingDraftId || undefined, category: 'prepaid-assets', label: `${mode === 'consumption' ? 'Consumption' : mode === 'downpayment' ? 'Downpayment' : 'Purchase'} of ${draftItem}`, formState: { mode, item, categoryValue: category, date, amount, quantity, purpose, eventName, paymentMethod, officer, organizationPayments, officerPayments, advancePayments, selectedDownpaymentId, selectedPurchaseId, semesterFinal }, journalEntryId: savedEntry.id });
+        setEditingDraftId(id);
+        setMessage(`${savedEntry.reference} saved as a draft. It is visible in the ledger and excluded from Financial Statements. Continue or Post it from Review.`);
+        onDraftSaved?.();
+        return;
+      }
       setMessage('Prepaid-asset transaction posted successfully.');
       if (editingDraftId) {
-        deleteDraftTransaction(editingDraftId);
+        deleteDraftTransaction(editingDraftId, savedEntry ? [savedEntry.id] : []);
         setEditingDraftId(null);
         onDraftPosted?.('Prepaid-asset transaction posted successfully.');
       }
@@ -215,7 +229,7 @@ export function PrepaidAssetEntry({ draftToResume = null, onDraftResumed, onDraf
   useEffect(() => {
     if (!pendingAutoPost) return;
     setPendingAutoPost(false);
-    submit();
+    record(false);
   }, [pendingAutoPost]);
 
   const showOrg = paymentMethod === 'organization-funds' || paymentMethod === 'combination';
@@ -239,7 +253,7 @@ export function PrepaidAssetEntry({ draftToResume = null, onDraftResumed, onDraf
     }
   }, [advancePayments, amount, automaticPostingDate, availableAdvance, availableCash, category, date, mode, officerPayments, organizationPayments, paymentMethod, selectedDownpayment?.remaining, selectedPurchase?.entry?.transactionDetails?.prepaidAssetCategory]);
 
-  return <form onSubmit={event => { event.preventDefault(); saveAsDraft(); }} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-5">
+  return <form onSubmit={event => { event.preventDefault(); record(true); }} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-5">
     <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Prepaid Expenses and Other Assets</h3>
     <p className="mt-1 text-[12px] font-medium text-slate-500">(Record assets acquired in advance, whether paid or unpaid, that will be used or consumed later.)</p>
     <div className="mt-4 flex flex-wrap gap-2">
@@ -271,7 +285,7 @@ export function PrepaidAssetEntry({ draftToResume = null, onDraftResumed, onDraf
         <div className="rounded-lg bg-slate-50 p-3 text-[12px] font-semibold text-slate-600 dark:bg-slate-800 sm:col-span-2">Total payments and applied downpayment: {formatCurrency(totalPaid)}{money(amount) > totalPaid && <span className="ml-2 text-amber-700">Unpaid balance: {formatCurrency(money(amount) - totalPaid)} will be recorded in {config ? `${config.payableCode} - ${accounts.find(account => account.code === config.payableCode)?.name || 'the related payable account'}` : 'the related payable account'} and can be settled later under Payables.</span>}{totalPaid > money(amount) && <span className="ml-2 text-blue-700">Excess payment: {formatCurrency(totalPaid - money(amount))} will be recorded as Accounts Receivable - Suppliers.</span>}</div>
       </>}
     </div>}</div>
-    <div className="h-fit"><FinancialPreviewPanels lines={previewLines} fallbackDate={date || automaticPostingDate} accounts={accounts} accountBalances={accountBalances} formatCurrency={formatCurrency} /></div>
+    <div className="h-fit"><FinancialPreviewPanels lines={previewLines} fallbackDate={date || automaticPostingDate} accounts={accounts} accountBalances={ledger.balances} formatCurrency={formatCurrency} /></div>
     </div>
     {error && <p className="mt-3 text-xs font-semibold text-rose-600">{error}</p>}{message && <p className="mt-3 text-xs font-semibold text-emerald-600">{message}</p>}
     <div className="mt-4"><ReviewLaterNote /></div>
