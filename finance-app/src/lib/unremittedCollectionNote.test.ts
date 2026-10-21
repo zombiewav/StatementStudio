@@ -9,8 +9,9 @@ describe('Unremitted collections reminder placement', () => {
     expect(showsUnremittedCollectionNote('membership-fees', 'Collection of Unpaid Membership Fees from Previous Period')).toBe(true);
     expect(showsUnremittedCollectionNote('membership-fees', 'Excess Membership Fee Collection - Status')).toBe(false);
   });
-  it('shows on every Miscellaneous type', () => {
-    expect(showsUnremittedCollectionNote('other', 'Unremitted Collections by an Officer')).toBe(true);
+  it('shows on every Miscellaneous type except Unremitted Collections by an Officer itself', () => {
+    expect(showsUnremittedCollectionNote('other', 'Unremitted Collections by an Officer')).toBe(false);
+    expect(showsUnremittedCollectionNote('other', 'Other Income')).toBe(true);
     expect(showsUnremittedCollectionNote('other', 'Remittance of Collections by Officers')).toBe(true);
   });
   it('shows on only the three merchandise collection types', () => {

@@ -1,10 +1,12 @@
 // Client (Oct 21 2026): the red "Reminder" about unremitted collections is shown on these forms only.
 //  - Membership Fees: every type except the Membership Fee Collection Status one
 //  - Activity Fees: both Yes - current semester and No - next semester (placed in ActivityFeeEntry)
-//  - Miscellaneous Transactions: every type
+//  - Miscellaneous Transactions: every type except Unremitted Collections by an Officer
 //  - Merchandise Transactions: the Purchase type "Collection of Refund from Supplier for Excess Payment" and the Sales types
 //    "Collection of Receivables from Officers - Merchandise" and "Collection of Unpaid Sold Merchandise"
 export const MEMBERSHIP_COLLECTION_STATUS_TYPE = 'Excess Membership Fee Collection - Status';
+
+export const UNREMITTED_COLLECTIONS_TYPE = 'Unremitted Collections by an Officer';
 
 const MERCHANDISE_NOTE_TYPES = [
   'Collection of Refund from Supplier for Excess Payment',
@@ -15,7 +17,8 @@ const MERCHANDISE_NOTE_TYPES = [
 export function showsUnremittedCollectionNote(categoryId: string | undefined, typeDescription: string | undefined): boolean {
   if (!categoryId || !typeDescription) return false;
   if (categoryId === 'membership-fees') return typeDescription !== MEMBERSHIP_COLLECTION_STATUS_TYPE;
-  if (categoryId === 'other') return true;
+  // The note points to this very type, so it is not repeated on it.
+  if (categoryId === 'other') return typeDescription !== UNREMITTED_COLLECTIONS_TYPE;
   if (categoryId === 'merchandise') return MERCHANDISE_NOTE_TYPES.includes(typeDescription);
   return false;
 }
