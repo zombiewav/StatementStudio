@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { 
   LayoutDashboard, 
   ArrowRightLeft, 
@@ -12,10 +12,12 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardCheck,
-  History
+  History,
+  SlidersHorizontal
 } from "lucide-react";
 import { useFinance } from '../context/FinanceContext';
-import { computePendingObligations } from '../lib/reviewEngine';
+import { computeTransactionReviewStates } from '../lib/reviewEngine';
+import { useOtherAdjustments } from '../hooks/useOtherAdjustments';
 import { LogoMark } from './LogoMark';
 import { CLOSING_PAGES_ENABLED } from '../lib/featureFlags';
 
@@ -42,14 +44,21 @@ export function Sidebar({
   isCollapsed,
   setIsCollapsed,
 }: SidebarProps): React.ReactElement {
-  const { journalEntries, accounts } = useFinance();
-  const pendingReviewCount = computePendingObligations(journalEntries, accounts).length;
+  const { journalEntries, accounts, settings } = useFinance();
+  const semesterKey = `${settings.reportingYear}::${settings.semester}`;
+  const pendingReviewCount = useMemo(
+    () => computeTransactionReviewStates(journalEntries.filter(entry => !entry.isDraft), accounts, semesterKey).filter(state => state.status === 'incomplete').length,
+    [journalEntries, accounts, semesterKey]
+  );
+  // Client (Oct 21 2026): the Other Adjustments tab is red while end-of-semester adjustments are outstanding.
+  const { status: adjustmentStatus } = useOtherAdjustments();
 
   const menuItems: MenuItem[] = [
     { id: 'dashboard', icon: LayoutDashboard, label: "Dashboard" },
     { id: 'transactions', icon: ArrowRightLeft, label: "Transactions" },
     { id: 'transaction-history', icon: History, label: "FS History" },
     { id: 'review', icon: ClipboardCheck, label: "Review" },
+    { id: 'other-adjustments', icon: SlidersHorizontal, label: "Other Adjustments" },
     { id: 'journals', icon: BookOpen, label: "Journal Entries" },
     { id: 'ledger', icon: Layers, label: "General Ledger" },
     { id: 'trial-balance', icon: Scale, label: "Trial Balance" },
@@ -108,6 +117,7 @@ export function Sidebar({
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto custom-scrollbar">
           {menuItems.map((item) => {
             const isActive = activePage === item.id;
+            const needsAttention = item.id === 'other-adjustments' && adjustmentStatus.hasOutstanding;
             return (
               <button
                 key={item.id}
@@ -116,16 +126,22 @@ export function Sidebar({
                   setIsOpen(false);
                 }}
                 className={`w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl transition-all relative group font-semibold text-xs
-                  ${isActive
+                  ${needsAttention
+                    ? `bg-rose-50 text-rose-700 ring-1 ${isActive ? 'ring-rose-400 shadow-sm' : 'ring-rose-200'} dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-500/40`
+                    : isActive
                     ? "bg-[#f3e9d1] text-slate-950 shadow-sm ring-1 ring-[#d9c58f] dark:bg-slate-800/70 dark:text-slate-100 dark:ring-slate-700/60"
                     : "text-slate-500 dark:text-slate-400 hover:text-slate-950 dark:hover:text-slate-100 hover:bg-slate-100/70 dark:hover:bg-slate-800/50"
                   }
                 `}
                 type="button"
                 data-nav
+                data-attention={needsAttention ? 'true' : undefined}
               >
-                <item.icon className={`w-4.5 h-4.5 shrink-0 ${isActive ? 'text-blue-900 dark:text-blue-400' : 'text-slate-400 group-hover:text-blue-900 dark:group-hover:text-blue-400 transition-colors'}`} />
+                <item.icon className={`w-4.5 h-4.5 shrink-0 ${needsAttention ? 'text-rose-600 dark:text-rose-400' : isActive ? 'text-blue-900 dark:text-blue-400' : 'text-slate-400 group-hover:text-blue-900 dark:group-hover:text-blue-400 transition-colors'}`} />
                 {!isCollapsed && <span className="truncate flex-1 text-left">{item.label}</span>}
+                {needsAttention && !isCollapsed && (
+                  <span className="text-[11px] font-black px-1.5 py-0.5 rounded-full bg-rose-600 text-white">{adjustmentStatus.outstanding}</span>
+                )}
                 {item.id === 'review' && pendingReviewCount > 0 && !isCollapsed && (
                   <span className={`text-[11px] font-black px-1.5 py-0.5 rounded-full ${isActive ? 'bg-blue-900 text-white' : 'bg-amber-500 text-white'}`}>
                     {pendingReviewCount}

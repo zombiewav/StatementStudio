@@ -5,193 +5,12 @@ import { JournalEntry } from '../types';
 import { ReceiptAttachments } from '../components/ReceiptAttachments';
 import { CustomerOrderFollowUp, CUSTOMER_ORDER_DRAFT } from '../components/CustomerOrderEntry';
 import {
-  computePendingObligations,
   isJournalEntryEditLocked,
-  buildPrepaidExpenseSettlementLines,
-  obligationAccountLabel,
-  PendingObligation,
-  PREPAID_EXPENSE_CODE,
   computeTransactionReviewStates,
   buildRestrictionReleaseLines,
   ReviewStatus,
 } from '../lib/reviewEngine';
 import { automaticPostingDate } from '../lib/reportingPeriod';
-import { PREPAID_ASSET_ACCOUNT_CODES, PREPAID_ASSET_CATEGORIES, prepaidCategoryForAssetAccount } from '../lib/prepaidAssets';
-
-// Prepaid Expenses and Other Assets are the only transactions that ask a
-// follow-up question inside Review. Every other open balance (payables, Due
-// to Officers, Advances to Officers) is settled from Transactions.
-function isPrepaidObligation(accountCode: string): boolean {
-  return accountCode === PREPAID_EXPENSE_CODE || PREPAID_ASSET_ACCOUNT_CODES.includes(accountCode);
-}
-
-function ObligationRow({
-  obligation,
-  onSettlementPosted,
-}: {
-  obligation: PendingObligation;
-  onSettlementPosted: (entry: JournalEntry) => void;
-}): React.ReactElement {
-  const { accounts, journalEntries, settings, formatCurrency, addJournalEntry } = useFinance();
-  const [isOpen, setIsOpen] = useState(false);
-  const [rowMessage, setRowMessage] = useState('');
-  const [prepaidAmount, setPrepaidAmount] = useState('');
-  const [purpose, setPurpose] = useState<'general' | 'event'>('general');
-  const [eventName, setEventName] = useState('');
-
-  // The four prepaid asset accounts each have a related expense account, so
-  // consumption posts there automatically. Only the general Prepaid Expenses
-  // account (1260) has no link and still asks which expense it is.
-  const originalEntry = journalEntries.find(je => je.id === obligation.entryId);
-  const relatedCategory = prepaidCategoryForAssetAccount(obligation.accountCode);
-  const relatedExpenseCode = relatedCategory ? PREPAID_ASSET_CATEGORIES[relatedCategory].expenseCode : '';
-  const defaultExpenseAccountCode = originalEntry?.transactionDetails?.prepaidAssetExpenseAccountCode || originalEntry?.lines.find(
-    l => l.debit > 0 && accounts.find(a => a.code === l.accountCode)?.type === 'Expenses'
-  )?.accountCode || '';
-  const [expenseAccountCode, setExpenseAccountCode] = useState(defaultExpenseAccountCode);
-  const expenseAccounts = accounts.filter(a => a.type === 'Expenses' && a.isActive);
-  const resolvedExpenseCode = relatedExpenseCode || expenseAccountCode;
-
-  const handlePrepaidSubmit = () => {
-    const amount = Number(prepaidAmount) || 0;
-    if (amount <= 0 || amount > obligation.remainingAmount) {
-      setRowMessage(`Enter an amount greater than zero and no more than ${formatCurrency(obligation.remainingAmount)}.`);
-      return;
-    }
-    if (!resolvedExpenseCode) {
-      setRowMessage('Select the expense account before posting.');
-      return;
-    }
-    if (purpose === 'event' && !eventName.trim()) {
-      setRowMessage('Enter the event name.');
-      return;
-    }
-    setRowMessage('');
-    const posted = addJournalEntry(
-      automaticPostingDate(settings.semester, settings.reportingYear),
-      `Settlement of ${obligation.reference}: ${obligation.description}`,
-      obligation.project,
-      buildPrepaidExpenseSettlementLines(resolvedExpenseCode, amount, obligation.accountCode),
-      purpose === 'event' ? eventName.trim() : undefined,
-      obligation.entryId,
-      {
-        transactionType: 'Consumption of Prepaid Assets',
-        details: {
-          eventRelated: purpose === 'event',
-          receiptAttachmentIds: [],
-          prepaidAssetCategory: relatedCategory,
-          prepaidAssetItem: originalEntry?.transactionDetails?.prepaidAssetItem,
-          prepaidAssetExpenseAccountCode: resolvedExpenseCode,
-          prepaidAssetPurpose: purpose,
-        },
-      }
-    );
-    setPrepaidAmount('');
-    setPurpose('general');
-    setEventName('');
-    setExpenseAccountCode(defaultExpenseAccountCode);
-    setIsOpen(false);
-    onSettlementPosted(posted);
-  };
-
-  return (
-    <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
-      <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900">
-        <div>
-          <p className="text-xs font-bold text-slate-900 dark:text-slate-100">{obligation.description}</p>
-          <p className="text-[12px] text-slate-500 dark:text-slate-400 mt-0.5">
-            {obligation.reference} • {obligation.date} • {obligationAccountLabel(obligation.accountCode, accounts)}
-            {obligation.eventName ? ` • ${obligation.eventName}` : ''}
-          </p>
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="text-right">
-            <p className="text-[11px] uppercase tracking-wider text-slate-400 font-bold">Remaining</p>
-            <p className="text-sm font-black text-rose-600 dark:text-rose-400">{formatCurrency(obligation.remainingAmount)}</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setIsOpen(!isOpen)}
-            className="text-[13px] font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-500/10 px-3 py-1.5 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-500/20 transition-colors"
-          >
-            {isOpen ? 'Close' : 'Review'}
-          </button>
-        </div>
-      </div>
-
-      {isOpen && (
-        <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 space-y-3">
-          {rowMessage && (
-            <div className="rounded-lg border border-rose-200 bg-rose-50 p-2.5 text-[12px] font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">{rowMessage}</div>
-          )}
-          <label className="block text-[13px] font-bold text-slate-700 dark:text-slate-300">
-            How much of this has been used or consumed this semester?
-          </label>
-          <input
-            type="number"
-            step="0.01"
-            min="0"
-            max={obligation.remainingAmount}
-            value={prepaidAmount}
-            onChange={(e) => setPrepaidAmount(e.target.value)}
-            placeholder={`0.00, up to ${formatCurrency(obligation.remainingAmount)}`}
-            className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold p-2.5 outline-none text-slate-900 dark:text-slate-100"
-          />
-
-          {Number(prepaidAmount) > 0 && (
-            <>
-              <div>
-                <label className="block text-[12px] font-bold text-slate-600 dark:text-slate-400 mb-1">Purpose</label>
-                <select
-                  value={purpose}
-                  onChange={(e) => setPurpose(e.target.value as 'general' | 'event')}
-                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold p-2.5 outline-none text-slate-900 dark:text-slate-100"
-                >
-                  <option value="general">For a general purpose</option>
-                  <option value="event">For an event</option>
-                </select>
-              </div>
-              {purpose === 'event' && (
-                <div>
-                  <label className="block text-[12px] font-bold text-slate-600 dark:text-slate-400 mb-1">Event name</label>
-                  <input
-                    value={eventName}
-                    onChange={(e) => setEventName(e.target.value)}
-                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold p-2.5 outline-none text-slate-900 dark:text-slate-100"
-                  />
-                </div>
-              )}
-              {!relatedExpenseCode && (
-                <div>
-                  <label className="block text-[12px] font-bold text-slate-600 dark:text-slate-400 mb-1">Which expense is this?</label>
-                  <select
-                    value={expenseAccountCode}
-                    onChange={(e) => setExpenseAccountCode(e.target.value)}
-                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold p-2.5 outline-none text-slate-900 dark:text-slate-100"
-                  >
-                    <option value="" disabled>Select an expense account…</option>
-                    {expenseAccounts.map(acc => (
-                      <option key={acc.code} value={acc.code}>{acc.code} - {acc.name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </>
-          )}
-
-          <button
-            type="button"
-            disabled={!prepaidAmount || (Number(prepaidAmount) > 0 && !resolvedExpenseCode)}
-            onClick={handlePrepaidSubmit}
-            className="w-full bg-blue-700 hover:bg-blue-800 disabled:opacity-40 text-white font-bold text-xs p-2.5 rounded-lg transition-colors"
-          >
-            Post Settlement
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
 
 interface ReviewProps {
   // Called when the user clicks "Continue" on a draft — App.tsx switches
@@ -212,7 +31,6 @@ export function Review({ onContinueDraft, onPostDraft, notice, onNoticeShown }: 
   // is kept out of Transaction Review (where it would offer a second Edit and a
   // permanent Delete that bypass the draft). Financial Statements already skips drafts.
   const postedEntries = useMemo(() => journalEntries.filter(entry => !entry.isDraft), [journalEntries]);
-  const pendingObligations = useMemo(() => computePendingObligations(postedEntries, accounts, semesterKey), [postedEntries, accounts, semesterKey]);
   const reviewStates = useMemo(() => computeTransactionReviewStates(postedEntries, accounts, semesterKey), [postedEntries, accounts, semesterKey]);
   const [statusFilter, setStatusFilter] = useState<'all' | ReviewStatus>('all');
   const [settlementMessage, setSettlementMessage] = useState('');
@@ -426,10 +244,6 @@ export function Review({ onContinueDraft, onPostDraft, notice, onNoticeShown }: 
           const isIncomplete = state.status === 'incomplete';
           const editLocked = isJournalEntryEditLocked(state.entry, closedFiscalYears);
           const amountEditable = state.entry.lines.filter(line => line.debit > 0).length === 1 && state.entry.lines.filter(line => line.credit > 0).length === 1;
-          const entryObligations = pendingObligations.filter(obligation =>
-            obligation.reviewEntryId === state.entry.id &&
-            isPrepaidObligation(obligation.accountCode)
-          );
           return (
             <article key={state.entry.id} className={`rounded-xl border p-4 ${isIncomplete ? 'border-rose-200 bg-rose-50 dark:border-rose-500/30 dark:bg-rose-500/10' : state.status === 'complete' ? 'border-emerald-100 bg-white dark:border-emerald-500/20 dark:bg-slate-900' : 'border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900/70'}`}>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -498,17 +312,6 @@ export function Review({ onContinueDraft, onPostDraft, notice, onNoticeShown }: 
                     <button type="button" onClick={() => setEditingEntryId(null)} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-[12px] font-bold text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">Cancel</button>
                     <button type="button" onClick={() => saveEntryEdit(state.entry)} className="rounded-lg bg-blue-700 px-3 py-1.5 text-[12px] font-bold text-white hover:bg-blue-800">Save changes</button>
                   </div>
-                </div>
-              )}
-              {entryObligations.length > 0 && (
-                <div className="mt-4 space-y-2 border-t border-rose-200 pt-4 dark:border-rose-500/20">
-                  {entryObligations.map(obligation => (
-                    <ObligationRow
-                      key={`${obligation.entryId}-${obligation.accountCode}`}
-                      obligation={obligation}
-                      onSettlementPosted={handleSettlementPosted}
-                    />
-                  ))}
                 </div>
               )}
               <ReceiptAttachments entryId={state.entry.id} allowAdd={state.status !== 'reversed'} />

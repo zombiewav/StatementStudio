@@ -89,6 +89,15 @@ describe('Activity Fees "No - next semester" note', () => {
     expect(text(renderer.root)).not.toContain('Please record all advance collections received this semester for the event scheduled next semester.');
     const no = renderer.root.findAllByType('button').find(button => text(button) === 'No - next semester')!;
     act(() => { no.props.onClick(); });
-    expect(text(renderer.root)).toContain('Please record all advance collections received this semester for the event scheduled next semester.');
+    const full = text(renderer.root);
+    expect(full).toContain('Please record all advance collections received this semester for the event scheduled next semester.');
+    expect(full.split('Please record all advance collections').length - 1).toBe(1);
+    expect(full).not.toContain('Include all current-semester activity-fee collections');
+  });
+
+  it('keeps the usual collections note for "Yes - current semester"', () => {
+    autoPost = false;
+    act(() => { renderer = create(createElement(FinanceProvider, null, createElement(() => createElement(ActivityFeeEntry, { defaultOpen: true })))); });
+    expect(text(renderer.root)).toContain('Include all current-semester activity-fee collections');
   });
 });

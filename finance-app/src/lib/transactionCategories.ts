@@ -22,15 +22,15 @@ export interface TransactionCategory {
   description: string;
 }
 
+// Client (Oct 21 2026): the Event/Program Expenses, Depreciation and Retirement of PPE boxes are gone from the picker.
+// Their ids stay in TransactionCategoryId so saved drafts and entries still resolve; Depreciation and Retirement of PPE
+// are recorded in Other Adjustments, and PPE Transactions only shows them (disabled) with "See Other Adjustments."
 export const TRANSACTION_CATEGORIES: TransactionCategory[] = [
   { id: 'membership-fees', label: 'Membership Fees', description: 'Current and prior-period member collections.' },
   { id: 'activity-fees', label: 'Activity Fees', description: 'Collections for events, including future or postponed events.' },
   { id: 'merchandise', label: 'Merchandise Transactions', description: 'Buy inventory or record merchandise sales.' },
   { id: 'expense-transactions', label: 'Expense Transactions', description: 'Operating, event, and administrative expenses.' },
-  { id: 'event-program-expenses', label: 'Event/Program Expenses', description: 'Record event and program expenses under the Event Expense account.' },
-  { id: 'depreciation', label: 'Depreciation', description: 'Non-cash depreciation of equipment and furniture.' },
-  { id: 'ppe-transactions', label: 'PPE Transactions', description: 'Property, plant, equipment, and furniture purchases.' },
-  { id: 'retirement-of-ppe', label: 'Retirement of PPE', description: 'Permanently retire or dispose of equipment or furniture and fixtures no longer used.' },
+  { id: 'ppe-transactions', label: 'PPE Transactions', description: 'Property, plant, equipment, and furniture purchases, depreciation and retirement.' },
   { id: 'prepaid-assets', label: 'Prepaid Expenses and Other Assets', description: 'Record assets acquired in advance, whether paid or unpaid, that will be used or consumed later.' },
   { id: 'payables', label: 'Payables', description: 'Pay payable balances carried forward from the previous reporting period.' },
   { id: 'advances-to-officers', label: 'Advances to Officers', description: 'Cash advances released to accountable officers.' },

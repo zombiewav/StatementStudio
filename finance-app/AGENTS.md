@@ -310,7 +310,7 @@ login flag. This is still local-browser authentication, not secure multi-device 
 
 - **Tentative final revisions + additions (client, Oct 20-21 2026)**: *Reimbursement to Officers* is per officer (see above). *Merchandise*: "Collections from Suppliers - Merchandise" is now
   "Collection of Refund from Supplier for Excess Payment" (old rules stay, hidden) and the excess-payment caution says the excess goes to Accounts Receivable - Supplier and to use that dropdown
-  choice for a refund. *Activity Fees*: "No - next semester" shows the advance-collections note; **Collection of Activity Fees Receivable** has no event dropdown any more: it is capped by the
+  choice for a refund. *Activity Fees*: "No - next semester" shows the advance-collections note in place of the "Include all current-semester..." note inside the Collections box (Yes keeps that note); **Collection of Activity Fees Receivable** has no event dropdown any more: it is capped by the
   BEGINNING balance of Activity Fees Receivable (1310) like Membership/Payables (`lib/activityFeeReceivable.ts`, `transactionDetails.activityFeePriorReceivableCollected` marks what was collected
   against it; saved receivable drafts count via `activityFeeDraftEffects().reservedBeginningReceivableCollected`) and posts Dr Cash / Cr 1310 directly. *Expense and PPE / F&F purchases*: the PPE form now
   has the same required Date of transaction at the top; the transaction date and every payment date are required, no payment before the transaction date, only Payment 1 may share it, payment dates
@@ -318,6 +318,17 @@ login flag. This is still local-browser authentication, not secure multi-device 
   passes false), so a draft purchase can be depreciated or retired and balances move on Save as Draft. *Return of Advances* and *Retirement of PPE* are draft forms like the rest: Save as Draft writes a
   real draft ledger entry (category `return-of-advances` / `retirement-of-ppe`), the review note sits above the button, Return has a Journal Entry Preview, Review's Continue/Post resumes them
   (Retirement still asks to confirm a loss when posted).
+
+- **Other Adjustments tab (client, Oct 21 2026)**: the Event/Program Expenses, Depreciation and Retirement of PPE boxes are gone from the Transactions picker (drafts of those categories still resolve; Event Expense 5300
+  can no longer be posted to from the UI). PPE Transactions shows Purchase / Depreciation / Retirement of PPE buttons, the last two disabled with "See Other Adjustments." The sidebar tab **Other Adjustments** (after Review,
+  `pages/OtherAdjustments.tsx`) has three sections: **PPE** (groups = Item References; three questions that must total the available quantity, `checkPpeClassification`; Retirement form (`fixed` group mode) first, then
+  `DepreciationEntry`, both draft forms; Depreciation/Retirement drafts resume here via `pageForDraft` in App.tsx), **Consumption of Prepaid Assets** (moved out of Review: amount consumed, 0 allowed, then the purchase is finalized
+  for the semester via `finalizePrepaidAssetForSemester`; balances carried in from an earlier semester are rows without a purchase entry, kept in `prepaidCarried`) and **Cash** (balance = 1010 + 1015; the bank/e-wallet amount is
+  informational: no entry, never above the balance). `lib/otherAdjustments.ts` derives everything (`computeOtherAdjustments`); the answers (PPE classification, cash amount, carried prepaid) live per semester in
+  `settings.otherAdjustments[`${reportingYear}::${semester}`]`. The tab is red (count badge) while anything is outstanding, whatever the date; it is not red when nothing is required. Review no longer lists unused prepaid balances
+  (`computeTransactionReviewStates` ignores them; the Review badge counts incomplete Review items). **Financial Statements** are held back while adjustments are outstanding (after the drafts/Review/negative-balance checks): message +
+  "Go to Other Adjustments", or "View statements without adjusting" -> confirm -> YES shows them with the red UNADJUSTED note under every statement (also printed, history record `unadjusted`), NO returns to Other Adjustments;
+  the exception never completes an adjustment and ends when nothing is outstanding or the semester changes.
 
 ## Known bugs / gaps, not yet fixed (flagged, intentionally left alone)
 

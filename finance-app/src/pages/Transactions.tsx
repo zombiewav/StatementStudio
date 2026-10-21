@@ -41,9 +41,8 @@ import { checkOfficerReimbursement } from '../lib/officerReimbursement';
 import { checkGuidedPurchaseDates, PAYMENT_DATE_HELP } from '../lib/guidedPurchaseDates';
 import { PrepaidAssetEntry } from '../components/PrepaidAssetEntry';
 import { PayablesEntry } from '../components/PayablesEntry';
-import { RetirementOfPpeEntry } from '../components/RetirementOfPpeEntry';
 import { ReturnOfAdvancesEntry } from '../components/ReturnOfAdvancesEntry';
-import { isDepreciationPickerTypeVisible, isMerchandisePurchaseType, isRetiredAssetPickerType, isRetiredMerchandisePickerType, categorizeTransactionRule, TRANSACTION_CATEGORIES, TransactionCategoryId } from '../lib/transactionCategories';
+import { isMerchandisePurchaseType, isRetiredAssetPickerType, isRetiredMerchandisePickerType, categorizeTransactionRule, TRANSACTION_CATEGORIES, TransactionCategoryId } from '../lib/transactionCategories';
 import { merchandiseSaleCostError } from '../lib/transactionHistory';
 import {
   buildMerchandiseAcquisitionPosting,
@@ -127,7 +126,6 @@ interface TransactionFormSnapshot {
   merchandiseQuantity: string;
   ppeQuantity?: string;
   ppeUnitCost?: string;
-  ppeReferenceId?: string;
   merchandiseBatch: string;
   merchandisePrepaymentEntryId: string;
   merchandisePaymentMethod: MerchandisePaymentMethod;
@@ -169,9 +167,11 @@ interface TransactionsProps {
   // away with this form's own validation, then onDraftPosted reports the result.
   autoPostDraft?: boolean;
   onDraftPosted?: (message: string) => void;
+  // Opens another sidebar page (PPE Transactions points Depreciation and Retirement of PPE to Other Adjustments).
+  onNavigate?: (page: string) => void;
 }
 
-export function Transactions({ draftToResume = null, onDraftResumed, onDraftSaved, autoPostDraft = false, onDraftPosted }: TransactionsProps = {}): React.ReactElement {
+export function Transactions({ draftToResume = null, onDraftResumed, onDraftSaved, autoPostDraft = false, onDraftPosted, onNavigate }: TransactionsProps = {}): React.ReactElement {
   const {
     accounts,
     journalEntries,
@@ -230,7 +230,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   const [merchandiseQuantity, setMerchandiseQuantity] = useState('');
   const [ppeQuantity, setPpeQuantity] = useState('');
   const [ppeUnitCost, setPpeUnitCost] = useState('');
-  const [ppeReferenceChoice, setPpeReferenceChoice] = useState('');
   // A PPE purchase is entered as quantity and amount per unit; the total posted is calculated from them.
   const changePpeQuantity = (value: string) => { setPpeQuantity(value); setAmount(Math.round((Number(value) || 0) * (Number(ppeUnitCost) || 0) * 100) / 100); };
   const changePpeUnitCost = (value: string) => { setPpeUnitCost(value); setAmount(Math.round((Number(ppeQuantity) || 0) * (Number(value) || 0) * 100) / 100); };
@@ -364,15 +363,13 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   // Deduped, alphabetized list of known transaction types (two rules —
   // 'award'/'prize' — share the description "Awards & Prizes Expense",
   // since they're the same category under two different trigger words).
-  // Items still held and not fully written down: only these can be depreciated.
-  // Saved drafts count too (client, Oct 20 2026): a draft purchase can be depreciated and balances move on Save as Draft.
+  // The PPE Item References, which a new purchase joins when the item and amount per unit match (saved drafts count too).
   // The draft being edited is left out so it never counts against itself.
   const editedDraftEntryId = editingDraftId ? draftTransactions.find(draft => draft.id === editingDraftId)?.journalEntryId : undefined;
   const ppeReferences = useMemo(
     () => buildPpeReferences(editedDraftEntryId ? journalEntries.filter(entry => entry.id !== editedDraftEntryId) : journalEntries, openingBalances),
     [journalEntries, openingBalances, editedDraftEntryId]
   );
-  const depreciableTypes = useMemo(() => new Set(ppeReferences.filter(reference => reference.netBookValue > 0.005).map(reference => reference.item.depreciationType)), [ppeReferences]);
   const transactionTypeOptions = useMemo(() => {
     if (!selectedCategory || selectedCategory === 'activity-fees') return [];
     if (selectedCategory === 'expense-transactions') {
@@ -381,13 +378,12 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     return Array.from(new Set(
       classificationRules
         .filter(rule => categorizeTransactionRule(rule) === selectedCategory && isRuleAvailable(rule)
-          && (selectedCategory !== 'depreciation' || (isDepreciationPickerTypeVisible(rule.description) && depreciableTypes.has(rule.description)))
           && !(selectedCategory === 'other' && MISC_TYPES_HIDDEN_FROM_PICKER.has(rule.description))
           && !(selectedCategory === 'merchandise' && isRetiredMerchandisePickerType(rule.description))
           && (selectedCategory !== 'ppe-transactions' || ((rule.description === 'Purchase Chairs' || rule.description.toLowerCase().startsWith('purchase of ')) && !isRetiredAssetPickerType(rule.description))))
         .map(rule => rule.description)
     )).sort();
-  }, [classificationRules, selectedCategory, isRuleAvailable, depreciableTypes]);
+  }, [classificationRules, selectedCategory, isRuleAvailable]);
   const filteredTxTypeOptions = txName.trim()
     ? transactionTypeOptions.filter(d => d.toLowerCase().includes(txName.trim().toLowerCase()))
     : transactionTypeOptions;
@@ -413,7 +409,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
 
   // Transaction types a category's picker offers (same rules as the per-category list).
   const isCategoryPickerRule = (categoryId: TransactionCategoryId, rule: ClassificationRule) => categorizeTransactionRule(rule) === categoryId
-    && (categoryId !== 'depreciation' || (isDepreciationPickerTypeVisible(rule.description) && depreciableTypes.has(rule.description)))
     && !(categoryId === 'other' && MISC_TYPES_HIDDEN_FROM_PICKER.has(rule.description))
     && !(categoryId === 'merchandise' && isRetiredMerchandisePickerType(rule.description))
     && (categoryId !== 'ppe-transactions' || ((rule.description === 'Purchase Chairs' || rule.description.toLowerCase().startsWith('purchase of ')) && !isRetiredAssetPickerType(rule.description)))
@@ -432,12 +427,12 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       ];
     }
     if (category.id === 'expense-transactions') return [own, ...EXPENSE_ITEMS.map(item => ({ ...base, label: item.label, typeName: item.label }))];
-    const guided = ['prepaid-assets', 'payables', 'retirement-of-ppe', 'return-of-advances', 'advances-to-officers', 'reimbursements-to-officers', 'event-program-expenses'].includes(category.id);
+    const guided = ['prepaid-assets', 'payables', 'return-of-advances', 'advances-to-officers', 'reimbursements-to-officers', 'event-program-expenses'].includes(category.id);
     if (guided) return [own];
     const descriptions = Array.from(new Set(classificationRules.filter(rule => isCategoryPickerRule(category.id, rule)).map(rule => rule.description)));
     return [own, ...descriptions.map(description => ({ ...base, label: description, typeName: description }))];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [classificationRules, depreciableTypes, isRuleAvailable]);
+  }), [classificationRules, isRuleAvailable]);
   const typeSearchResults = useMemo(() => searchTransactionTypes(typeSearch, typeSearchEntries), [typeSearch, typeSearchEntries]);
 
   const openSearchResult = (entry: TransactionSearchEntry) => {
@@ -539,7 +534,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       setMerchandiseQuantity('');
       setPpeQuantity('');
       setPpeUnitCost('');
-      setPpeReferenceChoice('');
       setMerchandiseBatch('');
       setMerchandisePrepaymentEntryId('');
       setMerchandisePaymentMethod('organization-funds');
@@ -597,7 +591,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       setMerchandiseQuantity('');
       setPpeQuantity('');
       setPpeUnitCost('');
-      setPpeReferenceChoice('');
       setMerchandiseBatch('');
       setMerchandisePrepaymentEntryId('');
       setMerchandisePaymentMethod('organization-funds');
@@ -640,8 +633,9 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       setEditingDraftId(null);
       return;
     }
-    // Return of Advances and Retirement of PPE keep their own form state and draft entry; the form itself resumes the draft.
-    if (draftToResume.category === 'return-of-advances' || draftToResume.category === 'retirement-of-ppe') {
+    // Return of Advances keeps its own form state and draft entry; the form itself resumes the draft.
+    // (Depreciation and Retirement of PPE drafts resume in Other Adjustments.)
+    if (draftToResume.category === 'return-of-advances') {
       appliedDraftIdRef.current = draftToResume.id;
       setSelectedCategory(draftToResume.category);
       setEditingDraftId(null);
@@ -690,7 +684,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     setPpeQuantity(snapshot.ppeQuantity || '');
     // Drafts saved before the amount per unit existed keep their total: unit cost = total / quantity.
     setPpeUnitCost(snapshot.ppeUnitCost ?? (Number(snapshot.ppeQuantity) > 0 && Number(snapshot.amount) > 0 ? String(Math.round(Number(snapshot.amount) / Number(snapshot.ppeQuantity) * 100) / 100) : ''));
-    setPpeReferenceChoice(snapshot.ppeReferenceId || '');
     setMerchandiseBatch(snapshot.merchandiseBatch || '');
     setMerchandisePrepaymentEntryId(snapshot.merchandisePrepaymentEntryId || '');
     setMerchandisePaymentMethod(snapshot.merchandisePaymentMethod || 'organization-funds');
@@ -969,10 +962,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     }
   }, [isBuyerDownpayment, buyerInitialDownpayment, buyerSubsequentDownpayments]);
 
-  const isDepreciationEntry = debitCode === '5090' || debitCode === '5095';
-  // The chosen item's references that can still be depreciated; one is picked automatically when it is the only one.
-  const depreciableReferences = isDepreciationEntry ? ppeReferences.filter(reference => reference.item.depreciationType === txName.trim() && reference.netBookValue > 0.005) : [];
-  const selectedPpe = depreciableReferences.find(reference => reference.referenceId === ppeReferenceChoice) ?? (depreciableReferences.length === 1 ? depreciableReferences[0] : undefined);
   const isEventProgramExpense = selectedCategory === 'event-program-expenses' && debitCode === '5300';
   // Every event line, first line first. The total is what leaves cash.
   const eventExpenseRows = isEventProgramExpense
@@ -982,7 +971,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
   const eventCashError = isEventProgramExpense && eventExpenseTotal > cashAvailable
     ? `The event amounts cannot exceed the available cash balance of ${formatCurrency(cashAvailable)}.`
     : '';
-  const isOutrightExpense = !!classificationPreview && activeAccounts.find(account => account.code === debitCode)?.type === 'Expenses' && !isMerchandiseAcquisition && !isDepreciationEntry && !isEventProgramExpense;
+  const isOutrightExpense = !!classificationPreview && activeAccounts.find(account => account.code === debitCode)?.type === 'Expenses' && !isMerchandiseAcquisition && !isEventProgramExpense;
   const debitCodeNumber = Number(debitCode);
   const isPpeAcquisition = selectedCategory === 'ppe-transactions' && ((debitCodeNumber >= 1500 && debitCodeNumber <= 1516) || (debitCodeNumber >= 1650 && debitCodeNumber <= 1653));
   const isGuidedPurchase = isOutrightExpense || isPpeAcquisition;
@@ -1170,7 +1159,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     merchandiseQuantity,
     ppeQuantity,
     ppeUnitCost,
-    ppeReferenceId: ppeReferenceChoice,
     merchandiseBatch,
     merchandisePrepaymentEntryId,
     merchandisePaymentMethod,
@@ -1262,18 +1250,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     }
     if ((isMerchandiseAcquisition || isMerchandisePrepayment || isBuyerDownpayment) && !merchandiseBatch.trim()) {
       setErrorMessage('Please enter the merchandise batch or pre-order reference.');
-      return;
-    }
-    if (isDepreciationEntry && depreciableReferences.length === 0) {
-      setErrorMessage('Select an item that still has a balance to depreciate.');
-      return;
-    }
-    if (isDepreciationEntry && !selectedPpe) {
-      setErrorMessage('Select which purchase of this item the depreciation is for.');
-      return;
-    }
-    if (isDepreciationEntry && selectedPpe && transactionAmount > selectedPpe.netBookValue + 0.005) {
-      setErrorMessage(`Depreciation cannot exceed the Net Book Value of the selected ${selectedPpe.item.label} purchase (${formatCurrency(selectedPpe.netBookValue)}).`);
       return;
     }
     if (isPpeAcquisition && !savingDraft && (!Number.isInteger(Number(ppeQuantity)) || Number(ppeQuantity) <= 0)) {
@@ -1533,8 +1509,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
             merchandiseQuantity: isMerchandiseAcquisition && merchandiseQuantity.trim() ? Number(merchandiseQuantity) : undefined,
             ppeQuantity: isPpeAcquisition && Number(ppeQuantity) > 0 ? Number(ppeQuantity) : undefined,
             ppeUnitCost: isPpeAcquisition && Number(ppeUnitCost) > 0 ? Number(ppeUnitCost) : undefined,
-            ppeReferenceId: isPpeAcquisition ? purchaseReferenceId : isDepreciationEntry ? selectedPpe?.referenceId : undefined,
-            ppeItemCode: isDepreciationEntry ? selectedPpe?.item.code : undefined,
+            ppeReferenceId: isPpeAcquisition ? purchaseReferenceId : undefined,
             merchandiseBatch: (isMerchandiseAcquisition || isMerchandisePrepayment || isBuyerDownpayment) ? merchandiseBatch.trim() : undefined,
             merchandiseBuyerDownpayment: isBuyerDownpayment ? true : undefined,
             merchandisePurchaseDate: isMerchandiseAcquisition ? merchandisePurchaseDate : undefined,
@@ -1693,7 +1668,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       setMerchandiseQuantity('');
       setPpeQuantity('');
       setPpeUnitCost('');
-      setPpeReferenceChoice('');
       setMerchandiseBatch('');
       setMerchandisePrepaymentEntryId('');
       setMerchandisePaymentMethod('organization-funds');
@@ -1843,12 +1817,11 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                     : LayoutGrid;
             const selected = selectedCategory === category.id;
             const optionCount = category.id === 'activity-fees' || category.id === 'prepaid-assets' || category.id === 'payables' || category.id === 'event-program-expenses'
-              || category.id === 'retirement-of-ppe' || category.id === 'return-of-advances'
+              || category.id === 'return-of-advances'
               || category.id === 'advances-to-officers' || category.id === 'reimbursements-to-officers'
               ? null
               : category.id === 'expense-transactions' ? EXPENSE_ITEMS.length
               : new Set(classificationRules.filter(rule => categorizeTransactionRule(rule) === category.id
-                && (category.id !== 'depreciation' || (isDepreciationPickerTypeVisible(rule.description) && depreciableTypes.has(rule.description)))
                 && !(category.id === 'other' && MISC_TYPES_HIDDEN_FROM_PICKER.has(rule.description))
                 && !(category.id === 'merchandise' && isRetiredMerchandisePickerType(rule.description))
                 && (category.id !== 'ppe-transactions' || ((rule.description === 'Purchase Chairs' || rule.description.toLowerCase().startsWith('purchase of ')) && !isRetiredAssetPickerType(rule.description)))
@@ -1887,12 +1860,11 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
       {selectedCategory === 'activity-fees' && <ActivityFeeEntry defaultOpen requestedType={activityFeeRequest} draftToResume={draftToResume} onDraftResumed={onDraftResumed} onDraftSaved={onDraftSaved} autoPostDraft={autoPostDraft} onDraftPosted={onDraftPosted} />}
       {selectedCategory === 'prepaid-assets' && <PrepaidAssetEntry draftToResume={draftToResume} onDraftResumed={onDraftResumed} onDraftSaved={onDraftSaved} autoPostDraft={autoPostDraft} onDraftPosted={onDraftPosted} />}
       {selectedCategory === 'payables' && <PayablesEntry />}
-      {selectedCategory === 'retirement-of-ppe' && <RetirementOfPpeEntry draftToResume={draftToResume} onDraftResumed={onDraftResumed} onDraftSaved={onDraftSaved} autoPostDraft={autoPostDraft} onDraftPosted={onDraftPosted} />}
       {selectedCategory === 'return-of-advances' && <ReturnOfAdvancesEntry draftToResume={draftToResume} onDraftResumed={onDraftResumed} onDraftSaved={onDraftSaved} autoPostDraft={autoPostDraft} onDraftPosted={onDraftPosted} />}
 
       {selectedCategory === 'merchandise' && <InventorySummaryCard compact />}
 
-      {selectedCategory && selectedCategory !== 'activity-fees' && selectedCategory !== 'prepaid-assets' && selectedCategory !== 'payables' && selectedCategory !== 'retirement-of-ppe' && selectedCategory !== 'return-of-advances' && (
+      {selectedCategory && selectedCategory !== 'activity-fees' && selectedCategory !== 'prepaid-assets' && selectedCategory !== 'payables' && selectedCategory !== 'return-of-advances' && (
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
         {/* Left Column: Entry Form */}
         <form onSubmit={event => { event.preventDefault(); handleSaveDraft(); }} className="xl:col-span-7 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm p-6 sm:p-8 space-y-5">
@@ -1956,7 +1928,16 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                     </div>
                   ))}
                 </div>
-              ) : selectedCategory === 'ppe-transactions' ? (
+              ) : selectedCategory === 'ppe-transactions' ? (<>
+                <div className="mb-4 flex flex-wrap items-start gap-2" role="group" aria-label="PPE transaction">
+                  <button type="button" aria-pressed="true" className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-bold text-white">Purchase</button>
+                  {['Depreciation', 'Retirement of PPE'].map(label => <div key={label} className="flex flex-col items-start gap-1">
+                    <button type="button" disabled aria-disabled="true" className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-bold text-slate-400 disabled:cursor-not-allowed dark:border-slate-600 dark:text-slate-500">{label}</button>
+                    {onNavigate
+                      ? <button type="button" onClick={() => onNavigate('other-adjustments')} className="text-[12px] font-bold text-blue-700 underline dark:text-blue-300">See Other Adjustments.</button>
+                      : <span className="text-[12px] font-bold text-slate-500">See Other Adjustments.</span>}
+                  </div>)}
+                </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
                     <label className="block text-[12px] font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">PPE Dropdown</label>
@@ -1973,7 +1954,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                     </select>
                   </div>
                 </div>
-              ) : <>
+              </>) : <>
               <input
                 type="text"
                 value={txName}
@@ -2590,24 +2571,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               </div>
             )}
 
-            {isDepreciationEntry && <div className="sm:col-span-2 space-y-2">
-              <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-[12px] font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">Note: Compute depreciation based on your organization’s depreciation policy and include the depreciation for the entire semester.</p>
-              <p className="rounded-lg bg-slate-50 p-3 text-[12px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">Event: General and Administrative (automatic classification)</p>
-              {depreciableReferences.length > 0 && <div className="space-y-2">
-                <p className="text-[12px] font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">Select the purchase to depreciate</p>
-                {depreciableReferences.map(reference => {
-                  const chosen = selectedPpe?.referenceId === reference.referenceId;
-                  return <button key={reference.referenceId} type="button" aria-pressed={chosen} onClick={() => setPpeReferenceChoice(reference.referenceId)} className={`grid w-full grid-cols-2 gap-2 rounded-lg border p-3 text-left text-[12px] sm:grid-cols-4 ${chosen ? 'border-blue-700 bg-blue-50 dark:bg-blue-500/10' : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800'}`}>
-                    <span><span className="block font-bold text-slate-500">Available Quantity</span><span className="mt-1 block text-xs font-black text-slate-900 dark:text-slate-100">{reference.quantity}</span></span>
-                    <span><span className="block font-bold text-slate-500">Amount per Unit</span><span className="mt-1 block text-xs font-black text-slate-900 dark:text-slate-100">{formatCurrency(reference.unitCost)}</span></span>
-                    <span><span className="block font-bold text-slate-500">Remaining Original Cost</span><span className="mt-1 block text-xs font-black text-slate-900 dark:text-slate-100">{formatCurrency(reference.cost)}</span></span>
-                    <span><span className="block font-bold text-slate-500">{accounts.find(account => account.code === reference.item.accumulatedAccountCode)?.name || 'Accumulated Depreciation'} ({reference.item.label})</span><span className="mt-1 block text-xs font-black text-slate-900 dark:text-slate-100">{formatCurrency(reference.accumulatedDepreciation)}</span></span>
-                  </button>;
-                })}
-              </div>}
-              {selectedPpe && <p className="text-[12px] font-semibold text-slate-600 dark:text-slate-300">Net Book Value of the selected purchase: {formatCurrency(selectedPpe.netBookValue)}. The depreciation amount cannot be more than this.</p>}
-            </div>}
-
             {selectedCategory === 'ppe-transactions' && !isGuidedPurchase && <div className="sm:col-span-2 grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className="block text-[13px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Quantity <span className="text-rose-600">*required</span></label>
@@ -2636,7 +2599,6 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
                   className="w-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-blue-900 focus:ring-blue-900/10 rounded-xl text-xs font-bold p-2.5 pl-8 outline-none transition-colors disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/20"
                 />
               </div>
-              {isDepreciationEntry && <p className="mt-1.5 text-[12px] font-bold text-slate-700 dark:text-slate-200">*Note: The amount entered here will be allocated based on the available quantity.</p>}
               {receivableCollection && (
                 <p className={`mt-1.5 text-[12px] font-semibold ${amount > receivableOutstanding ? 'text-rose-700 dark:text-rose-300' : 'text-slate-500 dark:text-slate-400'}`}>
                   {amount > receivableOutstanding

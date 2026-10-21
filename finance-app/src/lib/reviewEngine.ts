@@ -37,11 +37,7 @@ export interface TransactionReviewState {
   missing: string[];
   restrictedRemaining: number;
   completedOn?: string;
-  /**
-   * False when the only thing still open is an unused Prepaid Expenses / Other Assets balance.
-   * That stays visible (and Incomplete) in Review, but Financial Statements and Closing
-   * Entries do not wait for it.
-   */
+  /** True when the transaction is incomplete (Financial Statements and Closing Entries wait for it). */
   blocksStatements?: boolean;
 }
 
@@ -109,7 +105,7 @@ export function computePendingObligations(entries: JournalEntry[], accounts: Acc
     const obligationCodesInEntry = [...new Set(entry.lines.map(line => line.accountCode)
       .filter(accountCode => OBLIGATION_ACCOUNT_CODES.includes(accountCode as ObligationAccountCode)))] as ObligationAccountCode[];
     for (const accountCode of obligationCodesInEntry) {
-      if (PREPAID_ASSET_ACCOUNT_CODES.includes(accountCode) && currentReportingPeriod && entry.transactionDetails?.prepaidSemesterFinalized === currentReportingPeriod) continue;
+      if ((PREPAID_ASSET_ACCOUNT_CODES.includes(accountCode) || accountCode === PREPAID_EXPENSE_CODE) && currentReportingPeriod && entry.transactionDetails?.prepaidSemesterFinalized === currentReportingPeriod) continue;
       const account = accounts.find(a => a.code === accountCode);
       if (!account) continue;
 
@@ -161,11 +157,9 @@ export function computePendingObligations(entries: JournalEntry[], accounts: Acc
  * records and remain available in Journal Entries instead of appearing as
  * duplicate transactions here.
  */
-export function computeTransactionReviewStates(entries: JournalEntry[], accounts: Account[], currentReportingPeriod?: string): TransactionReviewState[] {
-  const pending = computePendingObligations(entries, accounts, currentReportingPeriod);
-  const pendingByEntry = new Map<string, PendingObligation[]>();
-  pending.forEach(item => pendingByEntry.set(item.reviewEntryId, [...(pendingByEntry.get(item.reviewEntryId) || []), item]));
-
+export function computeTransactionReviewStates(entries: JournalEntry[], _accounts: Account[], _currentReportingPeriod?: string): TransactionReviewState[] {
+  // Client (Oct 21 2026): how much of a prepaid asset was consumed is answered in Other Adjustments, no longer in Review,
+  // so an unused prepaid balance never holds a Review item incomplete.
   return entries
     .filter(entry =>
       !entry.settlesEntryId &&
@@ -178,13 +172,7 @@ export function computeTransactionReviewStates(entries: JournalEntry[], accounts
         return { entry, status: 'reversed' as const, missing: [], restrictedRemaining: 0 };
       }
 
-      const entryPending = pendingByEntry.get(entry.id) || [];
-      const isPrepaidItem = (item: PendingObligation) => item.accountCode === PREPAID_EXPENSE_CODE || PREPAID_ASSET_ACCOUNT_CODES.includes(item.accountCode);
-      const prepaidOnlyCount = entryPending.filter(isPrepaidItem).length;
-      const missing = entryPending.map(item => {
-        if (item.accountCode === PREPAID_EXPENSE_CODE || PREPAID_ASSET_ACCOUNT_CODES.includes(item.accountCode)) return `${obligationAccountLabel(item.accountCode, accounts)} still unused: ${item.remainingAmount}`;
-        return `${obligationAccountLabel(item.accountCode, accounts)} still open: ${item.remainingAmount}`;
-      });
+      const missing: string[] = [];
 
       const restrictedCreated = entry.lines
         .filter(line => line.accountCode === TEMPORARILY_RESTRICTED_REVENUE_CODE)
@@ -216,7 +204,7 @@ export function computeTransactionReviewStates(entries: JournalEntry[], accounts
         status,
         missing,
         restrictedRemaining,
-        blocksStatements: missing.length > prepaidOnlyCount,
+        blocksStatements: missing.length > 0,
         ...(status === 'complete' ? { completedOn: completionDates[completionDates.length - 1] || entry.date } : {}),
       };
     })

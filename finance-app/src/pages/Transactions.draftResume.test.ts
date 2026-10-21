@@ -567,42 +567,13 @@ describe('resuming a saved draft', () => {
   });
 });
 
-describe('PPE quantity and depreciation limits', () => {
-  const adaptor = () => finance.addJournalEntry('2026-10-02', 'Purchase of Adaptor', PROJECT, [{ accountCode: '1513', debit: 100, credit: 0 }, { accountCode: '1010', debit: 0, credit: 100 }], undefined, undefined, meta('Purchase of Adaptor', { ppeQuantity: 2 }));
-  const depreciationDraft = (amount: number) => saveDraft('Depreciation of Adaptor', 'depreciation',
-    [{ accountCode: '5090', debit: amount, credit: 0 }, { accountCode: '1550', debit: 0, credit: amount }], {}, { amount, date: '2026-10-12' });
-
+describe('PPE quantity limits', () => {
   it('refuses to post a PPE purchase without a quantity', () => {
     start(() => undefined);
     saveDraft('Purchase of Laptop', 'ppe-transactions',
       [{ accountCode: '1501', debit: 500, credit: 0 }, { accountCode: '1010', debit: 0, credit: 500 }], {},
       { amount: 500, date: '2026-10-12', outrightPaymentMethod: 'organization-funds', outrightOrganizationPayments: [{ id: 'o1', date: '2026-10-12', amount: '500' }] });
     expect(alerts().join(' ')).toContain('quantity');
-    expect(posted).toHaveLength(0);
-  });
-
-  it('refuses depreciation above the Net Book Value of the item', () => {
-    start(() => { adaptor(); });
-    depreciationDraft(150);
-    expect(alerts().join(' ')).toContain('Net Book Value');
-    expect(posted).toHaveLength(0);
-  });
-
-  it('posts depreciation within the Net Book Value', () => {
-    start(() => { adaptor(); });
-    depreciationDraft(40);
-    expect(alerts()).toEqual([]);
-    expect(posted).toHaveLength(1);
-    expect(finance.accountBalances['1550']).toBe(40);
-  });
-
-  it('refuses depreciation for an item that is fully depreciated', () => {
-    start(() => {
-      adaptor();
-      finance.addJournalEntry('2026-10-03', 'Depreciation of Adaptor', PROJECT, [{ accountCode: '5090', debit: 100, credit: 0 }, { accountCode: '1550', debit: 0, credit: 100 }], undefined, undefined, meta('Depreciation of Adaptor', {}));
-    });
-    depreciationDraft(10);
-    expect(alerts().join(' ')).toContain('still has a balance');
     expect(posted).toHaveLength(0);
   });
 });
@@ -637,36 +608,6 @@ describe('PPE Item References from the Transactions form', () => {
     expect(chairEntries()).toHaveLength(0);
   });
 
-  const twoReferences = () => {
-    finance.addJournalEntry('2026-10-02', 'Purchase Chairs', PROJECT, [{ accountCode: '1652', debit: 500, credit: 0 }, { accountCode: '1010', debit: 0, credit: 500 }], undefined, undefined, meta('Purchase Chairs', { ppeQuantity: 2, ppeUnitCost: 250, ppeReferenceId: 'r1' }));
-    finance.addJournalEntry('2026-10-03', 'Purchase Chairs', PROJECT, [{ accountCode: '1652', debit: 300, credit: 0 }, { accountCode: '1010', debit: 0, credit: 300 }], undefined, undefined, meta('Purchase Chairs', { ppeQuantity: 1, ppeUnitCost: 300, ppeReferenceId: 'r2' }));
-  };
-  const chairDepreciation = (amount: number, formState: Record<string, unknown> = {}) => saveDraft('Depreciation of Chairs', 'depreciation',
-    [{ accountCode: '5095', debit: amount, credit: 0 }, { accountCode: '1660', debit: 0, credit: amount }], {}, { amount, date: '2026-10-12', ...formState });
-
-  it('asks which purchase to depreciate when an item has several', () => {
-    start(() => { twoReferences(); });
-    chairDepreciation(50);
-    expect(alerts().join(' ')).toContain('Select which purchase');
-    expect(posted).toHaveLength(0);
-  });
-
-  it('depreciates only the chosen reference and caps the amount at its Net Book Value', () => {
-    start(() => { twoReferences(); });
-    chairDepreciation(400, { ppeReferenceId: 'r2' });
-    expect(alerts().join(' ')).toContain('Net Book Value');
-    expect(posted).toHaveLength(0);
-  });
-
-  it('records depreciation against the chosen reference', () => {
-    start(() => { twoReferences(); });
-    chairDepreciation(50, { ppeReferenceId: 'r2' });
-    expect(alerts()).toEqual([]);
-    expect(posted).toHaveLength(1);
-    const entry = finance.journalEntries.find(item => item.transactionType === 'Depreciation of Chairs' && !item.isDraft)!;
-    expect(entry.transactionDetails).toMatchObject({ ppeReferenceId: 'r2', ppeItemCode: '1652' });
-    expect(entry.lines.map(line => line.accountCode).sort()).toEqual(['1660', '5095']);
-  });
 });
 
 describe('Expense and PPE / F&F dates (client, Oct 20 2026)', () => {
@@ -753,7 +694,7 @@ describe('Expense and PPE / F&F dates (client, Oct 20 2026)', () => {
   });
 });
 
-describe('Return of Advances and Retirement of PPE drafts resumed from Review', () => {
+describe('Return of Advances drafts resumed from Review', () => {
   const advance = () => finance.addJournalEntry('2026-10-05', 'Advance to Alpha', PROJECT, [{ accountCode: '1250', debit: 500, credit: 0 }, { accountCode: '1010', debit: 0, credit: 500 }], undefined, undefined, meta('Cash Advance to Officer', { counterpartyName: 'Alpha' }));
   const returnDraft = () => act(() => {
     const entry = finance.addJournalEntry('2026-10-12', 'Return of Advance - Alpha', PROJECT, [{ accountCode: '1010', debit: 200, credit: 0 }, { accountCode: '1250', debit: 0, credit: 200 }], undefined, undefined, meta('Return of Advances', { counterpartyName: 'Alpha' }), true, 'd1');
@@ -782,19 +723,5 @@ describe('Return of Advances and Retirement of PPE drafts resumed from Review', 
     expect(finance.draftTransactions).toHaveLength(1);
   });
 
-  it('Continue opens Retirement of PPE with the saved item, purchase and quantity', () => {
-    start(() => {
-      finance.addJournalEntry('2026-10-02', 'Purchase of Adaptor', PROJECT, [{ accountCode: '1513', debit: 500, credit: 0 }, { accountCode: '1010', debit: 0, credit: 500 }], undefined, undefined, meta('Purchase of Adaptor', { ppeQuantity: 5, ppeUnitCost: 100, ppeReferenceId: 'r-a' }));
-    }, false);
-    act(() => {
-      const entry = finance.addJournalEntry('2026-10-12', 'Retirement of PPE - Adaptor', PROJECT, [{ accountCode: '5370', debit: 200, credit: 0 }, { accountCode: '1513', debit: 0, credit: 200 }], undefined, undefined,
-        meta('Retirement of PPE', { ppeItemCode: '1513', ppeReferenceId: 'r-a', ppeRetiredQuantity: 2, ppeRetiredCost: 200, ppeRetiredAccumulated: 0 }), true, 'd2');
-      finance.saveDraftTransaction({ id: 'd2', category: 'retirement-of-ppe', label: 'Retirement of PPE - Adaptor', formState: { itemCode: '1513', referenceChoice: 'r-a', quantity: '2', date: '2026-10-12' }, journalEntryId: entry.id });
-    });
-    expect(text(renderer.root)).toContain('Retirement of PPE');
-    expect(renderer.root.findAllByType('select')[0].props.value).toBe('1513');
-    expect(renderer.root.findAllByType('input').find(input => input.props.placeholder === 'Units to dispose of')!.props.value).toBe('2');
-    expect(finance.draftTransactions).toHaveLength(1);
-  });
 });
 

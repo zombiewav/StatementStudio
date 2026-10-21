@@ -187,6 +187,26 @@ export interface AuditLog {
   user: string;
 }
 
+/** How the user classified the units of one PPE group (Item Reference) for the semester: Other Adjustments, Depreciation/Retirement. */
+export interface PpeClassification {
+  /** Units still used next semester and/or in the future. */
+  continueQuantity: number;
+  /** Units not used this semester but used again next school year. */
+  nextYearQuantity: number;
+  /** Units no longer used this semester or in the future. */
+  retireQuantity: number;
+}
+
+/** What the user has answered in Other Adjustments for one semester (key `${reportingYear}::${semester}` in AppSettings.otherAdjustments). */
+export interface SemesterAdjustments {
+  /** PPE classification per Item Reference id. */
+  ppe?: Record<string, PpeClassification>;
+  /** Cash: how much of the cash balance is held in bank accounts and/or e-wallets. */
+  cashBankAndEwallet?: number;
+  /** Carried-forward prepaid balances (no purchase entry this semester) already adjusted, by asset account code. */
+  prepaidCarried?: Record<string, boolean>;
+}
+
 export interface AppSettings {
   fiscalYear: string;
   organizationName: string;
@@ -201,6 +221,8 @@ export interface AppSettings {
   semester?: '1st Semester' | '2nd Semester' | '';
   // Set once the first-sign-in Beginning Balances dialog was answered (posted or skipped), so it never shows again.
   beginningBalancesPrompted?: boolean;
+  // Client (Oct 21 2026): the end-of-semester answers kept by Other Adjustments, per reporting period.
+  otherAdjustments?: Record<string, SemesterAdjustments>;
   // The starting calendar year set alongside semester (e.g. 2021 for
   // "FY 2021-2022"). Both are set once, together, via the Navbar's fiscal
   // year picker, and every transaction now inherits them automatically
@@ -303,6 +325,8 @@ export interface FinancialStatementHistoryRecord {
   startDate: string;
   endDate: string;
   action: 'Print' | 'Export PDF' | 'Export Excel';
+  /** Printed before the required end-of-semester adjustments were completed (the "proceed anyway" exception). */
+  unadjusted?: boolean;
   statements: string[];
   ledgerBalances: Array<{
     accountCode: string;

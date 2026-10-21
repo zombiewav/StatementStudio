@@ -342,7 +342,7 @@ describe('buildPrepaidExpenseSettlementLines', () => {
 });
 
 describe('transaction review status', () => {
-  it('keeps completed transactions in Review and marks open prepaid balances incomplete', () => {
+  it('keeps completed transactions in Review; an unused prepaid balance is answered in Other Adjustments, not here', () => {
     const entries = [
       baseEntry({ id: 'je-1', transactionType: 'Purchase of Prepaid Assets', lines: [
         { accountCode: '1285', debit: 1000, credit: 0 },
@@ -354,7 +354,7 @@ describe('transaction review status', () => {
       ] }),
     ];
     const states = computeTransactionReviewStates(entries, accounts);
-    expect(states.find(state => state.entry.id === 'je-1')?.status).toBe('incomplete');
+    expect(states.find(state => state.entry.id === 'je-1')).toMatchObject({ status: 'complete', missing: [] });
     expect(states.find(state => state.entry.id === 'je-2')?.status).toBe('complete');
   });
 
@@ -395,10 +395,9 @@ describe('what still blocks Financial Statements and closing', () => {
   const accts = [acct('1010', 'Cash on Hand', 'Assets', 'Debit'), acct('1285', 'Supplies and Materials', 'Assets', 'Debit'), acct('4030', 'Contributions', 'Revenue', 'Credit'), acct('4035', 'Temporarily Restricted Revenue', 'Revenue', 'Credit')];
   const entry = (id: string, lines: { accountCode: string; debit: number; credit: number }[]) => ({ id, reference: id, date: '2026-10-14', description: id, project: 'p', lines });
 
-  it('keeps an unused prepaid balance Incomplete in Review but does not block statements', () => {
+  it('does not hold an unused prepaid balance in Review or block statements (Other Adjustments asks about it)', () => {
     const states = computeTransactionReviewStates([entry('staples', [{ accountCode: '1285', debit: 100, credit: 0 }, { accountCode: '1010', debit: 0, credit: 100 }])], accts);
-    expect(states[0]).toMatchObject({ status: 'incomplete', blocksStatements: false });
-    expect(states[0].missing[0]).toContain('still unused');
+    expect(states[0]).toMatchObject({ status: 'complete', blocksStatements: false, missing: [] });
   });
 
   it('still blocks statements for other open items, such as a donor restriction', () => {

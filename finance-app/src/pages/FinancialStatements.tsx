@@ -18,6 +18,8 @@ import { isPropertyAndEquipmentAccount } from '../lib/propertyEquipmentAccounts'
 import { excludeClosingEntries } from '../lib/closingEntries';
 import { periodEndedLabel, periodForSemester, reportingPeriodBounds } from '../lib/reportingPeriod';
 import { combineOpeningAndPeriodBalances } from '../lib/reportingPeriodBalances';
+import { ADJUSTMENTS_GATE_MESSAGE, ADJUSTMENTS_PROCEED_PROMPT, UNADJUSTED_WARNING } from '../lib/otherAdjustments';
+import { useOtherAdjustments } from '../hooks/useOtherAdjustments';
 
 /** A balance counts as shown only when it is not zero (cents rounding ignored). */
 const hasBalance = (amount: number | undefined): boolean => Math.abs(amount || 0) >= 0.005;
@@ -31,7 +33,12 @@ const STATEMENT_OPTIONS: { id: ActiveStatementTab; label: string }[] = [
   { id: 'cashflow', label: 'Cash Flows' },
 ];
 
-export function FinancialStatements(): React.ReactElement {
+interface FinancialStatementsProps {
+  // Opens another sidebar page (the adjustments gate sends the user to Other Adjustments).
+  onNavigate?: (page: string) => void;
+}
+
+export function FinancialStatements({ onNavigate }: FinancialStatementsProps = {}): React.ReactElement {
   const { 
     accounts, 
     journalEntries, 
@@ -179,6 +186,16 @@ export function FinancialStatements(): React.ReactElement {
   // Client rule (Oct 2026): nothing may still be waiting as a draft when the statements are generated.
   const pendingDrafts = useMemo(() => pendingDraftLabels(draftTransactions, journalEntries), [draftTransactions, journalEntries]);
   const isGated = incompleteReviewItems.length > 0 || negativeBalanceAccounts.length > 0 || pendingDrafts.length > 0;
+  // Client (Oct 21 2026): the end-of-semester adjustments in Other Adjustments must be updated first. The user may still view
+  // the statements without adjusting, after confirming; every statement then carries a red UNADJUSTED note. That choice never
+  // marks an adjustment as completed, and it ends as soon as nothing is outstanding or the semester changes.
+  const { status: adjustmentStatus } = useOtherAdjustments();
+  const [confirmingUnadjusted, setConfirmingUnadjusted] = useState(false);
+  const [unadjustedAccepted, setUnadjustedAccepted] = useState(false);
+  useEffect(() => { setConfirmingUnadjusted(false); setUnadjustedAccepted(false); }, [settings.semester, settings.reportingYear]);
+  useEffect(() => { if (!adjustmentStatus.hasOutstanding) { setConfirmingUnadjusted(false); setUnadjustedAccepted(false); } }, [adjustmentStatus.hasOutstanding]);
+  const adjustmentsGate = !isGated && adjustmentStatus.hasOutstanding && !unadjustedAccepted;
+  const showUnadjustedWarning = !isGated && adjustmentStatus.hasOutstanding && unadjustedAccepted;
   const positionAssetGroups = useMemo(() => {
     const groups: Array<[string, string[]]> = [
       ['Cash and Cash Equivalents', ['1010', '1015']], ['Receivables', ['1200', '1300', '1310', '1330', '1360', '1370']], ['Advances and Dues', ['1250', '1270', '1275', '1320']], ['Inventories', ['1700']], ['Prepaid Expenses and Other Assets', ['1260', '1280', '1285', '1295', '1298']], ['Property and Equipment', accounts.filter(isPropertyAndEquipmentAccount).map(account => account.code)],
@@ -223,6 +240,7 @@ export function FinancialStatements(): React.ReactElement {
       startDate,
       endDate,
       action,
+      ...(showUnadjustedWarning ? { unadjusted: true } : {}),
       statements: STATEMENT_OPTIONS.filter(option => selectedStatements[option.id]).map(option => option.label),
       ledgerBalances: accounts.map(account => ({
         accountCode: account.code,
@@ -278,7 +296,7 @@ export function FinancialStatements(): React.ReactElement {
           {/* Print Button */}
           <button
             onClick={handlePrint}
-            disabled={isGated}
+            disabled={isGated || adjustmentsGate}
             className="flex items-center gap-2 bg-white dark:bg-slate-900 hover:bg-gray-50 dark:hover:bg-slate-800 text-gray-700 dark:text-slate-200 font-semibold text-xs px-3.5 py-2 rounded-xl border border-gray-100 dark:border-slate-800 shadow-sm transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             type="button"
           >
@@ -429,6 +447,27 @@ export function FinancialStatements(): React.ReactElement {
                   <p className="text-[12px] text-slate-400 text-center pt-1">+{incompleteReviewItems.length - 8} more in Review</p>
                 )}
               </div>
+            </div>
+          ) : adjustmentsGate ? (
+            <div className="text-center py-10 h-full flex flex-col justify-center">
+              <ClipboardCheck className="w-10 h-10 text-rose-500 mx-auto mb-3" />
+              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Adjustments are not complete</h3>
+              <p role="alert" className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 max-w-md mx-auto">{ADJUSTMENTS_GATE_MESSAGE}</p>
+              <p className="mt-1 text-[12px] font-semibold text-rose-700 dark:text-rose-300">{adjustmentStatus.outstanding} adjustment{adjustmentStatus.outstanding === 1 ? '' : 's'} still to update.</p>
+              {confirmingUnadjusted ? (
+                <div role="alertdialog" className="mt-5 max-w-md mx-auto rounded-xl border border-amber-200 bg-amber-50 p-4 text-left dark:border-amber-500/30 dark:bg-amber-500/10">
+                  <p className="text-[13px] font-bold text-amber-900 dark:text-amber-200">{ADJUSTMENTS_PROCEED_PROMPT}</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button type="button" onClick={() => { setUnadjustedAccepted(true); setConfirmingUnadjusted(false); }} className="rounded-lg bg-rose-700 px-4 py-2 text-xs font-bold text-white hover:bg-rose-800">YES — Proceed Anyway</button>
+                    <button type="button" onClick={() => { setConfirmingUnadjusted(false); onNavigate?.('other-adjustments'); }} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">NO — Return to Adjustments</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-5 flex flex-wrap justify-center gap-2">
+                  <button type="button" onClick={() => onNavigate?.('other-adjustments')} className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-bold text-white hover:bg-blue-800">Go to Other Adjustments</button>
+                  <button type="button" onClick={() => setConfirmingUnadjusted(true)} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">View statements without adjusting</button>
+                </div>
+              )}
             </div>
           ) : (
             <>
@@ -731,6 +770,7 @@ export function FinancialStatements(): React.ReactElement {
               </div>
             )}
           </div>
+          {showUnadjustedWarning && <p role="note" data-unadjusted-warning="true" className="mt-8 border-t border-rose-200 pt-4 text-[13px] font-bold leading-5 text-rose-600 dark:border-rose-500/30 dark:text-rose-400 print:text-red-600">{UNADJUSTED_WARNING}</p>}
             </>
           )}
         </div>

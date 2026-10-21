@@ -6,6 +6,8 @@ import { FinancialStatements } from './FinancialStatements';
 
 vi.mock('../hooks/useWorkspaceSync', () => ({ useWorkspaceSync: () => ({ workspaceStatus: 'ready' }) }));
 vi.mock('canvas-confetti', () => ({ default: () => undefined }));
+// These tests are about the statements themselves; the Other Adjustments gate has its own tests (FinancialStatements.adjustmentsGate.test.ts).
+vi.mock('../hooks/useOtherAdjustments', () => ({ useOtherAdjustments: () => ({ status: { hasOutstanding: false, outstanding: 0 }, record: undefined, semesterKey: '', saveRecord: () => undefined }) }));
 
 let renderer: ReactTestRenderer;
 let finance: ReturnType<typeof useFinance>;

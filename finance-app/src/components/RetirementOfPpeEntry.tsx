@@ -3,6 +3,7 @@ import { useFinance } from '../context/FinanceContext';
 import { ledgerWithoutDraftEntry } from '../lib/draftLedger';
 import { FinancialPreviewPanels } from './FinancialPreviewPanels';
 import { ReviewLaterNote } from './ReviewLaterNote';
+import { retiredQuantityInSemester } from '../lib/otherAdjustments';
 import { buildPpeReferences, describePpeReference, planPpeRetirement, PPE_ITEMS, ppeRetirementWarning, RETIREMENT_TYPE } from '../lib/ppeItems';
 import { automaticPostingDate, isDateWithinReportingPeriod } from '../lib/reportingPeriod';
 import { TransactionDraft } from '../types';
@@ -18,13 +19,16 @@ interface RetirementOfPpeEntryProps {
   // Set when Review's "Post" opened this draft; it is posted once its saved fields are restored.
   autoPostDraft?: boolean;
   onDraftPosted?: (message: string) => void;
+  // Other Adjustments: the PPE group and the number of units the user said are no longer used. The item, the purchase
+  // and the quantity are then pre-identified (units already retired this semester by other entries are taken off).
+  fixed?: { itemCode: string; referenceId: string; targetQuantity: number };
 }
 
-export function RetirementOfPpeEntry({ draftToResume = null, onDraftResumed, onDraftSaved, autoPostDraft = false, onDraftPosted }: RetirementOfPpeEntryProps): React.ReactElement {
+export function RetirementOfPpeEntry({ draftToResume = null, onDraftResumed, onDraftSaved, autoPostDraft = false, onDraftPosted, fixed }: RetirementOfPpeEntryProps): React.ReactElement {
   const { accounts, journalEntries, openingBalances, draftTransactions, addJournalEntry, saveDraftTransaction, deleteDraftTransaction, accountBalances, formatCurrency, settings } = useFinance();
-  const [itemCode, setItemCode] = useState('');
-  const [referenceChoice, setReferenceChoice] = useState('');
-  const [quantity, setQuantity] = useState('');
+  const [itemCodeState, setItemCode] = useState('');
+  const [referenceChoiceState, setReferenceChoice] = useState('');
+  const [quantityState, setQuantity] = useState('');
   const [date, setDate] = useState('');
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState('');
@@ -43,8 +47,13 @@ export function RetirementOfPpeEntry({ draftToResume = null, onDraftResumed, onD
   // Only Item References still held (linked to their purchases and depreciation, drafts included) can be retired.
   const references = useMemo(() => buildPpeReferences(ledgerEntries, openingBalances), [ledgerEntries, openingBalances]);
   const itemsWithStock = PPE_ITEMS.filter(item => references.some(reference => reference.item.code === item.code));
+  const itemCode = fixed ? fixed.itemCode : itemCodeState;
   const itemReferences = references.filter(reference => reference.item.code === itemCode);
+  const referenceChoice = fixed ? fixed.referenceId : referenceChoiceState;
   const selected = itemReferences.find(reference => reference.referenceId === referenceChoice) ?? (itemReferences.length === 1 ? itemReferences[0] : undefined);
+  const retiredElsewhere = fixed && settings.semester && settings.reportingYear ? retiredQuantityInSemester(ledgerEntries, fixed.referenceId, settings.semester, settings.reportingYear) : 0;
+  const fixedQuantity = fixed ? Math.max(0, fixed.targetQuantity - retiredElsewhere) : 0;
+  const quantity = fixed ? (fixedQuantity > 0 ? String(fixedQuantity) : '') : quantityState;
   const accumulatedName = selected ? accounts.find(account => account.code === selected.item.accumulatedAccountCode)?.name || 'Accumulated Depreciation' : '';
   const postingDate = date || (settings.semester && settings.reportingYear ? automaticPostingDate(settings.semester, settings.reportingYear) : '');
   const plan = selected && quantity.trim() ? planPpeRetirement(selected, Number(quantity), postingDate) : null;
@@ -69,6 +78,7 @@ export function RetirementOfPpeEntry({ draftToResume = null, onDraftResumed, onD
   const problem = (): string => {
     if (!settings.semester || !settings.reportingYear) return 'Set the organization Semester and Year before saving.';
     if (!selected) return 'Select the item and the purchase to retire.';
+    if (fixed && fixedQuantity <= 0) return 'All the units named in your classification are already retired.';
     if (date && !isDateWithinReportingPeriod(date, settings.semester, settings.reportingYear)) return 'The date must be within the active reporting period.';
     const result = planPpeRetirement(selected, Number(quantity), postingDate);
     return result.error || '';
@@ -120,28 +130,30 @@ export function RetirementOfPpeEntry({ draftToResume = null, onDraftResumed, onD
   return <form onSubmit={submit} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-5">
     <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Retirement of PPE</h3>
     <p className="mt-1 text-[12px] font-medium text-slate-500">Use this transaction when your organization permanently retires or disposes of equipment or furniture and fixtures that it no longer uses.</p>
-    <div className="mt-4 grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(300px,0.75fr)]">
+    <div className={`mt-4 grid gap-5 ${fixed ? '' : 'lg:grid-cols-[minmax(0,1fr)_minmax(300px,0.75fr)]'}`}>
     <div className="grid content-start gap-3 sm:grid-cols-2">
-      <label className="text-[12px] font-bold uppercase text-slate-600 sm:col-span-2">Item
+      {!fixed && <label className="text-[12px] font-bold uppercase text-slate-600 sm:col-span-2">Item
         <select value={itemCode} onChange={event => { setItemCode(event.target.value); setReferenceChoice(''); setConfirming(false); }} className={inputClass}>
           <option value="">{itemsWithStock.length ? 'Select an item…' : 'No PPE item has a remaining quantity'}</option>
           {itemsWithStock.map(item => <option key={item.code} value={item.code}>{item.label}</option>)}
         </select>
-      </label>
-      {itemCode && <label className="text-[12px] font-bold uppercase text-slate-600 sm:col-span-2">Purchase
+      </label>}
+      {!fixed && itemCode && <label className="text-[12px] font-bold uppercase text-slate-600 sm:col-span-2">Purchase
         <select value={selected?.referenceId || ''} onChange={event => { setReferenceChoice(event.target.value); setConfirming(false); }} className={inputClass}>
           {itemReferences.length > 1 && <option value="">Select which purchase…</option>}
           {itemReferences.map(reference => <option key={reference.referenceId} value={reference.referenceId}>{describePpeReference(reference, formatCurrency)}</option>)}
         </select>
       </label>}
+      {fixed && selected && <p className="rounded-lg bg-slate-50 p-3 text-[12px] font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200 sm:col-span-2">{selected.item.label} · {formatCurrency(selected.unitCost)} per unit</p>}
       {selected && <div className="grid grid-cols-2 gap-2 sm:col-span-2 sm:grid-cols-4">
         <div className="rounded-lg bg-slate-50 p-3 text-[12px] dark:bg-slate-800"><span className="font-bold text-slate-500">Available Quantity</span><p className="mt-1 text-xs font-black text-slate-900 dark:text-slate-100">{selected.quantity}</p></div>
         <div className="rounded-lg bg-slate-50 p-3 text-[12px] dark:bg-slate-800"><span className="font-bold text-slate-500">Amount per Unit</span><p className="mt-1 text-xs font-black text-slate-900 dark:text-slate-100">{formatCurrency(selected.unitCost)}</p></div>
         <div className="rounded-lg bg-slate-50 p-3 text-[12px] dark:bg-slate-800"><span className="font-bold text-slate-500">Remaining Original Cost</span><p className="mt-1 text-xs font-black text-slate-900 dark:text-slate-100">{formatCurrency(selected.cost)}</p></div>
         <div className="rounded-lg bg-slate-50 p-3 text-[12px] dark:bg-slate-800"><span className="font-bold text-slate-500">{accumulatedName} ({selected.item.label} only)</span><p className="mt-1 text-xs font-black text-slate-900 dark:text-slate-100">{formatCurrency(selected.accumulatedDepreciation)}</p></div>
       </div>}
-      <label className="text-[12px] font-bold uppercase text-slate-600">Quantity (to be disposed) <span className="text-rose-600">*required</span>
-        <input type="number" min="1" step="1" value={quantity} onChange={event => { setQuantity(event.target.value); setConfirming(false); }} disabled={!selected} placeholder="Units to dispose of" className={inputClass} />
+      <label className="text-[12px] font-bold uppercase text-slate-600">Quantity (to be disposed) {!fixed && <span className="text-rose-600">*required</span>}
+        <input type="number" min="1" step="1" value={quantity} onChange={event => { setQuantity(event.target.value); setConfirming(false); }} disabled={!selected} readOnly={!!fixed} placeholder="Units to dispose of" className={inputClass} />
+        {fixed && <span className="mt-1 block text-[12px] normal-case text-slate-500">Taken from your answer to the third question.</span>}
       </label>
       <label className="text-[12px] font-bold uppercase text-slate-600">Date <span className="font-medium normal-case">(optional)</span>
         <input type="date" value={date} onChange={event => setDate(event.target.value)} className={inputClass} />

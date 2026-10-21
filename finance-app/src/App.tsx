@@ -8,6 +8,7 @@ import { Dashboard } from './pages/Dashboard';
 import { Transactions } from './pages/Transactions';
 import { TransactionHistory } from './pages/TransactionHistory';
 import { Review } from './pages/Review';
+import { OtherAdjustments } from './pages/OtherAdjustments';
 import { JournalEntries } from './pages/JournalEntries';
 import { GeneralLedger } from './pages/GeneralLedger';
 import { TrialBalance } from './pages/TrialBalance';
@@ -41,6 +42,11 @@ function DashboardLayout() {
   const [reviewNotice, setReviewNotice] = useState('');
   const { draftTransactions } = useFinance();
   const draftToResume = resumeDraft ? draftTransactions.find(d => d.id === resumeDraft.id) || null : null;
+  // Depreciation and Retirement of PPE are recorded in Other Adjustments, so their drafts resume there.
+  const pageForDraft = (draftId: string) => {
+    const category = draftTransactions.find(d => d.id === draftId)?.category;
+    return category === 'depreciation' || category === 'retirement-of-ppe' ? 'other-adjustments' : 'transactions';
+  };
 
   const renderActivePage = () => {
     switch (activePage) {
@@ -54,14 +60,24 @@ function DashboardLayout() {
             onDraftResumed={() => setResumeDraft(null)}
             onDraftSaved={() => setActivePage('review')}
             onDraftPosted={(message) => { setReviewNotice(message); setActivePage('review'); }}
+            onNavigate={setActivePage}
           />
         );
       case 'transaction-history':
         return <TransactionHistory onNavigate={setActivePage} />;
+      case 'other-adjustments':
+        return (
+          <OtherAdjustments
+            draftToResume={draftToResume}
+            autoPostDraft={!!resumeDraft?.post}
+            onDraftResumed={() => setResumeDraft(null)}
+            onDraftPosted={(message) => { setReviewNotice(message); setActivePage('review'); }}
+          />
+        );
       case 'review':
         return <Review
-          onContinueDraft={(draftId) => { setResumeDraft({ id: draftId, post: false }); setActivePage('transactions'); }}
-          onPostDraft={(draftId) => { setResumeDraft({ id: draftId, post: true }); setActivePage('transactions'); }}
+          onContinueDraft={(draftId) => { setResumeDraft({ id: draftId, post: false }); setActivePage(pageForDraft(draftId)); }}
+          onPostDraft={(draftId) => { setResumeDraft({ id: draftId, post: true }); setActivePage(pageForDraft(draftId)); }}
           notice={reviewNotice}
           onNoticeShown={() => setReviewNotice('')}
         />;
@@ -72,7 +88,7 @@ function DashboardLayout() {
       case 'trial-balance':
         return <TrialBalance />;
       case 'statements':
-        return <FinancialStatements />;
+        return <FinancialStatements onNavigate={setActivePage} />;
       case 'analytics':
         return <Analytics />;
       case 'projects':

@@ -40,9 +40,9 @@ describe('transaction categories', () => {
     expect(categorizeTransactionRule(rule('1010', '4030', 'Sponsorship - Cash Contribution'))).toBe('other');
   });
 
-  it('routes the shared Event/Program Expense account to its dedicated category', () => {
+  it('still routes the shared Event/Program Expense account to its category, but the picker no longer offers a box for it', () => {
     expect(categorizeTransactionRule(rule('5300', '1010', 'Event/Program Expense'))).toBe('event-program-expenses');
-    expect(TRANSACTION_CATEGORIES.find(category => category.id === 'event-program-expenses')?.label).toBe('Event/Program Expenses');
+    expect(TRANSACTION_CATEGORIES.find(category => category.id === 'event-program-expenses')).toBeUndefined();
   });
 
   it('routes the item-specific PPE accounts to Property, Plant and Equipment', () => {
@@ -61,9 +61,11 @@ describe('transaction categories', () => {
     expect(TRANSACTION_CATEGORIES.find(category => category.id === 'payables')?.label).toBe('Payables');
   });
 
-  it('has separate tabs for Retirement of PPE and Return of Advances', () => {
-    expect(TRANSACTION_CATEGORIES.find(category => category.id === 'retirement-of-ppe')?.label).toBe('Retirement of PPE');
+  it('keeps Return of Advances as a tab, while Depreciation and Retirement of PPE leave the picker for Other Adjustments', () => {
     expect(TRANSACTION_CATEGORIES.find(category => category.id === 'return-of-advances')?.label).toBe('Return of Advances');
+    expect(TRANSACTION_CATEGORIES.find(category => category.id === 'retirement-of-ppe')).toBeUndefined();
+    expect(TRANSACTION_CATEGORIES.find(category => category.id === 'depreciation')).toBeUndefined();
+    expect(TRANSACTION_CATEGORIES.find(category => category.id === 'ppe-transactions')?.label).toBe('PPE Transactions');
   });
 
   it('gives advances and reimbursements to officers their own transaction categories', () => {

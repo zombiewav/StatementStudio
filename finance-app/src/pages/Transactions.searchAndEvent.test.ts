@@ -22,16 +22,32 @@ const mount = () => {
 };
 const button = (label: string) => renderer.root.findAllByType('button').find(item => text(item).includes(label))!;
 
-describe('Event/Program Expenses category', () => {
-  it('has no Transaction Type dropdown: the type is chosen automatically', () => {
+describe('Category boxes (client, Oct 21 2026)', () => {
+  const categoryLabels = () => renderer.root.findAllByType('button').filter(item => item.props['aria-pressed'] !== undefined && item.props.className?.includes('rounded-xl')).map(item => text(item).trim());
+
+  it('no longer has Event/Program Expenses, Depreciation or Retirement of PPE boxes', () => {
     mount();
-    act(() => { button('Event/Program Expenses').props.onClick(); });
-    const shown = text(renderer.root);
-    expect(shown).not.toContain('Search a transaction type');
-    expect(shown).not.toContain('Transaction Type');
-    expect(shown).toContain('Amount');
-    expect(shown).toContain('Date');
-    expect(shown).not.toContain('Seminar / Conference Attendance Fee');
+    const labels = categoryLabels();
+    expect(labels.length).toBeGreaterThan(5);
+    expect(labels.some(label => label.startsWith('Event/Program Expenses'))).toBe(false);
+    expect(labels.some(label => label.startsWith('Depreciation'))).toBe(false);
+    expect(labels.some(label => label.startsWith('Retirement of PPE'))).toBe(false);
+    expect(labels.some(label => label.startsWith('PPE Transactions'))).toBe(true);
+  });
+
+  it('PPE Transactions lists Purchase, Depreciation and Retirement of PPE in that order, the last two disabled with "See Other Adjustments."', () => {
+    mount();
+    act(() => { button('PPE Transactions').props.onClick(); });
+    const group = renderer.root.findByProps({ role: 'group', 'aria-label': 'PPE transaction' });
+    const buttons = group.findAllByType('button');
+    const labels = buttons.map(item => text(item));
+    expect(labels.indexOf('Purchase')).toBeLessThan(labels.indexOf('Depreciation'));
+    expect(labels.indexOf('Depreciation')).toBeLessThan(labels.indexOf('Retirement of PPE'));
+    expect(buttons[labels.indexOf('Purchase')].props.disabled).toBeFalsy();
+    expect(buttons[labels.indexOf('Depreciation')].props.disabled).toBe(true);
+    expect(buttons[labels.indexOf('Retirement of PPE')].props.disabled).toBe(true);
+    expect(labels.filter(label => label === 'See Other Adjustments.')).toHaveLength(0);
+    expect(text(group).split('See Other Adjustments.').length - 1).toBe(2);
   });
 });
 
