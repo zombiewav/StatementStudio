@@ -107,7 +107,7 @@ function DashboardLayout() {
   };
 
   return (
-    <div className="app-shell flex h-screen font-sans overflow-hidden">
+    <div className="app-shell flex h-screen font-sans overflow-hidden print:block print:h-auto print:overflow-visible">
       {/* Sidebar Navigation */}
       <Sidebar 
         activePage={activePage} 
@@ -120,7 +120,7 @@ function DashboardLayout() {
       
       {/* Main Content Area */}
       <div
-        className={`app-shell flex-1 flex flex-col h-full overflow-hidden transition-all duration-300 ${
+        className={`app-shell flex-1 flex flex-col h-full overflow-hidden transition-all duration-300 print:block print:h-auto print:overflow-visible print:pl-0 ${
           isSidebarCollapsed ? 'md:pl-20' : 'md:pl-64'
         }`}
       >
@@ -137,7 +137,7 @@ function DashboardLayout() {
 
         {/* Scrollable Content Container */}
         <WorkspaceSyncStatus />
-        <main className="app-shell flex-1 overflow-y-auto px-4 py-4 md:px-6 md:py-5 z-10 custom-scrollbar select-none">
+        <main className="app-shell flex-1 overflow-y-auto px-4 py-4 md:px-6 md:py-5 z-10 custom-scrollbar select-none print:overflow-visible print:p-0">
           <div className="max-w-[1520px] mx-auto pb-10">
             <div key={activePage} className="page-enter">
               {renderActivePage()}

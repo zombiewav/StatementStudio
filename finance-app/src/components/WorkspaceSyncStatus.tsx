@@ -25,7 +25,7 @@ export function WorkspaceSyncStatus(): React.ReactElement {
   const button = 'rounded border border-current px-2 py-1 text-xs font-semibold';
   // Stay out of the way while everything is fine; only surface problems or the older-backup notice.
   if (!failed && !showLegacyNotice) return <></>;
-  return <div className={`border-b px-4 py-2 text-xs md:px-6 ${failed ? 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100' : 'border-slate-200 bg-white text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'}`}>
+  return <div className={`border-b px-4 py-2 text-xs md:px-6 print:hidden ${failed ? 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100' : 'border-slate-200 bg-white text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'}`}>
     <div className="flex flex-wrap items-center gap-2">
       <span role="status" aria-live="polite" className="font-semibold">{workspaceSaveStatus === 'saved' ? 'Saved' : workspaceSaveStatus === 'saving' ? 'Saving…' : workspaceSaveStatus === 'conflict' ? 'Save conflict' : 'Failed to save'}</span>
       <span className="break-all">Account: {user?.email}</span>

@@ -78,14 +78,14 @@ export function Sidebar({
       {/* Mobile Drawer Overlay */}
       {isOpen && (
         <div 
-          className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 md:hidden"
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 md:hidden print:hidden"
           onClick={() => setIsOpen(false)}
         />
       )}
 
       {/* Sidebar Container */}
       <aside 
-        className={`fixed top-0 bottom-0 left-0 bg-[#faf8f3] border-r border-slate-200 dark:bg-[#0d1015] dark:border-slate-800 flex flex-col h-full z-50 transition-all duration-300 select-none
+        className={`fixed top-0 bottom-0 left-0 bg-[#faf8f3] border-r border-slate-200 dark:bg-[#0d1015] dark:border-slate-800 flex flex-col h-full z-50 transition-all duration-300 select-none print:hidden
           ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
           ${isCollapsed ? 'w-20' : 'w-64'}
         `}

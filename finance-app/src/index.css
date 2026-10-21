@@ -500,3 +500,9 @@ button:not(:disabled):active {
   opacity: 0.8;
   color: var(--text-readable);
 }
+
+/* Printing a financial statement: only the report itself, on a plain white page. */
+@media print {
+  .app-shell { background: #fff !important; }
+  [role="dialog"], [role="alertdialog"] { display: none !important; }
+}

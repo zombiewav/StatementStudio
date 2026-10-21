@@ -51,6 +51,8 @@ export function FinancialStatements({ onNavigate }: FinancialStatementsProps = {
   } = useFinance();
 
   const [activeTab, setActiveTab] = useState<ActiveStatementTab>('position');
+  // Print All Financial Statements: every statement is stacked, one per page, in a block that only exists while printing.
+  const [printingAll, setPrintingAll] = useState(false);
   const [selectedStatements, setSelectedStatements] = useState<Record<ActiveStatementTab, boolean>>({
     position: true,
     activities: true,
@@ -196,19 +198,29 @@ export function FinancialStatements({ onNavigate }: FinancialStatementsProps = {
   useEffect(() => { if (!adjustmentStatus.hasOutstanding) { setConfirmingUnadjusted(false); setUnadjustedAccepted(false); } }, [adjustmentStatus.hasOutstanding]);
   const adjustmentsGate = !isGated && adjustmentStatus.hasOutstanding && !unadjustedAccepted;
   const showUnadjustedWarning = !isGated && adjustmentStatus.hasOutstanding && unadjustedAccepted;
+  // Client (Oct 21 2026): once the Cash answer in Other Adjustments is given, the Statement of Financial Position shows it as
+  // Cash in Bank, and the rest of the cash as Cash on Hand. Display only: the ledger and the Total Assets do not change.
+  const cashAdjustment = adjustmentStatus.cash;
+  const cashSplit = useMemo(
+    () => (cashAdjustment && cashAdjustment.required && !cashAdjustment.outstanding && cashAdjustment.declared !== undefined
+      ? { '1010': cashAdjustment.remainingCash, '1015': cashAdjustment.declared } as Record<string, number>
+      : undefined),
+    [cashAdjustment]
+  );
+  const positionBalance = (code: string) => cashSplit?.[code] ?? (cumulativeToEndBalances[code] || 0);
   const positionAssetGroups = useMemo(() => {
     const groups: Array<[string, string[]]> = [
       ['Cash and Cash Equivalents', ['1010', '1015']], ['Receivables', ['1200', '1300', '1310', '1330', '1360', '1370']], ['Advances and Dues', ['1250', '1270', '1275', '1320']], ['Inventories', ['1700']], ['Prepaid Expenses and Other Assets', ['1260', '1280', '1285', '1295', '1298']], ['Property and Equipment', accounts.filter(isPropertyAndEquipmentAccount).map(account => account.code)],
     ];
     const assigned = new Set(groups.flatMap(([, codes]) => codes));
     // Accounts with a zero balance are left off the statement, and a heading with no accounts left goes with them.
-    const visible = (list: Account[]) => list.filter(account => hasBalance(cumulativeToEndBalances[account.code]));
+    const visible = (list: Account[]) => list.filter(account => hasBalance(cashSplit?.[account.code] ?? cumulativeToEndBalances[account.code]));
     const grouped = [...groups.map(([label, codes]) => {
       const list = visible(accounts.filter(account => codes.includes(account.code)));
       return [label, label === 'Property and Equipment' ? [...list].sort(comparePpeAccounts) : list] as const;
     }), ['Other Assets', visible(accounts.filter(account => account.type === 'Assets' && !assigned.has(account.code)))] as const];
     return grouped.filter(([, list]) => list.length > 0);
-  }, [accounts, cumulativeToEndBalances]);
+  }, [accounts, cumulativeToEndBalances, cashSplit]);
   const positionLiabilityGroups = useMemo(() => {
     const groups: Array<[string, string[]]> = [
       ['Dues and Payables', ['2010', '2020', '2030', '2040', '2050', '2061', '2062', '2063', '2064', '2070', '2080']], ['Unearned Revenues', ['2110', '2140']], ['Refund Liabilities', ['2120', '2130', '2150']],
@@ -233,7 +245,7 @@ export function FinancialStatements({ onNavigate }: FinancialStatementsProps = {
   );
 
 
-  const saveFinalSnapshot = (action: 'Print') => {
+  const saveFinalSnapshot = (action: 'Print', allStatements = false) => {
     if (!settings.semester || !settings.reportingYear) return;
     const schoolYear = `${settings.reportingYear}-${settings.reportingYear + 1}`;
     recordFinancialStatementHistory({
@@ -244,7 +256,7 @@ export function FinancialStatements({ onNavigate }: FinancialStatementsProps = {
       endDate,
       action,
       ...(showUnadjustedWarning ? { unadjusted: true } : {}),
-      statements: STATEMENT_OPTIONS.filter(option => selectedStatements[option.id]).map(option => option.label),
+      statements: STATEMENT_OPTIONS.filter(option => allStatements || selectedStatements[option.id]).map(option => option.label),
       ledgerBalances: accounts.map(account => ({
         accountCode: account.code,
         accountName: account.name,
@@ -272,6 +284,16 @@ export function FinancialStatements({ onNavigate }: FinancialStatementsProps = {
     saveFinalSnapshot('Print');
     window.print();
   };
+  const handlePrintAll = () => {
+    saveFinalSnapshot('Print', true);
+    setPrintingAll(true);
+  };
+  // The stacked statements are on the page once printingAll is set; print them, then go back to the normal view.
+  useEffect(() => {
+    if (!printingAll) return;
+    window.print();
+    setPrintingAll(false);
+  }, [printingAll]);
 
   const cashFlowDetails = useMemo(
     () => buildCashFlowStatement(
@@ -283,6 +305,319 @@ export function FinancialStatements({ onNavigate }: FinancialStatementsProps = {
   const formatOutflow = (amount: number) => amount === 0
     ? formatCurrency(0)
     : `(${formatCurrency(Math.abs(amount))})`;
+
+  // One statement (header, body and UNADJUSTED note); the normal view shows the active tab, Print All stacks all four.
+  const renderReport = (tab: ActiveStatementTab) => (
+    <>
+          {/* Report Header */}
+          <div className="text-center border-b-2 border-slate-200 dark:border-slate-700 pb-5 mb-8">
+            <h1 className="text-xl font-bold uppercase text-slate-900 dark:text-slate-100 tracking-wide">{settings.organizationName}</h1>
+            <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 mt-1.5 uppercase tracking-wide">
+              {tab === 'position' && 'Statement of Financial Position'}
+              {tab === 'activities' && 'Statement of Activities (Income Statement)'}
+              {tab === 'functional' && 'Statement of Functional Expenses'}
+              {tab === 'cashflow' && 'Statement of Cash Flows (Direct Method)'}
+            </h2>
+            <p className="text-sm text-slate-600 dark:text-slate-300 font-medium mt-1.5">
+              {tab === 'position' 
+                ? `As of ${new Date(endDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`
+                : periodEndedLabel(endDate)
+              }
+            </p>
+            <p className="text-xs text-slate-600 dark:text-slate-300 font-semibold uppercase mt-1">Figures in {settings.currencyCode} ({settings.currencySymbol})</p>
+          </div>
+
+          {/* Statement Layouts */}
+          <div className="text-[15px] text-slate-900 dark:text-slate-100 leading-relaxed font-sans tabular-nums">
+            {/* 1. Statement of Financial Position (Balance Sheet) */}
+            {tab === 'position' && (
+              <div className="space-y-6">
+                {/* ASSETS SECTION */}
+                <div>
+                  <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wide text-[13px]">Assets</h3>
+                  <div className="space-y-1">
+                    {positionAssetGroups.map(([group, groupAccounts]) => <React.Fragment key={group}>
+                    <p className="px-2 pt-2 text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-400">{group}</p>
+                    {groupAccounts.map((acc, index) => {
+                      const bal = positionBalance(acc.code);
+                      const isContra = isContraAccount(acc);
+                      const ppeSection = group === 'Property and Equipment' ? ppeSectionOf(acc.code) : undefined;
+                      const startsPpeSection = ppeSection !== undefined && (index === 0 || ppeSectionOf(groupAccounts[index - 1].code) !== ppeSection);
+                      return (
+                        <React.Fragment key={acc.code}>
+                          {startsPpeSection && <p className="px-4 pt-2 text-sm font-bold text-slate-700 dark:text-slate-300">{ppeSection}</p>}
+                          <div className={`flex justify-between py-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50 ${ppeSection ? 'px-8' : 'px-4'}`}>
+                            <span>{isContra ? `Less: ${acc.name}` : acc.name}</span>
+                            <span className="font-bold">{formatCurrency(isContra ? -bal : bal)}</span>
+                          </div>
+                        </React.Fragment>
+                      );
+                    })}
+                    </React.Fragment>)}
+                  </div>
+                  <div className="flex justify-between py-2 border-t border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-slate-100 mt-2 px-2">
+                    <span className="uppercase text-[13px] tracking-wide">Total Assets</span>
+                    <span className="border-b-4 border-double border-slate-200 dark:border-slate-700">{formatCurrency(cumulativeToEndTotals.Assets)}</span>
+                  </div>
+                </div>
+
+                {/* LIABILITIES SECTION */}
+                <div>
+                  <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wide text-[13px]">Liabilities</h3>
+                  <div className="space-y-1">
+                    {positionLiabilityGroups.map(([group, groupAccounts]) => <React.Fragment key={group}>
+                    <p className="px-2 pt-2 text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-400">{group}</p>
+                    {groupAccounts.map(acc => {
+                      const bal = cumulativeToEndBalances[acc.code] || 0;
+                      return (
+                        <div key={acc.code} className="flex justify-between py-1.5 px-4 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                          <span>{acc.name}</span>
+                          <span className="font-bold">{formatCurrency(bal)}</span>
+                        </div>
+                      );
+                    })}
+                    </React.Fragment>)}
+                  </div>
+                  <div className="flex justify-between py-2 border-t border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-slate-100 mt-2 px-2">
+                    <span className="uppercase text-[13px] tracking-wide">Total Liabilities</span>
+                    <span className="border-b border-slate-200 dark:border-slate-700">{formatCurrency(cumulativeToEndTotals.Liabilities)}</span>
+                  </div>
+                </div>
+
+                {/* FUND BALANCE SECTION */}
+                <div>
+                  <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wide text-[13px]">Net Assets</h3>
+                  <div className="space-y-1">
+                    {positionFundBalanceAccounts.map(acc => {
+                      const bal = cumulativeToEndBalances[acc.code] || 0;
+                      return (
+                        <div key={acc.code} className="flex justify-between py-1.5 px-4 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                          <span>{acc.name}</span>
+                          <span className="font-bold">{formatCurrency(bal)}</span>
+                        </div>
+                      );
+                    })}
+                    {Math.abs(accumulatedNet.amount) >= 0.005 && (
+                      <div className="flex justify-between py-1 px-4 rounded-md text-blue-900 dark:text-blue-300 font-bold hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                        <span>{accumulatedNet.label} (Current Period)</span>
+                        <span>{formatCurrency(accumulatedNet.amount)}</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex justify-between py-2 border-t border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-slate-100 mt-2 px-2">
+                    <span className="uppercase text-[13px] tracking-wide">Total Fund Balance</span>
+                    <span className="border-b border-slate-200 dark:border-slate-700">{formatCurrency(fEndingFundBalance)}</span>
+                  </div>
+                </div>
+
+                {/* LIABILITIES & FUND BALANCE GRAND TOTAL */}
+                <div className="pt-4 border-t-2 border-slate-200 dark:border-slate-700">
+                  <div className="flex justify-between font-bold text-slate-900 dark:text-slate-100 text-base px-2">
+                    <span className="uppercase tracking-wide text-[13px]">Total Liabilities & Fund Balance</span>
+                    <span className="border-b-4 border-double border-slate-200 dark:border-slate-700">{formatCurrency(fTotalLiabilitiesAndFund)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 2. Statement of Activities (Income Statement) */}
+            {tab === 'activities' && (
+              <div className="space-y-6">
+                {/* REVENUE */}
+                <div>
+                  <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wide text-[13px]">Revenues & Contributions</h3>
+                  <div className="space-y-1">
+                    {activitiesRevenueAccounts.map(acc => {
+                      const bal = filteredBalances[acc.code] || 0;
+                      return (
+                        <div key={acc.code} className="flex justify-between py-1.5 px-4 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                          <span>{acc.name}</span>
+                          <span className="font-bold">{formatCurrency(bal)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex justify-between py-2 border-t border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-slate-100 mt-2 px-2">
+                    <span className="uppercase text-[13px] tracking-wide">Total Revenue & Inflows</span>
+                    <span className="border-b border-slate-200 dark:border-slate-700">{formatCurrency(filteredTotals.Revenue)}</span>
+                  </div>
+                </div>
+
+                {/* Program Services is deliberately a single linked amount: its detail belongs in the Statement of Functional Expenses. */}
+                <div>
+                  <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wide text-[13px]">Program-Related Expenses</h3>
+                  <div className="flex justify-between py-1.5 px-4 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                    <span>Program Services — see Statement of Functional Expenses</span>
+                    <span className="font-bold">{formatCurrency(activitiesExpenseBreakdown.eventRelatedTotal)}</span>
+                  </div>
+                  <div className="flex justify-between py-2 border-t border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-slate-100 mt-2 px-2">
+                    <span className="uppercase text-[13px] tracking-wide">Total Program-Related Expenses</span>
+                    <span className="border-b border-slate-200 dark:border-slate-700">{formatCurrency(activitiesExpenseBreakdown.eventRelatedTotal)}</span>
+                  </div>
+                </div>
+
+                {/* SUPPORTING SERVICES — journal entries without an event name */}
+                <div>
+                  <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wide text-[13px]">General & Administrative Expenses</h3>
+                  <div className="space-y-1">
+                    {activitiesGeneralAdminAccounts.map(acc => {
+                      const bal = activitiesExpenseBreakdown.generalAdminByAccount[acc.code] || 0;
+                      return (
+                        <div key={acc.code} className="flex justify-between py-1.5 px-4 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                          <span>{acc.name}</span>
+                          <span className="font-bold">{formatCurrency(bal)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex justify-between py-2 border-t border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-slate-100 mt-2 px-2">
+                    <span className="uppercase text-[13px] tracking-wide">Total General & Administrative</span>
+                    <span className="border-b border-slate-200 dark:border-slate-700">{formatCurrency(activitiesExpenseBreakdown.generalAdminTotal)}</span>
+                  </div>
+                </div>
+
+                <div className="flex justify-between py-2 border-t-2 border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-slate-100 mt-2 px-2">
+                  <span className="uppercase text-[13px] tracking-wide">Total Expenses & Outflows</span>
+                  <span className="border-b border-slate-200 dark:border-slate-700">{formatCurrency(filteredTotals.Expenses)}</span>
+                </div>
+
+                {/* NET EXCESS */}
+                <div className="pt-4 border-t-2 border-slate-200 dark:border-slate-700">
+                  <div className="flex justify-between font-bold text-base px-2 text-slate-900 dark:text-slate-100">
+                    <span className="uppercase tracking-wide text-[13px]">Net Surplus (Deficit) for Period</span>
+                    <span className={`border-b-4 border-double border-slate-200 dark:border-slate-700 ${fNetIncome >= 0 ? 'text-slate-900 dark:text-slate-100' : 'text-rose-600 dark:text-rose-400 font-bold'}`}>
+                      {formatCurrency(fNetIncome)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 3. Statement of Functional Expenses */}
+            {tab === 'functional' && (
+              <div className="space-y-4">
+                <p className="text-xs text-slate-600 dark:text-slate-400 font-sans">
+                  Program Services are expenses posted with an event name. Supporting Services are expenses posted without an event name.
+                </p>
+                <div className="overflow-x-auto border border-slate-200 dark:border-slate-700 rounded-lg">
+                  <table className="min-w-full text-[13px]">
+                    <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
+                      <tr>
+                        <th className="sticky left-0 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-left font-bold">Expense Category</th>
+                        {activitiesExpenseBreakdown.eventNames.map(name => <th key={name} className="min-w-28 px-3 py-2 text-right font-bold">{name}</th>)}
+                        <th className="min-w-28 px-3 py-2 text-right font-bold">Total Program Services</th>
+                        <th className="min-w-28 px-3 py-2 text-right font-bold">Supporting Services (G&A)</th>
+                        <th className="min-w-28 px-3 py-2 text-right font-bold">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {functionalExpenseAccounts.length === 0 && (
+                        <tr><td colSpan={activitiesExpenseBreakdown.eventNames.length + 4} className="px-3 py-4 text-center text-slate-500 dark:text-slate-400">No expenses with a balance in this period.</td></tr>
+                      )}
+                      {functionalExpenseAccounts.map(account => {
+                        const programAmounts = activitiesExpenseBreakdown.eventNames.map(name => activitiesExpenseBreakdown.eventGroups[name][account.code] || 0);
+                        const totalPrograms = programAmounts.reduce((total, amount) => total + amount, 0);
+                        const generalAdmin = activitiesExpenseBreakdown.generalAdminByAccount[account.code] || 0;
+                        return (
+                          <tr key={account.code} className="border-t border-slate-100 dark:border-slate-800">
+                            <th className="sticky left-0 bg-white dark:bg-slate-900 px-3 py-2 text-left font-medium">{account.name}</th>
+                            {programAmounts.map((amount, index) => <td key={activitiesExpenseBreakdown.eventNames[index]} className="px-3 py-2 text-right">{formatCurrency(amount)}</td>)}
+                            <td className="px-3 py-2 text-right font-semibold">{formatCurrency(totalPrograms)}</td>
+                            <td className="px-3 py-2 text-right font-semibold">{formatCurrency(generalAdmin)}</td>
+                            <td className="px-3 py-2 text-right font-bold">{formatCurrency(totalPrograms + generalAdmin)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot className="border-t-2 border-slate-300 bg-slate-50 font-bold dark:border-slate-600 dark:bg-slate-800">
+                      <tr>
+                        <th className="sticky left-0 bg-slate-50 px-3 py-2 text-left dark:bg-slate-800">Total Expenses</th>
+                        {activitiesExpenseBreakdown.eventNames.map(name => <td key={name} className="px-3 py-2 text-right">{formatCurrency(Object.values(activitiesExpenseBreakdown.eventGroups[name]).reduce((total, amount) => total + amount, 0))}</td>)}
+                        <td className="px-3 py-2 text-right">{formatCurrency(activitiesExpenseBreakdown.eventRelatedTotal)}</td>
+                        <td className="px-3 py-2 text-right">{formatCurrency(activitiesExpenseBreakdown.generalAdminTotal)}</td>
+                        <td className="px-3 py-2 text-right">{formatCurrency(filteredTotals.Expenses)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* 4. Statement of Cash Flows (Direct Method) */}
+            {tab === 'cashflow' && (
+              <div className="space-y-6">
+                {/* OPERATING ACTIVITIES */}
+                <div>
+                  <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wide text-[13px]">Cash Flows from Operating Activities</h3>
+                  <div className="space-y-1 px-4">
+                    <p className="font-semibold">Receipts from:</p>
+                    {cashFlowDetails.receipts.length === 0 && <p className="pl-4 text-slate-400">No cash receipts in this period.</p>}
+                    {cashFlowDetails.receipts.map(line => (
+                      <div key={line.key} className="flex justify-between rounded-md pl-4 hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                        <span>{line.label}</span>
+                        <span>{formatCurrency(line.amount)}</span>
+                      </div>
+                    ))}
+                    <p className="pt-2 font-semibold">Payments for:</p>
+                    {cashFlowDetails.payments.length === 0 && <p className="pl-4 text-slate-400">No cash payments in this period.</p>}
+                    {cashFlowDetails.payments.map(line => (
+                      <div key={line.key} className="flex justify-between rounded-md pl-4 hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                        <span>{line.label}</span>
+                        <span>{formatOutflow(line.amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex justify-between py-1.5 border-t border-slate-200 dark:border-slate-700 font-semibold text-slate-900 dark:text-slate-100 mt-2 px-4">
+                    <span>{netCashLabel('operating', cashFlowDetails.netOperating)}</span>
+                    <span className="font-bold">{cashFlowDetails.netOperating < 0 ? formatOutflow(cashFlowDetails.netOperating) : formatCurrency(cashFlowDetails.netOperating)}</span>
+                  </div>
+                </div>
+
+                {/* INVESTING ACTIVITIES */}
+                <div>
+                  <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wide text-[13px]">Cash Flows from Investing Activities</h3>
+                  <div className="space-y-1 px-4">
+                    <div className="flex justify-between rounded-md pl-4 hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                      <span>{EQUIPMENT_PURCHASE_LABEL}</span>
+                      <span>{formatOutflow(cashFlowDetails.equipmentPurchases)}</span>
+                    </div>
+                    <div className="flex justify-between rounded-md pl-4 hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                      <span>{FURNITURE_PURCHASE_LABEL}</span>
+                      <span>{formatOutflow(cashFlowDetails.furniturePurchases)}</span>
+                    </div>
+                  </div>
+                  <div className="flex justify-between py-1.5 border-t border-slate-200 dark:border-slate-700 font-semibold text-slate-900 dark:text-slate-100 mt-2 px-4">
+                    <span>{netCashLabel('investing', cashFlowDetails.netInvesting)}</span>
+                    <span className="font-bold">{cashFlowDetails.netInvesting < 0 ? formatOutflow(cashFlowDetails.netInvesting) : formatCurrency(cashFlowDetails.netInvesting)}</span>
+                  </div>
+                </div>
+
+                {/* SUMMARY */}
+                <div className="pt-4 border-t-2 border-slate-200 dark:border-slate-700 space-y-2">
+                  <div className="flex justify-between font-bold px-2 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                    <span>Net increase (decrease) in cash and cash equivalents</span>
+                    <span>{cashFlowDetails.netChange < 0 ? formatOutflow(cashFlowDetails.netChange) : formatCurrency(cashFlowDetails.netChange)}</span>
+                  </div>
+                  <div className="flex justify-between px-2 font-medium rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                    <span>Cash and cash equivalents at beginning of year</span>
+                    <span>{formatCurrency(cashFlowDetails.beginningCash)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold text-base px-2 text-slate-900 dark:text-slate-100 border-t border-slate-200 dark:border-slate-700 pt-2">
+                    <span>Cash and cash equivalents at end of year</span>
+                    <span className="border-b-4 border-double border-slate-200 dark:border-slate-700">{formatCurrency(cashFlowDetails.endingCash)}</span>
+                  </div>
+                  {cashFlowDetails.reconcilesToLedger ? (
+                    <p className="px-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300">Ending cash agrees with the General Ledger cash balance of {formatCurrency(cashFlowDetails.ledgerCash)}.</p>
+                  ) : (
+                    <p role="alert" className="px-2 text-xs font-bold text-rose-700 dark:text-rose-300">Ending cash does not agree with the General Ledger cash balance of {formatCurrency(cashFlowDetails.ledgerCash)}. Check the journal entries that touch Cash on Hand.</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+          {showUnadjustedWarning && <p role="note" data-unadjusted-warning="true" className="mt-8 border-t border-rose-200 pt-4 text-[13px] font-bold leading-5 text-rose-600 dark:border-rose-500/30 dark:text-rose-400 print:text-red-600">{UNADJUSTED_WARNING}</p>}
+    </>
+  );
 
   return (
     <div className="space-y-6">
@@ -304,6 +639,14 @@ export function FinancialStatements({ onNavigate }: FinancialStatementsProps = {
             type="button"
           >
             <Printer className="w-3.5 h-3.5 text-blue-900 dark:text-blue-400" /> Print Statement
+          </button>
+          <button
+            onClick={handlePrintAll}
+            disabled={isGated || adjustmentsGate}
+            className="flex items-center gap-2 bg-white dark:bg-slate-900 hover:bg-gray-50 dark:hover:bg-slate-800 text-gray-700 dark:text-slate-200 font-semibold text-xs px-3.5 py-2 rounded-xl border border-gray-100 dark:border-slate-800 shadow-sm transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            type="button"
+          >
+            <Printer className="w-3.5 h-3.5 text-blue-900 dark:text-blue-400" /> Print All Financial Statements
           </button>
         </div>
       </div>
@@ -415,7 +758,7 @@ export function FinancialStatements({ onNavigate }: FinancialStatementsProps = {
         </div>
 
         {/* Report Canvas - Right */}
-        <div className="lg:col-span-9 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-8 sm:p-12 rounded-3xl shadow-sm print:shadow-none print:border-none max-w-4xl mx-auto w-full select-none">
+        <div className={`lg:col-span-9 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-8 sm:p-12 rounded-3xl shadow-sm print:shadow-none print:border-none max-w-4xl mx-auto w-full select-none ${printingAll ? 'print:hidden' : ''}`}>
           {isGated ? (
             <div className="text-center py-10 h-full flex flex-col justify-center">
               <ClipboardCheck className="w-10 h-10 text-amber-500 mx-auto mb-3" />
@@ -472,319 +815,16 @@ export function FinancialStatements({ onNavigate }: FinancialStatementsProps = {
                 </div>
               )}
             </div>
-          ) : (
-            <>
-          {/* Report Header */}
-          <div className="text-center border-b-2 border-slate-200 dark:border-slate-700 pb-5 mb-8">
-            <h1 className="text-xl font-bold uppercase text-slate-900 dark:text-slate-100 tracking-wide">{settings.organizationName}</h1>
-            <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 mt-1.5 uppercase tracking-wide">
-              {activeTab === 'position' && 'Statement of Financial Position'}
-              {activeTab === 'activities' && 'Statement of Activities (Income Statement)'}
-              {activeTab === 'functional' && 'Statement of Functional Expenses'}
-              {activeTab === 'cashflow' && 'Statement of Cash Flows (Direct Method)'}
-            </h2>
-            <p className="text-sm text-slate-600 dark:text-slate-300 font-medium mt-1.5">
-              {activeTab === 'position' 
-                ? `As of ${new Date(endDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`
-                : periodEndedLabel(endDate)
-              }
-            </p>
-            <p className="text-xs text-slate-600 dark:text-slate-300 font-semibold uppercase mt-1">Figures in {settings.currencyCode} ({settings.currencySymbol})</p>
-          </div>
-
-          {/* Statement Layouts */}
-          <div className="text-[15px] text-slate-900 dark:text-slate-100 leading-relaxed font-sans tabular-nums">
-            {/* 1. Statement of Financial Position (Balance Sheet) */}
-            {activeTab === 'position' && (
-              <div className="space-y-6">
-                {/* ASSETS SECTION */}
-                <div>
-                  <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wide text-[13px]">Assets</h3>
-                  <div className="space-y-1">
-                    {positionAssetGroups.map(([group, groupAccounts]) => <React.Fragment key={group}>
-                    <p className="px-2 pt-2 text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-400">{group}</p>
-                    {groupAccounts.map((acc, index) => {
-                      const bal = cumulativeToEndBalances[acc.code] || 0;
-                      const isContra = isContraAccount(acc);
-                      const ppeSection = group === 'Property and Equipment' ? ppeSectionOf(acc.code) : undefined;
-                      const startsPpeSection = ppeSection !== undefined && (index === 0 || ppeSectionOf(groupAccounts[index - 1].code) !== ppeSection);
-                      return (
-                        <React.Fragment key={acc.code}>
-                          {startsPpeSection && <p className="px-4 pt-2 text-sm font-bold text-slate-700 dark:text-slate-300">{ppeSection}</p>}
-                          <div className={`flex justify-between py-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50 ${ppeSection ? 'px-8' : 'px-4'}`}>
-                            <span>{isContra ? `Less: ${acc.name}` : acc.name}</span>
-                            <span className="font-bold">{formatCurrency(isContra ? -bal : bal)}</span>
-                          </div>
-                        </React.Fragment>
-                      );
-                    })}
-                    </React.Fragment>)}
-                  </div>
-                  <div className="flex justify-between py-2 border-t border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-slate-100 mt-2 px-2">
-                    <span className="uppercase text-[13px] tracking-wide">Total Assets</span>
-                    <span className="border-b-4 border-double border-slate-200 dark:border-slate-700">{formatCurrency(cumulativeToEndTotals.Assets)}</span>
-                  </div>
-                </div>
-
-                {/* LIABILITIES SECTION */}
-                <div>
-                  <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wide text-[13px]">Liabilities</h3>
-                  <div className="space-y-1">
-                    {positionLiabilityGroups.map(([group, groupAccounts]) => <React.Fragment key={group}>
-                    <p className="px-2 pt-2 text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-400">{group}</p>
-                    {groupAccounts.map(acc => {
-                      const bal = cumulativeToEndBalances[acc.code] || 0;
-                      return (
-                        <div key={acc.code} className="flex justify-between py-1.5 px-4 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                          <span>{acc.name}</span>
-                          <span className="font-bold">{formatCurrency(bal)}</span>
-                        </div>
-                      );
-                    })}
-                    </React.Fragment>)}
-                  </div>
-                  <div className="flex justify-between py-2 border-t border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-slate-100 mt-2 px-2">
-                    <span className="uppercase text-[13px] tracking-wide">Total Liabilities</span>
-                    <span className="border-b border-slate-200 dark:border-slate-700">{formatCurrency(cumulativeToEndTotals.Liabilities)}</span>
-                  </div>
-                </div>
-
-                {/* FUND BALANCE SECTION */}
-                <div>
-                  <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wide text-[13px]">Net Assets</h3>
-                  <div className="space-y-1">
-                    {positionFundBalanceAccounts.map(acc => {
-                      const bal = cumulativeToEndBalances[acc.code] || 0;
-                      return (
-                        <div key={acc.code} className="flex justify-between py-1.5 px-4 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                          <span>{acc.name}</span>
-                          <span className="font-bold">{formatCurrency(bal)}</span>
-                        </div>
-                      );
-                    })}
-                    {Math.abs(accumulatedNet.amount) >= 0.005 && (
-                      <div className="flex justify-between py-1 px-4 rounded-md text-blue-900 dark:text-blue-300 font-bold hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                        <span>{accumulatedNet.label} (Current Period)</span>
-                        <span>{formatCurrency(accumulatedNet.amount)}</span>
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex justify-between py-2 border-t border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-slate-100 mt-2 px-2">
-                    <span className="uppercase text-[13px] tracking-wide">Total Fund Balance</span>
-                    <span className="border-b border-slate-200 dark:border-slate-700">{formatCurrency(fEndingFundBalance)}</span>
-                  </div>
-                </div>
-
-                {/* LIABILITIES & FUND BALANCE GRAND TOTAL */}
-                <div className="pt-4 border-t-2 border-slate-200 dark:border-slate-700">
-                  <div className="flex justify-between font-bold text-slate-900 dark:text-slate-100 text-base px-2">
-                    <span className="uppercase tracking-wide text-[13px]">Total Liabilities & Fund Balance</span>
-                    <span className="border-b-4 border-double border-slate-200 dark:border-slate-700">{formatCurrency(fTotalLiabilitiesAndFund)}</span>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* 2. Statement of Activities (Income Statement) */}
-            {activeTab === 'activities' && (
-              <div className="space-y-6">
-                {/* REVENUE */}
-                <div>
-                  <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wide text-[13px]">Revenues & Contributions</h3>
-                  <div className="space-y-1">
-                    {activitiesRevenueAccounts.map(acc => {
-                      const bal = filteredBalances[acc.code] || 0;
-                      return (
-                        <div key={acc.code} className="flex justify-between py-1.5 px-4 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                          <span>{acc.name}</span>
-                          <span className="font-bold">{formatCurrency(bal)}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div className="flex justify-between py-2 border-t border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-slate-100 mt-2 px-2">
-                    <span className="uppercase text-[13px] tracking-wide">Total Revenue & Inflows</span>
-                    <span className="border-b border-slate-200 dark:border-slate-700">{formatCurrency(filteredTotals.Revenue)}</span>
-                  </div>
-                </div>
-
-                {/* Program Services is deliberately a single linked amount: its detail belongs in the Statement of Functional Expenses. */}
-                <div>
-                  <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wide text-[13px]">Program-Related Expenses</h3>
-                  <div className="flex justify-between py-1.5 px-4 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                    <span>Program Services — see Statement of Functional Expenses</span>
-                    <span className="font-bold">{formatCurrency(activitiesExpenseBreakdown.eventRelatedTotal)}</span>
-                  </div>
-                  <div className="flex justify-between py-2 border-t border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-slate-100 mt-2 px-2">
-                    <span className="uppercase text-[13px] tracking-wide">Total Program-Related Expenses</span>
-                    <span className="border-b border-slate-200 dark:border-slate-700">{formatCurrency(activitiesExpenseBreakdown.eventRelatedTotal)}</span>
-                  </div>
-                </div>
-
-                {/* SUPPORTING SERVICES — journal entries without an event name */}
-                <div>
-                  <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wide text-[13px]">General & Administrative Expenses</h3>
-                  <div className="space-y-1">
-                    {activitiesGeneralAdminAccounts.map(acc => {
-                      const bal = activitiesExpenseBreakdown.generalAdminByAccount[acc.code] || 0;
-                      return (
-                        <div key={acc.code} className="flex justify-between py-1.5 px-4 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                          <span>{acc.name}</span>
-                          <span className="font-bold">{formatCurrency(bal)}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div className="flex justify-between py-2 border-t border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-slate-100 mt-2 px-2">
-                    <span className="uppercase text-[13px] tracking-wide">Total General & Administrative</span>
-                    <span className="border-b border-slate-200 dark:border-slate-700">{formatCurrency(activitiesExpenseBreakdown.generalAdminTotal)}</span>
-                  </div>
-                </div>
-
-                <div className="flex justify-between py-2 border-t-2 border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-slate-100 mt-2 px-2">
-                  <span className="uppercase text-[13px] tracking-wide">Total Expenses & Outflows</span>
-                  <span className="border-b border-slate-200 dark:border-slate-700">{formatCurrency(filteredTotals.Expenses)}</span>
-                </div>
-
-                {/* NET EXCESS */}
-                <div className="pt-4 border-t-2 border-slate-200 dark:border-slate-700">
-                  <div className="flex justify-between font-bold text-base px-2 text-slate-900 dark:text-slate-100">
-                    <span className="uppercase tracking-wide text-[13px]">Net Surplus (Deficit) for Period</span>
-                    <span className={`border-b-4 border-double border-slate-200 dark:border-slate-700 ${fNetIncome >= 0 ? 'text-slate-900 dark:text-slate-100' : 'text-rose-600 dark:text-rose-400 font-bold'}`}>
-                      {formatCurrency(fNetIncome)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* 3. Statement of Functional Expenses */}
-            {activeTab === 'functional' && (
-              <div className="space-y-4">
-                <p className="text-xs text-slate-600 dark:text-slate-400 font-sans">
-                  Program Services are expenses posted with an event name. Supporting Services are expenses posted without an event name.
-                </p>
-                <div className="overflow-x-auto border border-slate-200 dark:border-slate-700 rounded-lg">
-                  <table className="min-w-full text-[13px]">
-                    <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
-                      <tr>
-                        <th className="sticky left-0 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-left font-bold">Expense Category</th>
-                        {activitiesExpenseBreakdown.eventNames.map(name => <th key={name} className="min-w-28 px-3 py-2 text-right font-bold">{name}</th>)}
-                        <th className="min-w-28 px-3 py-2 text-right font-bold">Total Program Services</th>
-                        <th className="min-w-28 px-3 py-2 text-right font-bold">Supporting Services (G&A)</th>
-                        <th className="min-w-28 px-3 py-2 text-right font-bold">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {functionalExpenseAccounts.length === 0 && (
-                        <tr><td colSpan={activitiesExpenseBreakdown.eventNames.length + 4} className="px-3 py-4 text-center text-slate-500 dark:text-slate-400">No expenses with a balance in this period.</td></tr>
-                      )}
-                      {functionalExpenseAccounts.map(account => {
-                        const programAmounts = activitiesExpenseBreakdown.eventNames.map(name => activitiesExpenseBreakdown.eventGroups[name][account.code] || 0);
-                        const totalPrograms = programAmounts.reduce((total, amount) => total + amount, 0);
-                        const generalAdmin = activitiesExpenseBreakdown.generalAdminByAccount[account.code] || 0;
-                        return (
-                          <tr key={account.code} className="border-t border-slate-100 dark:border-slate-800">
-                            <th className="sticky left-0 bg-white dark:bg-slate-900 px-3 py-2 text-left font-medium">{account.name}</th>
-                            {programAmounts.map((amount, index) => <td key={activitiesExpenseBreakdown.eventNames[index]} className="px-3 py-2 text-right">{formatCurrency(amount)}</td>)}
-                            <td className="px-3 py-2 text-right font-semibold">{formatCurrency(totalPrograms)}</td>
-                            <td className="px-3 py-2 text-right font-semibold">{formatCurrency(generalAdmin)}</td>
-                            <td className="px-3 py-2 text-right font-bold">{formatCurrency(totalPrograms + generalAdmin)}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                    <tfoot className="border-t-2 border-slate-300 bg-slate-50 font-bold dark:border-slate-600 dark:bg-slate-800">
-                      <tr>
-                        <th className="sticky left-0 bg-slate-50 px-3 py-2 text-left dark:bg-slate-800">Total Expenses</th>
-                        {activitiesExpenseBreakdown.eventNames.map(name => <td key={name} className="px-3 py-2 text-right">{formatCurrency(Object.values(activitiesExpenseBreakdown.eventGroups[name]).reduce((total, amount) => total + amount, 0))}</td>)}
-                        <td className="px-3 py-2 text-right">{formatCurrency(activitiesExpenseBreakdown.eventRelatedTotal)}</td>
-                        <td className="px-3 py-2 text-right">{formatCurrency(activitiesExpenseBreakdown.generalAdminTotal)}</td>
-                        <td className="px-3 py-2 text-right">{formatCurrency(filteredTotals.Expenses)}</td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {/* 4. Statement of Cash Flows (Direct Method) */}
-            {activeTab === 'cashflow' && (
-              <div className="space-y-6">
-                {/* OPERATING ACTIVITIES */}
-                <div>
-                  <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wide text-[13px]">Cash Flows from Operating Activities</h3>
-                  <div className="space-y-1 px-4">
-                    <p className="font-semibold">Receipts from:</p>
-                    {cashFlowDetails.receipts.length === 0 && <p className="pl-4 text-slate-400">No cash receipts in this period.</p>}
-                    {cashFlowDetails.receipts.map(line => (
-                      <div key={line.key} className="flex justify-between rounded-md pl-4 hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                        <span>{line.label}</span>
-                        <span>{formatCurrency(line.amount)}</span>
-                      </div>
-                    ))}
-                    <p className="pt-2 font-semibold">Payments for:</p>
-                    {cashFlowDetails.payments.length === 0 && <p className="pl-4 text-slate-400">No cash payments in this period.</p>}
-                    {cashFlowDetails.payments.map(line => (
-                      <div key={line.key} className="flex justify-between rounded-md pl-4 hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                        <span>{line.label}</span>
-                        <span>{formatOutflow(line.amount)}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex justify-between py-1.5 border-t border-slate-200 dark:border-slate-700 font-semibold text-slate-900 dark:text-slate-100 mt-2 px-4">
-                    <span>{netCashLabel('operating', cashFlowDetails.netOperating)}</span>
-                    <span className="font-bold">{cashFlowDetails.netOperating < 0 ? formatOutflow(cashFlowDetails.netOperating) : formatCurrency(cashFlowDetails.netOperating)}</span>
-                  </div>
-                </div>
-
-                {/* INVESTING ACTIVITIES */}
-                <div>
-                  <h3 className="font-bold border-b border-slate-200 dark:border-slate-700 pb-1 mb-2 text-slate-900 dark:text-slate-100 uppercase tracking-wide text-[13px]">Cash Flows from Investing Activities</h3>
-                  <div className="space-y-1 px-4">
-                    <div className="flex justify-between rounded-md pl-4 hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                      <span>{EQUIPMENT_PURCHASE_LABEL}</span>
-                      <span>{formatOutflow(cashFlowDetails.equipmentPurchases)}</span>
-                    </div>
-                    <div className="flex justify-between rounded-md pl-4 hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                      <span>{FURNITURE_PURCHASE_LABEL}</span>
-                      <span>{formatOutflow(cashFlowDetails.furniturePurchases)}</span>
-                    </div>
-                  </div>
-                  <div className="flex justify-between py-1.5 border-t border-slate-200 dark:border-slate-700 font-semibold text-slate-900 dark:text-slate-100 mt-2 px-4">
-                    <span>{netCashLabel('investing', cashFlowDetails.netInvesting)}</span>
-                    <span className="font-bold">{cashFlowDetails.netInvesting < 0 ? formatOutflow(cashFlowDetails.netInvesting) : formatCurrency(cashFlowDetails.netInvesting)}</span>
-                  </div>
-                </div>
-
-                {/* SUMMARY */}
-                <div className="pt-4 border-t-2 border-slate-200 dark:border-slate-700 space-y-2">
-                  <div className="flex justify-between font-bold px-2 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                    <span>Net increase (decrease) in cash and cash equivalents</span>
-                    <span>{cashFlowDetails.netChange < 0 ? formatOutflow(cashFlowDetails.netChange) : formatCurrency(cashFlowDetails.netChange)}</span>
-                  </div>
-                  <div className="flex justify-between px-2 font-medium rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                    <span>Cash and cash equivalents at beginning of year</span>
-                    <span>{formatCurrency(cashFlowDetails.beginningCash)}</span>
-                  </div>
-                  <div className="flex justify-between font-bold text-base px-2 text-slate-900 dark:text-slate-100 border-t border-slate-200 dark:border-slate-700 pt-2">
-                    <span>Cash and cash equivalents at end of year</span>
-                    <span className="border-b-4 border-double border-slate-200 dark:border-slate-700">{formatCurrency(cashFlowDetails.endingCash)}</span>
-                  </div>
-                  {cashFlowDetails.reconcilesToLedger ? (
-                    <p className="px-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300">Ending cash agrees with the General Ledger cash balance of {formatCurrency(cashFlowDetails.ledgerCash)}.</p>
-                  ) : (
-                    <p role="alert" className="px-2 text-xs font-bold text-rose-700 dark:text-rose-300">Ending cash does not agree with the General Ledger cash balance of {formatCurrency(cashFlowDetails.ledgerCash)}. Check the journal entries that touch Cash on Hand.</p>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-          {showUnadjustedWarning && <p role="note" data-unadjusted-warning="true" className="mt-8 border-t border-rose-200 pt-4 text-[13px] font-bold leading-5 text-rose-600 dark:border-rose-500/30 dark:text-rose-400 print:text-red-600">{UNADJUSTED_WARNING}</p>}
-            </>
-          )}
+          ) : renderReport(activeTab)}
         </div>
       </div>
+      {printingAll && !isGated && !adjustmentsGate && (
+        <div className="hidden print:block text-slate-900 font-sans">
+          {STATEMENT_OPTIONS.map(option => (
+            <div key={option.id} data-print-statement={option.id} className="print-statement break-after-page last:break-after-auto p-8">{renderReport(option.id)}</div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
