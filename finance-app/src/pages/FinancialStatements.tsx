@@ -17,7 +17,7 @@ import { accumulatedNetPosition } from '../lib/fundBalancePresentation';
 import { isPropertyAndEquipmentAccount } from '../lib/propertyEquipmentAccounts';
 import { excludeClosingEntries } from '../lib/closingEntries';
 import { periodEndedLabel, periodForSemester, reportingPeriodBounds } from '../lib/reportingPeriod';
-import { combineOpeningAndPeriodBalances } from '../lib/reportingPeriodBalances';
+import { combineOpeningAndPeriodBalances, entriesThroughPeriodEnd, periodEndingBalances } from '../lib/reportingPeriodBalances';
 import { ADJUSTMENTS_GATE_MESSAGE, ADJUSTMENTS_PROCEED_PROMPT, UNADJUSTED_WARNING } from '../lib/otherAdjustments';
 import { useOtherAdjustments } from '../hooks/useOtherAdjustments';
 
@@ -135,11 +135,11 @@ export function FinancialStatements({ onNavigate }: FinancialStatementsProps = {
   // range — e.g. prior years' closing entries — not just activity within
   // it. Point-in-time balances, unlike Revenue/Expenses.
   const cumulativeToEndEntries = useMemo(
-    () => journalEntries.filter(je => !je.isDraft && je.date <= endDate),
+    () => entriesThroughPeriodEnd(journalEntries.filter(je => !je.isDraft), endDate),
     [journalEntries, endDate]
   );
   const cumulativeToEndBalances = useMemo(
-    () => combineOpeningAndPeriodBalances(openingBalances, computeAccountBalances(cumulativeToEndEntries, accounts), accounts),
+    () => periodEndingBalances(openingBalances, cumulativeToEndEntries, accounts),
     [openingBalances, cumulativeToEndEntries, accounts]
   );
   const cumulativeToEndTotals = useMemo(
@@ -554,10 +554,12 @@ export function FinancialStatements({ onNavigate }: FinancialStatementsProps = {
                         </div>
                       );
                     })}
-                    <div className="flex justify-between py-1 px-4 rounded-md text-blue-900 dark:text-blue-300 font-bold hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                      <span>{accumulatedNet.label} (Current Period)</span>
-                      <span>{formatCurrency(accumulatedNet.amount)}</span>
-                    </div>
+                    {Math.abs(accumulatedNet.amount) >= 0.005 && (
+                      <div className="flex justify-between py-1 px-4 rounded-md text-blue-900 dark:text-blue-300 font-bold hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                        <span>{accumulatedNet.label} (Current Period)</span>
+                        <span>{formatCurrency(accumulatedNet.amount)}</span>
+                      </div>
+                    )}
                   </div>
                   <div className="flex justify-between py-2 border-t border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-slate-100 mt-2 px-2">
                     <span className="uppercase text-[13px] tracking-wide">Total Fund Balance</span>

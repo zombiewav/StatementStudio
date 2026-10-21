@@ -1,8 +1,8 @@
 import React, { useMemo } from 'react';
 import { CheckCircle2, AlertTriangle, ArrowLeftRight } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
-import { computeAccountBalances } from '../lib/accountTotals';
-import { combineOpeningAndPeriodBalances } from '../lib/reportingPeriodBalances';
+import { linesAfterPeriodEnd, periodEndingBalances } from '../lib/reportingPeriodBalances';
+import { reportingPeriodBounds } from '../lib/reportingPeriod';
 import { excludeClosingEntries } from '../lib/closingEntries';
 
 // Client's order: Assets, then Liabilities, Fund Balance, Revenue and last Expenses (each by account code).
@@ -12,13 +12,12 @@ const TYPE_ORDER = ['Assets', 'Liabilities', 'Fund Balance', 'Revenue', 'Expense
 // 'post' picks up the ending balances after the closing entries.
 export function TrialBalance({ mode = 'pre' }: { mode?: 'pre' | 'post' } = {}): React.ReactElement {
   const { accounts, journalEntries, openingBalances, closedFiscalYears, formatCurrency, settings } = useFinance();
+  // Same rule as the General Ledger: a line counts up to the semester's last day by its own posting date.
+  const periodEnd = settings.semester && settings.reportingYear ? reportingPeriodBounds(settings.semester, settings.reportingYear).endDate : null;
+  const lateLines = useMemo(() => periodEnd ? linesAfterPeriodEnd(journalEntries, periodEnd) : [], [journalEntries, periodEnd]);
   const accountBalances = useMemo(
-    () => combineOpeningAndPeriodBalances(
-      openingBalances,
-      computeAccountBalances(mode === 'pre' ? excludeClosingEntries(journalEntries, closedFiscalYears) : journalEntries, accounts),
-      accounts,
-    ),
-    [mode, openingBalances, journalEntries, closedFiscalYears, accounts]
+    () => periodEndingBalances(openingBalances, mode === 'pre' ? excludeClosingEntries(journalEntries, closedFiscalYears) : journalEntries, accounts, periodEnd),
+    [mode, openingBalances, journalEntries, closedFiscalYears, accounts, periodEnd]
   );
 
   // Compute Trial Balance Rows:
@@ -102,6 +101,12 @@ export function TrialBalance({ mode = 'pre' }: { mode?: 'pre' | 'post' } = {}): 
             : 'Verify that the sum of all debits equals the sum of all credits in the ledger. Closing entries do not affect this report.'}</p>
         </div>
       </div>
+
+      {lateLines.length > 0 && (
+        <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs font-semibold text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
+          {lateLines.length} posting line{lateLines.length === 1 ? ' is' : 's are'} dated after this semester ends and {lateLines.length === 1 ? 'is' : 'are'} left out of these balances: {lateLines.slice(0, 5).map(line => `${line.reference} (${line.accountCode}, ${line.date})`).join('; ')}{lateLines.length > 5 ? '; ...' : ''}. Correct the date of the transaction to include {lateLines.length === 1 ? 'it' : 'them'}.
+        </p>
+      )}
 
       {/* Verification Status Alert */}
       <div className={`p-4.5 rounded-2xl border flex items-center justify-between text-xs font-semibold shadow-sm transition-colors bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 ${

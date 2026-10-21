@@ -4,8 +4,7 @@ import { useFinance } from '../context/FinanceContext';
 import { reportingPeriodBounds } from '../lib/reportingPeriod';
 import { AccountHistoryLine, buildAccountPeriodHistory, buildAccountTransactionHistory } from '../lib/transactionHistory';
 import { counterpartyBalances } from '../lib/counterpartyBalances';
-import { computeAccountBalances } from '../lib/accountTotals';
-import { appliesOpeningBalance, combineOpeningAndPeriodBalances, withCarriedFundBalance } from '../lib/reportingPeriodBalances';
+import { appliesOpeningBalance, periodEndingBalances, withCarriedFundBalance } from '../lib/reportingPeriodBalances';
 import { excludeClosingEntries } from '../lib/closingEntries';
 
 // 'pre' is the original ledger: closing entries do not touch it. 'post' is a copy that
@@ -16,9 +15,12 @@ export function GeneralLedger({ mode = 'pre' }: { mode?: 'pre' | 'post' } = {}):
     () => mode === 'pre' ? excludeClosingEntries(allJournalEntries, closedFiscalYears) : allJournalEntries,
     [mode, allJournalEntries, closedFiscalYears]
   );
+  const reportingBounds = settings.semester && settings.reportingYear
+    ? reportingPeriodBounds(settings.semester, settings.reportingYear)
+    : null;
   const accountBalances = useMemo(
-    () => combineOpeningAndPeriodBalances(openingBalances, computeAccountBalances(journalEntries, accounts), accounts),
-    [openingBalances, journalEntries, accounts]
+    () => periodEndingBalances(openingBalances, journalEntries, accounts, reportingBounds?.endDate),
+    [openingBalances, journalEntries, accounts, reportingBounds?.endDate]
   );
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedType, setSelectedType] = useState<'All' | 'Assets' | 'Liabilities' | 'Fund Balance' | 'Revenue' | 'Expenses'>('All');
@@ -30,9 +32,6 @@ export function GeneralLedger({ mode = 'pre' }: { mode?: 'pre' | 'post' } = {}):
   const accountsPerPage = 10;
 
   // Compute the transaction history with running balances for each account
-  const reportingBounds = settings.semester && settings.reportingYear
-    ? reportingPeriodBounds(settings.semester, settings.reportingYear)
-    : null;
   const ledgerData = useMemo(() => {
     const data: Record<string, { beginningBalance: number; lines: AccountHistoryLine[] }> = {};
     const carried = withCarriedFundBalance(openingBalances, accounts);
@@ -158,9 +157,7 @@ export function GeneralLedger({ mode = 'pre' }: { mode?: 'pre' | 'post' } = {}):
         {pageAccounts.map(acc => {
           const accountHistory = ledgerData[acc.code] || { beginningBalance: 0, lines: [] };
           const lines = accountHistory.lines;
-          const currentBal = reportingBounds
-            ? lines[lines.length - 1]?.runningBalance ?? accountHistory.beginningBalance
-            : accountBalances[acc.code] || 0;
+          const currentBal = accountBalances[acc.code] || 0;
 
           const hasActivity = lines.length > 0 || accountHistory.beginningBalance !== 0;
           const isOpen = expanded[acc.code] ?? hasActivity;

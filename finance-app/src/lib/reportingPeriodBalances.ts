@@ -27,6 +27,27 @@ export function withCarriedFundBalance(openingBalances: OpeningBalances, account
   return { ...openingBalances, [FUND_BALANCE_CODE]: (openingBalances[FUND_BALANCE_CODE] || 0) + missing };
 }
 
+const linePostingDate = (entry: JournalEntry, line: JournalEntry['lines'][number]) => line.date || entry.date;
+
+/**
+ * The General Ledger only counts a line up to the period's last day (by that line's own posting date), so every
+ * report that must tie to it (Trial Balance, Financial Statements, next semester's opening) reads the books through this.
+ */
+export function entriesThroughPeriodEnd(entries: JournalEntry[], endDate: string): JournalEntry[] {
+  return entries.flatMap(entry => {
+    const lines = entry.lines.filter(line => linePostingDate(entry, line) <= endDate);
+    if (lines.length === entry.lines.length) return [entry];
+    return lines.length ? [{ ...entry, lines }] : [];
+  });
+}
+
+/** Lines dated after the period's last day: they are left out of the period's ending balances. */
+export function linesAfterPeriodEnd(entries: JournalEntry[], endDate: string): { reference: string; accountCode: string; date: string; amount: number }[] {
+  return entries.flatMap(entry => entry.lines
+    .filter(line => linePostingDate(entry, line) > endDate)
+    .map(line => ({ reference: entry.reference, accountCode: line.accountCode, date: linePostingDate(entry, line), amount: Math.max(line.debit, line.credit) })));
+}
+
 export function combineOpeningAndPeriodBalances(
   openingBalances: OpeningBalances,
   periodBalances: Record<string, number>,
@@ -38,6 +59,19 @@ export function combineOpeningAndPeriodBalances(
       + (appliesOpeningBalance(account) ? (opening[account.code] || 0) : 0);
     return balances;
   }, {});
+}
+
+/**
+ * Ending balance of every account at the period's last day: opening balance plus every line posted up to that day.
+ * The General Ledger, Trial Balance and Statement of Financial Position all read their balances from here.
+ */
+export function periodEndingBalances(
+  openingBalances: OpeningBalances,
+  entries: JournalEntry[],
+  accounts: Account[],
+  endDate?: string | null,
+): Record<string, number> {
+  return combineOpeningAndPeriodBalances(openingBalances, computeAccountBalances(endDate ? entriesThroughPeriodEnd(entries, endDate) : entries, accounts), accounts);
 }
 
 // A semester's ending permanent balance becomes the next newly-created

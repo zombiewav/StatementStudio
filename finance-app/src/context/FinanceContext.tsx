@@ -23,7 +23,7 @@ import {
 import { deleteSemesterRecords, precedingSemester } from '../lib/semesterDeletion';
 import { validateBackupPayload } from '../lib/backupValidation';
 import { computeAccountBalances, computeTypeTotals } from '../lib/accountTotals';
-import { combineOpeningAndPeriodBalances, carryForwardOpeningBalances, OpeningBalances } from '../lib/reportingPeriodBalances';
+import { combineOpeningAndPeriodBalances, carryForwardOpeningBalances, entriesThroughPeriodEnd, OpeningBalances } from '../lib/reportingPeriodBalances';
 import { computeClosingStageLines, excludeClosingEntries, findFiscalCloseBlockers, planClosingSync } from '../lib/closingEntries';
 import { CLOSING_FLOW, CLOSING_PAGES_ENABLED } from '../lib/featureFlags';
 import { linkReceiptIdsToEntry } from '../lib/receiptAttachments';
@@ -1670,11 +1670,19 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
 
     const target = reportingPeriodWorkspaces.find(workspace => workspace.key === targetKey);
     const predecessor = precedingSemester(reportingPeriodWorkspaces, reportingYear, semester);
-    const nextOpeningBalances = migrateRetiredOpeningBalances(target?.openingBalances || (predecessor
-      ? carryForwardOpeningBalances(
-        predecessor.key === current ? openingBalances : predecessor.openingBalances || {},
-        predecessor.key === current ? journalEntries : predecessor.journalEntries, accounts)
-      : {}));
+    // A semester's beginning balance always copies the previous semester's ending (post-closing) balance, so it is
+    // worked out again from that semester's books every time, never kept from an earlier copy.
+    const resolveOpening = (workspace: Pick<ReportingPeriodWorkspace, 'key' | 'semester' | 'reportingYear' | 'openingBalances'>): OpeningBalances => {
+      const before = precedingSemester(reportingPeriodWorkspaces, workspace.reportingYear, workspace.semester);
+      if (!before) return workspace.openingBalances || {};
+      const beforeIsCurrent = before.key === current;
+      return carryForwardOpeningBalances(
+        beforeIsCurrent ? openingBalances : resolveOpening(before),
+        entriesThroughPeriodEnd(beforeIsCurrent ? journalEntries : before.journalEntries, reportingPeriodBounds(before.semester, before.reportingYear).endDate),
+        accounts,
+      );
+    };
+    const nextOpeningBalances = migrateRetiredOpeningBalances(resolveOpening({ key: targetKey, semester, reportingYear, openingBalances: target?.openingBalances }));
     const now = new Date().toISOString();
     if (current) {
       setReportingPeriodWorkspaces(previous => {
