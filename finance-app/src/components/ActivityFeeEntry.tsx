@@ -5,7 +5,8 @@ import { useFinance } from '../context/FinanceContext';
 import { computeAccountBalances } from '../lib/accountTotals';
 import { ACTIVITY_FEE_RECEIVABLE_CODE, ACTIVITY_FEE_REFUND_LIABILITY_CODE, ACTIVITY_FEE_REVENUE_CODE, buildInitialActivityFeeSchedule, CASH_CODE, UNEARNED_ACTIVITY_FEE_CODE } from '../lib/activityFees';
 import { activityFeeDraftEffects, isDraftRecordId } from '../lib/activityFeeDrafts';
-import { reportingPeriodBounds } from '../lib/reportingPeriod';
+import { ACTIVITY_FEE_RECEIVABLE_COLLECTION_TYPE, remainingBeginningActivityFeeReceivable } from '../lib/activityFeeReceivable';
+import { automaticPostingDate, isDateWithinReportingPeriod, reportingPeriodBounds } from '../lib/reportingPeriod';
 import { buildAccountPeriodHistory } from '../lib/transactionHistory';
 import { JournalLine, TransactionDraft } from '../types';
 import { DatedAmountInputRow, DatedAmountRows } from './DatedAmountRows';
@@ -33,7 +34,7 @@ interface ActivityFeeEntryProps {
 }
 
 export function ActivityFeeEntry({ defaultOpen = false, requestedType, draftToResume = null, onDraftResumed, onDraftSaved, autoPostDraft = false, onDraftPosted }: ActivityFeeEntryProps): React.ReactElement {
-  const { createActivityFeeRecord, collectActivityFeeReceivable, updateActivityFeeRecord, activityFeeRecords, draftTransactions, saveDraftTransaction, deleteDraftTransaction, settings, formatCurrency, accounts, journalEntries } = useFinance();
+  const { createActivityFeeRecord, addJournalEntry, updateActivityFeeRecord, activityFeeRecords, draftTransactions, saveDraftTransaction, deleteDraftTransaction, settings, formatCurrency, accounts, journalEntries, openingBalances } = useFinance();
   const [open, setOpen] = useState(defaultOpen);
   const [transactionType, setTransactionType] = useState<'activity-fees' | 'receivable' | 'excess-refund'>(requestedType?.value ?? 'activity-fees');
   useEffect(() => { if (requestedType) setTransactionType(requestedType.value); }, [requestedType?.nonce]);
@@ -47,7 +48,6 @@ export function ActivityFeeEntry({ defaultOpen = false, requestedType, draftToRe
   const [onOrAfterEventCollections, setOnOrAfterEventCollections] = useState<DatedAmountInputRow[]>(firstRow);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-  const [selectedReceivableId, setSelectedReceivableId] = useState('');
   const [receivableCollection, setReceivableCollection] = useState<DatedAmountInputRow[]>(firstRow);
   const [selectedExcessId, setSelectedExcessId] = useState('');
   const [excessStatus, setExcessStatus] = useState<'current' | 'next' | 'nonrefundable'>('current');
@@ -61,20 +61,10 @@ export function ActivityFeeEntry({ defaultOpen = false, requestedType, draftToRe
     () => activityFeeDraftEffects(draftTransactions, activityFeeRecords, editingDraftId || undefined),
     [draftTransactions, activityFeeRecords, editingDraftId]
   );
-  const receivableRecords = draftEffects.receivableRecords;
-  const selectedReceivable = receivableRecords.find(record => record.id === selectedReceivableId);
   const excessRecords = draftEffects.excessRecords;
   const selectedExcess = excessRecords.find(record => record.id === selectedExcessId);
   // A draft event becomes a real record once Review posts it: follow the saved choice over to that record.
-  const [pickedReceivableName, setPickedReceivableName] = useState('');
   const [pickedExcessName, setPickedExcessName] = useState('');
-  useEffect(() => {
-    if (selectedReceivable) setPickedReceivableName(selectedReceivable.eventName);
-    else if (isDraftRecordId(selectedReceivableId) && pickedReceivableName) {
-      const posted = receivableRecords.find(record => !isDraftRecordId(record.id) && record.eventName === pickedReceivableName);
-      if (posted) setSelectedReceivableId(posted.id);
-    }
-  }, [selectedReceivable, selectedReceivableId, pickedReceivableName, receivableRecords]);
   useEffect(() => {
     if (selectedExcess) setPickedExcessName(selectedExcess.eventName);
     else if (isDraftRecordId(selectedExcessId) && pickedExcessName) {
@@ -107,8 +97,6 @@ export function ActivityFeeEntry({ defaultOpen = false, requestedType, draftToRe
       : savedCollections.filter(row => !row.date || row.date >= savedEventDate).length
         ? savedCollections.filter(row => !row.date || row.date >= savedEventDate)
         : firstRow());
-    setSelectedReceivableId(typeof snapshot.selectedReceivableId === 'string' ? snapshot.selectedReceivableId : '');
-    setPickedReceivableName(typeof snapshot.selectedReceivableEventName === 'string' ? snapshot.selectedReceivableEventName : '');
     setReceivableCollection(Array.isArray(snapshot.receivableCollection) && snapshot.receivableCollection.length ? snapshot.receivableCollection as DatedAmountInputRow[] : firstRow());
     setSelectedExcessId(typeof snapshot.selectedExcessId === 'string' ? snapshot.selectedExcessId : '');
     setPickedExcessName(typeof snapshot.selectedExcessEventName === 'string' ? snapshot.selectedExcessEventName : '');
@@ -148,6 +136,21 @@ export function ActivityFeeEntry({ defaultOpen = false, requestedType, draftToRe
   const showUnearnedBalanceWarning = eventOccursThisPeriod === 'yes' && Number(priorPeriodCollected || 0) > availableUnearnedBalance;
   const excessCollection = Math.max(0, Number(priorPeriodCollected || 0) + collectionTotal - Number(totalExpected || 0));
 
+  // Collection of Activity Fees Receivable is capped by the BEGINNING balance of Activity Fees Receivable (client, Oct 2026),
+  // less what was already collected against it and what other saved drafts have set aside.
+  const beginningReceivable = Math.max(0, Math.round(Number(openingBalances[ACTIVITY_FEE_RECEIVABLE_CODE] || 0) * 100) / 100);
+  const remainingBeginningReceivable = Math.max(0, Math.round((remainingBeginningActivityFeeReceivable(beginningReceivable, journalEntries, periodBounds ?? undefined) - draftEffects.reservedBeginningReceivableCollected) * 100) / 100);
+  const receivableAmount = Number(receivableCollection[0]?.amount) || 0;
+  const showReceivableExceedsWarning = receivableAmount > remainingBeginningReceivable + 0.005;
+  const receivableCollectionProblem = (): string => {
+    if (beginningReceivable <= 0) return 'There is no beginning balance of Activity Fees Receivable to collect.';
+    if (receivableAmount <= 0) return 'Enter a collection amount greater than zero.';
+    if (!receivableCollection[0]?.date) return 'Enter the date of the collection.';
+    if (showReceivableExceedsWarning) return `The amount entered exceeds the beginning balance of ${formatCurrency(beginningReceivable)} in Activity Fees Receivable. Please review the amount entered. Make sure the fee was recorded and accrued in the previous reporting period/semester.`;
+    if (settings.semester && settings.reportingYear && !isDateWithinReportingPeriod(receivableCollection[0].date, settings.semester, settings.reportingYear)) return 'The date must be within the active reporting period.';
+    return '';
+  };
+
   // Live preview of the actual journal lines this will post, using the same
   // pure builder the real submit uses — so what's shown here is exactly
   // what gets recorded, not a guess. Silently shows nothing until the
@@ -180,12 +183,12 @@ export function ActivityFeeEntry({ defaultOpen = false, requestedType, draftToRe
         : [{ accountCode: ACTIVITY_FEE_REFUND_LIABILITY_CODE, debit: amount, credit: 0, date: excessDate }, { accountCode: ACTIVITY_FEE_REVENUE_CODE, debit: 0, credit: amount, date: excessDate }];
     }
     const amount = Number(receivableCollection[0]?.amount) || 0;
-    if (!selectedReceivable || amount <= 0) return [];
+    if (amount <= 0 || remainingBeginningReceivable <= 0) return [];
     return [
       { accountCode: CASH_CODE, debit: amount, credit: 0, date: receivableCollection[0]?.date },
       { accountCode: ACTIVITY_FEE_RECEIVABLE_CODE, debit: 0, credit: amount, date: receivableCollection[0]?.date },
     ];
-  }, [transactionType, preview, selectedReceivable, receivableCollection, selectedExcess, excessStatus, excessAmount, excessDate]);
+  }, [transactionType, preview, remainingBeginningReceivable, receivableCollection, selectedExcess, excessStatus, excessAmount, excessDate]);
 
   const submit = (event?: React.FormEvent) => {
     event?.preventDefault(); setError(''); setMessage('');
@@ -213,29 +216,22 @@ export function ActivityFeeEntry({ defaultOpen = false, requestedType, draftToRe
 
   const submitReceivableCollection = (event?: React.FormEvent) => {
     event?.preventDefault(); setError(''); setMessage('');
-    if (!selectedReceivable) {
-      setError('Select an event with an outstanding Activity Fees Receivable balance.');
-      return;
-    }
-    const receivableTarget = isDraftRecordId(selectedReceivable.id)
-      ? activityFeeRecords.find(record => record.eventName === selectedReceivable.eventName && record.status === 'receivable')
-      : selectedReceivable;
-    if (!receivableTarget) {
-      setError(`"${selectedReceivable.eventName}" is still a draft. Post that event from Review first, then post this collection.`);
-      return;
-    }
+    if (!settings.semester || !settings.reportingYear) { setError('Set the organization Semester and Year before posting.'); return; }
+    const problem = receivableCollectionProblem();
+    if (problem) { setError(problem); return; }
+    const { date, amount: rawAmount } = receivableCollection[0];
+    const amount = Number(rawAmount);
     try {
-      const updated = collectActivityFeeReceivable(
-        receivableTarget.id,
-        receivableCollection
-          .filter(row => Number(row.amount) > 0)
-          .map(row => ({ date: row.date, amount: Number(row.amount) })),
-        settings.fiscalYear
-      );
-      setMessage(`Collection recorded for ${updated.eventName}. Remaining receivable: ${formatCurrency(updated.receivableBalance)}.`);
+      const entry = addJournalEntry(date || automaticPostingDate(settings.semester, settings.reportingYear), ACTIVITY_FEE_RECEIVABLE_COLLECTION_TYPE, 'General Fund Operations', [
+        { accountCode: CASH_CODE, debit: amount, credit: 0, date },
+        { accountCode: ACTIVITY_FEE_RECEIVABLE_CODE, debit: 0, credit: amount, date },
+      ], undefined, undefined, {
+        transactionType: ACTIVITY_FEE_RECEIVABLE_COLLECTION_TYPE,
+        details: { eventRelated: false, receiptAttachmentIds: [], activityFeePriorReceivableCollected: amount },
+      });
+      setMessage(`${entry.reference}: collection of ${formatCurrency(amount)} recorded against the beginning balance of Activity Fees Receivable.`);
       setReceivableCollection(firstRow());
-      if (updated.receivableBalance === 0) setSelectedReceivableId('');
-      if (editingDraftId) { deleteDraftTransaction(editingDraftId); setEditingDraftId(null); onDraftPosted?.(`Collection recorded for ${updated.eventName}.`); }
+      if (editingDraftId) { deleteDraftTransaction(editingDraftId); setEditingDraftId(null); onDraftPosted?.(`${entry.reference}: collection of ${formatCurrency(amount)} recorded against Activity Fees Receivable.`); }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not collect the activity-fee receivable.');
     }
@@ -282,8 +278,12 @@ export function ActivityFeeEntry({ defaultOpen = false, requestedType, draftToRe
 
   const saveAsDraft = () => {
     setError(''); setMessage('');
+    if (transactionType === 'receivable') {
+      const problem = receivableCollectionProblem();
+      if (problem) { setError(problem); return; }
+    }
     const label = transactionType === 'receivable'
-      ? `Activity Fees Receivable${selectedReceivable ? ` - ${selectedReceivable.eventName}` : ''}`
+      ? 'Collection of Activity Fees Receivable'
       : transactionType === 'excess-refund'
         ? `Excess Activity Fees${selectedExcess ? ` - ${selectedExcess.eventName}` : ''}`
       : eventName.trim() || 'Activity / Event Fees';
@@ -301,8 +301,6 @@ export function ActivityFeeEntry({ defaultOpen = false, requestedType, draftToRe
         collections,
         priorEventCollections,
         onOrAfterEventCollections,
-        selectedReceivableId,
-        selectedReceivableEventName: selectedReceivable?.eventName || pickedReceivableName,
         receivableCollection,
         selectedExcessId,
         selectedExcessEventName: selectedExcess?.eventName || pickedExcessName,
@@ -340,7 +338,7 @@ export function ActivityFeeEntry({ defaultOpen = false, requestedType, draftToRe
           <div className="xl:col-span-7">
           {transactionType === 'activity-fees' ? (
         <form onSubmit={event => { event.preventDefault(); saveAsDraft(); }} className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="sm:col-span-2"><label className="mb-1 block text-[12px] font-bold uppercase text-slate-500">Has the event already taken place, or is it scheduled to take place during this reporting period?</label><div className="flex flex-wrap gap-2">{(['yes','no'] as const).map(answer => <button key={answer} type="button" onClick={() => setEventOccursThisPeriod(answer)} className={`rounded-lg px-4 py-2 text-xs font-bold ${eventOccursThisPeriod === answer ? 'bg-blue-700 text-white' : 'border border-slate-300 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'}`}>{answer === 'yes' ? 'Yes - current semester' : 'No - next semester'}</button>)}</div></div>
+          <div className="sm:col-span-2"><label className="mb-1 block text-[12px] font-bold uppercase text-slate-500">Has the event already taken place, or is it scheduled to take place during this reporting period?</label><div className="flex flex-wrap gap-2">{(['yes','no'] as const).map(answer => <button key={answer} type="button" onClick={() => setEventOccursThisPeriod(answer)} className={`rounded-lg px-4 py-2 text-xs font-bold ${eventOccursThisPeriod === answer ? 'bg-blue-700 text-white' : 'border border-slate-300 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'}`}>{answer === 'yes' ? 'Yes - current semester' : 'No - next semester'}</button>)}</div>{eventOccursThisPeriod === 'no' && <p className="mt-2 rounded-lg border border-rose-200 bg-rose-50 p-2.5 text-[13px] font-bold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">Please record all advance collections received this semester for the event scheduled next semester.</p>}</div>
           <label className="text-[12px] font-bold uppercase text-slate-500">Event Name<input value={eventName} onChange={event => setEventName(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" required /></label>
           {eventOccursThisPeriod === 'yes' && <label className="text-[12px] font-bold uppercase text-slate-500">Date of Event<input type="date" value={eventDate} onChange={event => setEventDate(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" required /></label>}
           {eventOccursThisPeriod === 'yes' && <>
@@ -395,26 +393,22 @@ export function ActivityFeeEntry({ defaultOpen = false, requestedType, draftToRe
               <p className="sm:col-span-2 text-[12px] font-medium text-slate-600 dark:text-slate-300">
                 Use this for unpaid activity fees from an event that was already held or completed in a previous reporting period. Record one collection transaction at a time.
               </p>
-              <label className="sm:col-span-2 text-[12px] font-bold uppercase text-slate-500">
-                Event with unpaid activity fees
-                <select
-                  value={selectedReceivableId}
-                  onChange={event => { setSelectedReceivableId(event.target.value); setError(''); setMessage(''); }}
-                  className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-xs font-semibold text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  required
-                >
-                  <option value="">Select an event…</option>
-                  {receivableRecords.map(record => (
-                    <option key={record.id} value={record.id}>{record.eventName}{isDraftRecordId(record.id) ? ' (saved draft)' : ''} — {formatCurrency(record.receivableBalance)} remaining</option>
-                  ))}
-                </select>
-              </label>
-              {receivableRecords.length === 0 && (
+              <div className="sm:col-span-2 overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
+                <p className="bg-slate-50 px-3 py-2 text-[12px] font-black uppercase text-slate-600 dark:bg-slate-800 dark:text-slate-300">Beginning balance of Activity Fees Receivable still to collect</p>
+                <p className="flex items-center justify-between border-t border-slate-100 px-3 py-2 text-[12px] dark:border-slate-800"><span className="font-semibold text-slate-700 dark:text-slate-200">Beginning balance carried from the previous period</span><span className="font-black text-slate-700 dark:text-slate-200">{formatCurrency(beginningReceivable)}</span></p>
+                <p className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-3 py-2 text-[12px] font-black text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"><span>Still to collect (after collections and saved drafts)</span><span className="text-blue-800 dark:text-blue-200">{formatCurrency(remainingBeginningReceivable)}</span></p>
+              </div>
+              {beginningReceivable <= 0 && (
                 <p className="sm:col-span-2 rounded-lg bg-amber-100 p-3 text-[12px] font-semibold text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
-                  No events currently have an outstanding Activity Fees Receivable balance.
+                  There is no beginning balance of Activity Fees Receivable to collect.
                 </p>
               )}
-              {selectedReceivable && (
+              {beginningReceivable > 0 && remainingBeginningReceivable <= 0 && (
+                <p className="sm:col-span-2 rounded-lg bg-amber-100 p-3 text-[12px] font-semibold text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
+                  The beginning balance of Activity Fees Receivable has already been collected in full.
+                </p>
+              )}
+              {remainingBeginningReceivable > 0 && (
                 <div className="sm:col-span-2 rounded-xl border border-indigo-200 bg-white/70 p-3 dark:border-indigo-500/30 dark:bg-slate-900/40">
                   <DatedAmountRows
                     label="Date and collection"
@@ -422,10 +416,11 @@ export function ActivityFeeEntry({ defaultOpen = false, requestedType, draftToRe
                     onChange={setReceivableCollection}
                     currencySymbol={settings.currencySymbol}
                     defaultDate=""
-                    maxTotal={selectedReceivable.receivableBalance}
+                    maxTotal={remainingBeginningReceivable}
                     allowEmptyAmounts
                     allowMultiple={false}
                   />
+                  {showReceivableExceedsWarning && <p className="mt-2 text-[12px] font-bold text-rose-700 dark:text-rose-300">{`The amount entered exceeds the beginning balance of ${formatCurrency(beginningReceivable)} in Activity Fees Receivable. Please review the amount entered. Make sure the fee was recorded and accrued in the previous reporting period/semester.`}</p>}
                   <div className="mt-3 rounded-lg bg-indigo-50 p-3 text-[12px] dark:bg-indigo-500/10">
                     <p className="font-bold text-slate-500">Automatic journal entry</p>
                     <p className="mt-1 font-semibold text-indigo-800 dark:text-indigo-200">Debit Cash • Credit Activity Fees Receivable</p>
@@ -436,7 +431,7 @@ export function ActivityFeeEntry({ defaultOpen = false, requestedType, draftToRe
               {message && <p className="sm:col-span-2 rounded-lg bg-emerald-100 p-2 text-[12px] font-bold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">{message}</p>}
               <div className="sm:col-span-2"><ReviewLaterNote /></div>
               <div className="sm:col-span-2 flex flex-col gap-2 sm:flex-row">
-                <button type="submit" disabled={!selectedReceivable} className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-3 text-xs font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">Save as Draft</button>
+                <button type="submit" disabled={remainingBeginningReceivable <= 0} className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-3 text-xs font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">Save as Draft</button>
               </div>
             </form>
           ) : (

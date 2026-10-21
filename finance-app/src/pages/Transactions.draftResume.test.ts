@@ -2,6 +2,8 @@ import { ComponentType, createElement } from 'react';
 import { act, create, ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FinanceProvider, useFinance } from '../context/FinanceContext';
+import { LATER_PAYMENT_SAME_DATE, PAYMENT_BEFORE_TRANSACTION, PAYMENT_DATE_REQUIRED, TRANSACTION_DATE_REQUIRED } from '../lib/guidedPurchaseDates';
+import { NO_OFFICER_PURCHASE_WARNING } from '../lib/officerReimbursement';
 import { Transactions } from './Transactions';
 
 vi.mock('../hooks/useWorkspaceSync', () => ({ useWorkspaceSync: () => ({ workspaceStatus: 'ready' }) }));
@@ -65,26 +67,27 @@ describe('resuming a saved draft', () => {
     expect(finance.accountBalances['1010']).toBe(50000 - 700);
   });
 
-  it('still blocks a reimbursement above the total Due to Officers balance', () => {
+  it('blocks a reimbursement above the named officer own balance', () => {
     start(() => { officerPurchase(); });
     saveDraft('Reimbursement to Officer', 'reimbursements-to-officers',
       [{ accountCode: '2050', debit: 700, credit: 0 }, { accountCode: '1010', debit: 0, credit: 700 }],
       { counterpartyName: 'Alpha' }, { amount: 900, date: '2026-10-12', counterpartyName: 'Alpha' });
     expect(alerts().length).toBeGreaterThan(0);
-    expect(new Set(alerts())).toEqual(new Set(['Reimbursement cannot exceed the total Due to Officers balance.']));
+    expect(alerts().every(message => message.includes("Alpha's outstanding balance of"))).toBe(true);
     expect(posted).toEqual([]);
     expect(finance.draftTransactions).toHaveLength(1);
   });
 
-  it('limits a reimbursement by the total balance when the balance has no officer name', () => {
+  it('blocks a reimbursement for a name that has no payable in the table, even when an unnamed balance exists', () => {
     start(() => {
       finance.addJournalEntry('2026-10-11', 'Purchase of Laptop', PROJECT, [{ accountCode: '1501', debit: 700, credit: 0 }, { accountCode: '2050', debit: 0, credit: 700 }]);
     });
     saveDraft('Reimbursement to Officer', 'reimbursements-to-officers',
       [{ accountCode: '2050', debit: 700, credit: 0 }, { accountCode: '1010', debit: 0, credit: 700 }],
       { counterpartyName: 'Alpha' }, { amount: 700, date: '2026-10-12', counterpartyName: 'Alpha' });
-    expect(alerts()).toEqual([]);
-    expect(finance.draftTransactions).toHaveLength(0);
+    expect(new Set(alerts())).toEqual(new Set([NO_OFFICER_PURCHASE_WARNING]));
+    expect(posted).toEqual([]);
+    expect(finance.draftTransactions).toHaveLength(1);
   });
 
   it('keeps the linked downpayment when a saved acquisition draft is posted', () => {
@@ -537,7 +540,7 @@ describe('resuming a saved draft', () => {
     start(() => undefined, true);
     saveDraft('Purchase of Meals consumed by participants, speakers and organizers', 'expense-transactions',
       [{ accountCode: '5080', debit: 1000, credit: 0 }, { accountCode: '1010', debit: 0, credit: 400 }, { accountCode: '2010', debit: 0, credit: 600 }], {},
-      { amount: 1000, date: '2026-10-12', expenseEvent: 'no', notYetUsedAmount: '0', outrightPaymentMethod: 'organization-funds', outrightOrganizationPayments: [{ id: 'o1', date: '', amount: '400' }] });
+      { amount: 1000, date: '2026-10-12', expenseEvent: 'no', notYetUsedAmount: '0', outrightPaymentMethod: 'organization-funds', outrightOrganizationPayments: [{ id: 'o1', date: '2026-10-12', amount: '400' }] });
     expect(alerts()).toEqual([]);
     expect(posted).toHaveLength(1);
     expect(finance.draftTransactions).toHaveLength(0);
@@ -554,7 +557,7 @@ describe('resuming a saved draft', () => {
     });
     saveDraft('Purchase of Laptop', 'ppe-transactions',
       [{ accountCode: '1501', debit: 500, credit: 0 }, { accountCode: '1010', debit: 0, credit: 500 }], {},
-      { amount: 500, ppeQuantity: '1', date: '2026-10-12', outrightPaymentMethod: 'organization-funds', outrightOrganizationPayments: [{ id: 'o1', date: '', amount: '500' }] });
+      { amount: 500, ppeQuantity: '1', date: '2026-10-12', outrightPaymentMethod: 'organization-funds', outrightOrganizationPayments: [{ id: 'o1', date: '2026-10-12', amount: '500' }] });
     expect(alerts()).toEqual([]);
     expect(posted).toHaveLength(1);
     expect(finance.draftTransactions).toHaveLength(0);
@@ -573,7 +576,7 @@ describe('PPE quantity and depreciation limits', () => {
     start(() => undefined);
     saveDraft('Purchase of Laptop', 'ppe-transactions',
       [{ accountCode: '1501', debit: 500, credit: 0 }, { accountCode: '1010', debit: 0, credit: 500 }], {},
-      { amount: 500, date: '2026-10-12', outrightPaymentMethod: 'organization-funds', outrightOrganizationPayments: [{ id: 'o1', date: '', amount: '500' }] });
+      { amount: 500, date: '2026-10-12', outrightPaymentMethod: 'organization-funds', outrightOrganizationPayments: [{ id: 'o1', date: '2026-10-12', amount: '500' }] });
     expect(alerts().join(' ')).toContain('quantity');
     expect(posted).toHaveLength(0);
   });
@@ -608,7 +611,7 @@ describe('PPE Item References from the Transactions form', () => {
   const chairs = (quantity: number, unitCost: number) => {
     const total = quantity * unitCost;
     saveDraft('Purchase Chairs', 'ppe-transactions', [{ accountCode: '1652', debit: total, credit: 0 }, { accountCode: '1010', debit: 0, credit: total }], {},
-      { amount: total, ppeQuantity: String(quantity), ppeUnitCost: String(unitCost), date: '2026-10-12', outrightPaymentMethod: 'organization-funds', outrightOrganizationPayments: [{ id: 'o1', date: '', amount: String(total) }] });
+      { amount: total, ppeQuantity: String(quantity), ppeUnitCost: String(unitCost), date: '2026-10-12', outrightPaymentMethod: 'organization-funds', outrightOrganizationPayments: [{ id: 'o1', date: '2026-10-12', amount: String(total) }] });
   };
   const chairEntries = () => finance.journalEntries.filter(entry => entry.transactionType === 'Purchase Chairs' && !entry.isDraft);
 
@@ -629,7 +632,7 @@ describe('PPE Item References from the Transactions form', () => {
   it('refuses a PPE purchase without an amount per unit', () => {
     start(() => undefined);
     saveDraft('Purchase Chairs', 'ppe-transactions', [{ accountCode: '1652', debit: 250, credit: 0 }, { accountCode: '1010', debit: 0, credit: 250 }], {},
-      { amount: 250, ppeQuantity: '1', ppeUnitCost: '0', date: '2026-10-12', outrightPaymentMethod: 'organization-funds', outrightOrganizationPayments: [{ id: 'o1', date: '', amount: '250' }] });
+      { amount: 250, ppeQuantity: '1', ppeUnitCost: '0', date: '2026-10-12', outrightPaymentMethod: 'organization-funds', outrightOrganizationPayments: [{ id: 'o1', date: '2026-10-12', amount: '250' }] });
     expect(alerts().join(' ')).toContain('amount per unit');
     expect(chairEntries()).toHaveLength(0);
   });
@@ -665,3 +668,133 @@ describe('PPE Item References from the Transactions form', () => {
     expect(entry.lines.map(line => line.accountCode).sort()).toEqual(['1660', '5095']);
   });
 });
+
+describe('Expense and PPE / F&F dates (client, Oct 20 2026)', () => {
+  const MEALS = 'Purchase of Meals consumed by participants, speakers and organizers';
+  const mealsDraft = (formState: Record<string, unknown>) => saveDraft(MEALS, 'expense-transactions',
+    [{ accountCode: '5080', debit: 1000, credit: 0 }, { accountCode: '1010', debit: 0, credit: 400 }, { accountCode: '2010', debit: 0, credit: 600 }], {},
+    { amount: 1000, expenseEvent: 'no', notYetUsedAmount: '0', outrightPaymentMethod: 'organization-funds', date: '2026-10-12', ...formState });
+  const rows = (...items: [string, string][]) => items.map(([date, amount], index) => ({ id: `o${index}`, date, amount }));
+
+  it('requires the date of the transaction', () => {
+    start(() => undefined);
+    mealsDraft({ date: '', outrightOrganizationPayments: rows(['2026-10-12', '400']) });
+    expect(alerts()).toContain(TRANSACTION_DATE_REQUIRED);
+    expect(posted).toHaveLength(0);
+  });
+
+  it('requires the date of every payment', () => {
+    start(() => undefined);
+    mealsDraft({ outrightOrganizationPayments: rows(['', '400']) });
+    expect(alerts()).toContain(PAYMENT_DATE_REQUIRED);
+    expect(posted).toHaveLength(0);
+  });
+
+  it('refuses a payment dated before the transaction', () => {
+    start(() => undefined);
+    mealsDraft({ outrightOrganizationPayments: rows(['2026-10-11', '400']) });
+    expect(alerts()).toContain(PAYMENT_BEFORE_TRANSACTION);
+    expect(posted).toHaveLength(0);
+  });
+
+  it('refuses Payment 2 on the transaction date, and a repeated payment date', () => {
+    start(() => undefined);
+    mealsDraft({ outrightOrganizationPayments: rows(['2026-10-14', '300'], ['2026-10-12', '100']) });
+    expect(alerts()).toContain(LATER_PAYMENT_SAME_DATE);
+    expect(posted).toHaveLength(0);
+    start(() => undefined);
+    mealsDraft({ outrightOrganizationPayments: rows(['2026-10-14', '300'], ['2026-10-14', '100']) });
+    expect(alerts().join(' ')).toContain('can only be used once');
+    expect(posted).toHaveLength(0);
+  });
+
+  it('refuses payments that add up to more than the total cost', () => {
+    start(() => undefined);
+    mealsDraft({ outrightOrganizationPayments: rows(['2026-10-12', '700'], ['2026-10-20', '400']) });
+    expect(alerts().join(' ')).toContain('cannot exceed');
+    expect(posted).toHaveLength(0);
+  });
+
+  it('posts Payment 1 on the transaction date and Payment 2 later: the payable is cleared by the later payment', () => {
+    start(() => undefined);
+    mealsDraft({ outrightOrganizationPayments: rows(['2026-10-12', '400'], ['2026-10-20', '200']) });
+    expect(alerts()).toEqual([]);
+    expect(posted).toHaveLength(1);
+    const lines = finance.journalEntries.filter(entry => !entry.isDraft && entry.description.startsWith('Purchase of Meals')).flatMap(entry => entry.lines.map(line => [line.accountCode, line.debit, line.credit, line.date]));
+    expect(lines).toEqual([
+      ['5080', 1000, 0, '2026-10-12'], ['1010', 0, 400, '2026-10-12'], ['2010', 0, 600, '2026-10-12'],
+      ['2010', 200, 0, '2026-10-20'], ['1010', 0, 200, '2026-10-20'],
+    ]);
+    expect(finance.accountBalances['2010']).toBe(400);
+  });
+
+  it('posts a purchase paid later: the whole cost first sits in Accounts Payable', () => {
+    start(() => undefined);
+    mealsDraft({ outrightOrganizationPayments: rows(['2026-10-15', '1000']) });
+    expect(alerts()).toEqual([]);
+    const lines = finance.journalEntries.filter(entry => !entry.isDraft && entry.description.startsWith('Purchase of Meals')).flatMap(entry => entry.lines.map(line => [line.accountCode, line.debit, line.credit, line.date]));
+    expect(lines).toEqual([
+      ['5080', 1000, 0, '2026-10-12'], ['2010', 0, 1000, '2026-10-12'],
+      ['2010', 1000, 0, '2026-10-15'], ['1010', 0, 1000, '2026-10-15'],
+    ]);
+    expect(finance.accountBalances['2010']).toBe(0);
+  });
+
+  it('PPE purchases ask for the date of the transaction at the top, like expenses, with no separate optional date', () => {
+    start(() => undefined);
+    saveDraft('Purchase of Laptop', 'ppe-transactions',
+      [{ accountCode: '1501', debit: 500, credit: 0 }, { accountCode: '1010', debit: 0, credit: 500 }], {},
+      { amount: 500, ppeQuantity: '1', ppeUnitCost: '500', date: '', outrightPaymentMethod: 'organization-funds', outrightOrganizationPayments: rows(['2026-10-12', '500']) });
+    expect(alerts()).toContain(TRANSACTION_DATE_REQUIRED);
+    const shown = text(renderer.root);
+    expect(shown).toContain('Date of transaction');
+    expect(shown.indexOf('Date of transaction')).toBeLessThan(shown.indexOf('Quantity'));
+    expect(shown).not.toContain('leave blank to use');
+  });
+});
+
+describe('Return of Advances and Retirement of PPE drafts resumed from Review', () => {
+  const advance = () => finance.addJournalEntry('2026-10-05', 'Advance to Alpha', PROJECT, [{ accountCode: '1250', debit: 500, credit: 0 }, { accountCode: '1010', debit: 0, credit: 500 }], undefined, undefined, meta('Cash Advance to Officer', { counterpartyName: 'Alpha' }));
+  const returnDraft = () => act(() => {
+    const entry = finance.addJournalEntry('2026-10-12', 'Return of Advance - Alpha', PROJECT, [{ accountCode: '1010', debit: 200, credit: 0 }, { accountCode: '1250', debit: 0, credit: 200 }], undefined, undefined, meta('Return of Advances', { counterpartyName: 'Alpha' }), true, 'd1');
+    finance.saveDraftTransaction({ id: 'd1', category: 'return-of-advances', label: 'Return of Advances - Alpha', formState: { officer: 'Alpha', amount: '200', date: '2026-10-12' }, journalEntryId: entry.id });
+  });
+
+  it('Post opens the Return of Advances form for the draft and posts it, then returns to Review', () => {
+    start(() => { advance(); }, true);
+    returnDraft();
+    expect(alerts()).toEqual([]);
+    expect(posted).toHaveLength(1);
+    expect(finance.draftTransactions).toHaveLength(0);
+    const returns = finance.journalEntries.filter(entry => entry.transactionType === 'Return of Advances');
+    expect(returns).toHaveLength(1);
+    expect(returns[0].isDraft).toBeFalsy();
+    expect(finance.accountBalances['1250']).toBe(300);
+  });
+
+  it('Continue opens the Return of Advances form with the saved officer and amount, still a draft', () => {
+    start(() => { advance(); }, false);
+    returnDraft();
+    expect(text(renderer.root)).toContain('Return of Advances');
+    expect(renderer.root.findAllByType('select')[0].props.value).toBe('Alpha');
+    expect(renderer.root.findAllByType('input').find(input => input.props.placeholder === '0.00')!.props.value).toBe('200');
+    expect(posted).toEqual([]);
+    expect(finance.draftTransactions).toHaveLength(1);
+  });
+
+  it('Continue opens Retirement of PPE with the saved item, purchase and quantity', () => {
+    start(() => {
+      finance.addJournalEntry('2026-10-02', 'Purchase of Adaptor', PROJECT, [{ accountCode: '1513', debit: 500, credit: 0 }, { accountCode: '1010', debit: 0, credit: 500 }], undefined, undefined, meta('Purchase of Adaptor', { ppeQuantity: 5, ppeUnitCost: 100, ppeReferenceId: 'r-a' }));
+    }, false);
+    act(() => {
+      const entry = finance.addJournalEntry('2026-10-12', 'Retirement of PPE - Adaptor', PROJECT, [{ accountCode: '5370', debit: 200, credit: 0 }, { accountCode: '1513', debit: 0, credit: 200 }], undefined, undefined,
+        meta('Retirement of PPE', { ppeItemCode: '1513', ppeReferenceId: 'r-a', ppeRetiredQuantity: 2, ppeRetiredCost: 200, ppeRetiredAccumulated: 0 }), true, 'd2');
+      finance.saveDraftTransaction({ id: 'd2', category: 'retirement-of-ppe', label: 'Retirement of PPE - Adaptor', formState: { itemCode: '1513', referenceChoice: 'r-a', quantity: '2', date: '2026-10-12' }, journalEntryId: entry.id });
+    });
+    expect(text(renderer.root)).toContain('Retirement of PPE');
+    expect(renderer.root.findAllByType('select')[0].props.value).toBe('1513');
+    expect(renderer.root.findAllByType('input').find(input => input.props.placeholder === 'Units to dispose of')!.props.value).toBe('2');
+    expect(finance.draftTransactions).toHaveLength(1);
+  });
+});
+

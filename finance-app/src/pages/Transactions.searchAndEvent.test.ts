@@ -46,12 +46,12 @@ describe('Search all transaction types', () => {
   it('finds a dropdown choice and opens its category with the type selected', () => {
     mount();
     const input = renderer.root.findByProps({ id: 'transaction-type-search' });
-    act(() => { input.props.onChange({ target: { value: 'collections from suppliers' } }); });
-    const result = renderer.root.findAll(node => node.props.role === 'option').find(option => text(option).includes('Collections from Suppliers - Merchandise'))!;
+    act(() => { input.props.onChange({ target: { value: 'refund from supplier' } }); });
+    const result = renderer.root.findAll(node => node.props.role === 'option').find(option => text(option).includes('Collection of Refund from Supplier for Excess Payment'))!;
     expect(result).toBeDefined();
     act(() => { result.props.onClick(); });
     const purchase = renderer.root.findAllByType('select').find(item => item.props['aria-label'] === 'Purchase Dropdown')!;
-    expect(purchase.props.value).toBe('Collections from Suppliers - Merchandise');
+    expect(purchase.props.value).toBe('Collection of Refund from Supplier for Excess Payment');
     expect(text(renderer.root)).toContain('Outstanding receivable');
   });
 });
@@ -97,20 +97,20 @@ describe('Merchandise Transactions dropdowns', () => {
     expect(text(renderer.root)).not.toContain('Search a transaction type');
     expect(optionLabels(selectNamed('Purchase Dropdown'))).toEqual([
       'Acquisition of Merchandise for Sale - Goods Received and On Hand',
-      'Collections from Suppliers - Merchandise',
+      'Collection of Refund from Supplier for Excess Payment',
       'Downpayment to Suppliers for Pre-Ordered Merchandise',
     ]);
     const sales = optionLabels(selectNamed('Sales Dropdown'));
     expect(sales.length).toBeGreaterThan(0);
     expect(sales).toContain('Sale of Merchandise / Delivery of Merchandise to Buyers (paid or unpaid)');
-    expect(sales).not.toContain('Collections from Suppliers - Merchandise');
+    expect(sales).not.toContain('Collection of Refund from Supplier for Excess Payment');
   });
 
   it('choosing from one dropdown applies that type and clears the other', () => {
     mount();
     act(() => { button('Merchandise Transactions').props.onClick(); });
-    act(() => { selectNamed('Purchase Dropdown').props.onChange({ target: { value: 'Collections from Suppliers - Merchandise' } }); });
-    expect(selectNamed('Purchase Dropdown').props.value).toBe('Collections from Suppliers - Merchandise');
+    act(() => { selectNamed('Purchase Dropdown').props.onChange({ target: { value: 'Collection of Refund from Supplier for Excess Payment' } }); });
+    expect(selectNamed('Purchase Dropdown').props.value).toBe('Collection of Refund from Supplier for Excess Payment');
     expect(selectNamed('Sales Dropdown').props.value).toBe('');
     expect(text(renderer.root)).toContain('Outstanding receivable');
     act(() => { selectNamed('Sales Dropdown').props.onChange({ target: { value: 'Collection of Unpaid Sold Merchandise' } }); });

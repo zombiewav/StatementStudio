@@ -93,4 +93,10 @@ describe('merchandise payables', () => {
     expect(isRetiredMerchandisePickerType('Downpayment for Pre-ordered Merchandise')).toBe(true);
     expect(isRetiredMerchandisePickerType('Downpayment to Suppliers for Pre-Ordered Merchandise')).toBe(false);
   });
+
+  it('offers the supplier refund collection under its new name and hides the former names', () => {
+    expect(isRetiredMerchandisePickerType('Collection of Refund from Supplier for Excess Payment')).toBe(false);
+    expect(isRetiredMerchandisePickerType('Collections from Suppliers - Merchandise')).toBe(true);
+    expect(categorizeTransactionRule(rule('1010', '1360', 'Collection of Refund from Supplier for Excess Payment'))).toBe('merchandise');
+  });
 });

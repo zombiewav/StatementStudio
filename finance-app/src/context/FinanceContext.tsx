@@ -630,8 +630,9 @@ export const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   // Former title, kept (hidden from the picker) so saved entries and drafts still resolve.
   { keyword: 'downpayment for pre-ordered merchandise', debitAccountCode: '1270', creditAccountCode: '1010', description: 'Downpayment for Pre-ordered Merchandise' },
   { keyword: 'payment for unpaid merchandise', debitAccountCode: '2020', creditAccountCode: '1010', description: 'Payment for Unpaid Merchandise Purchased and Received in Previous Period/Semester' },
+  { keyword: 'collection of refund from supplier', debitAccountCode: '1010', creditAccountCode: '1360', description: 'Collection of Refund from Supplier for Excess Payment' },
+  // Former names (client, Oct 2026): kept so saved drafts still resolve; not offered in the picker.
   { keyword: 'collections from suppliers', debitAccountCode: '1010', creditAccountCode: '1360', description: 'Collections from Suppliers - Merchandise' },
-  // Former name (client, Oct 2026): kept so saved drafts still resolve; not offered in the picker.
   { keyword: 'collection of receivables from suppliers', debitAccountCode: '1010', creditAccountCode: '1360', description: 'Collection of Receivables from Suppliers' },
   { keyword: 'collection of receivables from officers', debitAccountCode: '1010', creditAccountCode: '1320', description: 'Collection of Receivables from Officers - Merchandise' },
   { keyword: 'collection of unpaid sold merchandise', debitAccountCode: '1010', creditAccountCode: '1200', description: 'Collection of Unpaid Sold Merchandise' },

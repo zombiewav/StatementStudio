@@ -50,10 +50,20 @@ describe('the Retirement of PPE and Return of Advances tabs', () => {
   let renderer: ReactTestRenderer;
   let finance: ReturnType<typeof useFinance>;
   let Page: () => ReturnType<typeof createElement> | null = () => createElement('div');
+  let autoPost = false;
+  let posted: string[] = [];
+  let saved = 0;
   function Probe() { finance = useFinance(); return createElement(Page); }
   afterEach(() => { if (renderer) act(() => renderer.unmount()); });
   const text = (node: any): string => (node.children || []).map((child: any) => typeof child === 'string' ? child : text(child)).join(' ');
-  const start = (seed: () => void) => {
+  const draftProps = (category: string) => ({
+    draftToResume: finance.draftTransactions.find(draft => draft.category === category) || null,
+    autoPostDraft: autoPost, onDraftSaved: () => { saved += 1; }, onDraftPosted: (message: string) => { posted.push(message); },
+  });
+  const useRetirement = () => { Page = () => createElement(RetirementOfPpeEntry, draftProps('retirement-of-ppe')); };
+  const useReturn = () => { Page = () => createElement(ReturnOfAdvancesEntry, draftProps('return-of-advances')); };
+  const start = (seed: () => void, post = false) => {
+    autoPost = post; posted = []; saved = 0;
     act(() => { renderer = create(createElement(FinanceProvider, null, createElement(Probe))); });
     act(() => {
       finance.updateSettings({ semester: '1st Semester', reportingYear: 2026 } as never);
@@ -69,31 +79,64 @@ describe('the Retirement of PPE and Return of Advances tabs', () => {
     finance.addJournalEntry('2026-09-02', 'Purchase of Adaptor', PROJECT, [{ accountCode: '1513', debit: 500, credit: 0 }, { accountCode: '1010', debit: 0, credit: 500 }], undefined, undefined, meta('Purchase of Adaptor', { ppeQuantity: 5, ppeUnitCost: 100, ppeReferenceId: 'r-adaptor' }));
     finance.addJournalEntry('2026-10-01', 'Depreciation of Adaptor', PROJECT, [{ accountCode: '5090', debit: 100, credit: 0 }, { accountCode: '1550', debit: 0, credit: 100 }], undefined, undefined, meta('Depreciation of Adaptor', { ppeReferenceId: 'r-adaptor' }));
   };
+  // A retirement of 1 Adaptor already saved as a draft (what Review's Continue / Post opens).
+  const retirementDraft = () => {
+    const entry = finance.addJournalEntry('2026-10-12', 'Retirement of PPE - Adaptor', PROJECT, [{ accountCode: '1550', debit: 20, credit: 0 }, { accountCode: '5370', debit: 80, credit: 0 }, { accountCode: '1513', debit: 0, credit: 100 }], undefined, undefined,
+      meta('Retirement of PPE', { ppeItemCode: '1513', ppeReferenceId: 'r-adaptor', ppeRetiredQuantity: 1, ppeRetiredCost: 100, ppeRetiredAccumulated: 20 }), true, 'd-ret');
+    finance.saveDraftTransaction({ id: 'd-ret', category: 'retirement-of-ppe', label: 'Retirement of PPE - Adaptor', formState: { itemCode: '1513', referenceChoice: 'r-adaptor', quantity: '1', date: '2026-10-12' }, journalEntryId: entry.id });
+  };
 
-  it('retires part of an item after the user confirms, and the item keeps what is left', () => {
-    Page = RetirementOfPpeEntry as never;
+  it('saves a retirement as a draft: no confirm step, the balances move right away and the note is shown', () => {
+    useRetirement();
     start(buyAdaptors);
     change('select', 0, '1513');
     const page = text(renderer.root);
     expect(page).toContain('Available Quantity');
     expect(page).toMatch(/Accumulated Depreciation - Equipment\s*\(\s*Adaptor\s+only\s*\)/);
+    expect(page).toContain('Save this transaction as a draft and do not post it yet');
+    expect(page).toContain('Save as Draft');
+    expect(page).not.toContain('Retire PPE');
     change('input', 0, '1');
     expect(text(renderer.root)).toContain('Net Book Value');
     submit();
-    expect(text(renderer.root)).toContain('remaining book value of');
-    expect(finance.journalEntries.some(entry => entry.transactionType === 'Retirement of PPE')).toBe(false);
-    click('Confirm and retire');
-    const retirement = finance.journalEntries.find(entry => entry.transactionType === 'Retirement of PPE')!;
-    expect(retirement.lines.map(line => [line.accountCode, line.debit, line.credit])).toEqual([['1550', 20, 0], ['5370', 80, 0], ['1513', 0, 100]]);
+    expect(text(renderer.root)).not.toContain('Confirm and retire');
+    const draft = finance.journalEntries.find(entry => entry.transactionType === 'Retirement of PPE')!;
+    expect(draft.isDraft).toBe(true);
+    expect(draft.lines.map(line => [line.accountCode, line.debit, line.credit])).toEqual([['1550', 20, 0], ['5370', 80, 0], ['1513', 0, 100]]);
+    expect(finance.draftTransactions).toHaveLength(1);
+    expect(finance.draftTransactions[0]).toMatchObject({ category: 'retirement-of-ppe', journalEntryId: draft.id });
+    expect(saved).toBe(1);
     expect(finance.accountBalances['1513']).toBe(400);
-    expect(finance.accountBalances['1550']).toBe(80);
-    expect(finance.accountBalances['5370']).toBe(80);
     const left = buildPpeReferences(finance.journalEntries, finance.openingBalances).find(reference => reference.item.code === '1513')!;
     expect(left).toMatchObject({ quantity: 4, cost: 400, accumulatedDepreciation: 80, netBookValue: 320 });
+
+    // Saving again replaces the same draft entry instead of adding another one.
+    change('input', 0, '2');
+    submit();
+    expect(finance.draftTransactions).toHaveLength(1);
+    expect(finance.journalEntries.filter(entry => entry.transactionType === 'Retirement of PPE')).toHaveLength(1);
+    expect(finance.journalEntries.find(entry => entry.transactionType === 'Retirement of PPE')!.id).toBe(draft.id);
+    expect(finance.accountBalances['1513']).toBe(300);
+  });
+
+  it('posting the saved draft from Review confirms the loss, then posts the same entry and clears the draft', () => {
+    useRetirement();
+    start(() => { buyAdaptors(); retirementDraft(); }, true);
+    expect(text(renderer.root)).toContain('remaining book value of');
+    expect(posted).toEqual([]);
+    expect(finance.journalEntries.find(entry => entry.transactionType === 'Retirement of PPE')!.isDraft).toBe(true);
+    click('Confirm and retire');
+    expect(posted).toHaveLength(1);
+    expect(finance.draftTransactions).toHaveLength(0);
+    const retirement = finance.journalEntries.filter(entry => entry.transactionType === 'Retirement of PPE');
+    expect(retirement).toHaveLength(1);
+    expect(retirement[0].isDraft).toBeFalsy();
+    expect(finance.accountBalances['1513']).toBe(400);
+    expect(finance.accountBalances['5370']).toBe(80);
   });
 
   it('asks which purchase to retire when an item has several, and changes only that one', () => {
-    Page = RetirementOfPpeEntry as never;
+    useRetirement();
     start(() => {
       finance.addJournalEntry('2026-09-02', 'Purchase Chairs', PROJECT, [{ accountCode: '1652', debit: 750, credit: 0 }, { accountCode: '1010', debit: 0, credit: 750 }], undefined, undefined, meta('Purchase Chairs', { ppeQuantity: 3, ppeUnitCost: 250, ppeReferenceId: 'r1' }));
       finance.addJournalEntry('2026-09-03', 'Purchase Chairs', PROJECT, [{ accountCode: '1652', debit: 300, credit: 0 }, { accountCode: '1010', debit: 0, credit: 300 }], undefined, undefined, meta('Purchase Chairs', { ppeQuantity: 1, ppeUnitCost: 300, ppeReferenceId: 'r2' }));
@@ -105,7 +148,6 @@ describe('the Retirement of PPE and Return of Advances tabs', () => {
     expect(text(renderer.root)).toContain('Remaining Original Cost');
     change('input', 0, '1');
     submit();
-    click('Confirm and retire');
     const retirement = finance.journalEntries.find(entry => entry.transactionType === 'Retirement of PPE')!;
     expect(retirement.transactionDetails).toMatchObject({ ppeReferenceId: 'r1', ppeRetiredQuantity: 1, ppeRetiredCost: 250, ppeRetiredAccumulated: 50 });
     const references = buildPpeReferences(finance.journalEntries, finance.openingBalances);
@@ -113,33 +155,75 @@ describe('the Retirement of PPE and Return of Advances tabs', () => {
     expect(references.find(reference => reference.referenceId === 'r2')).toMatchObject({ quantity: 1, cost: 300, accumulatedDepreciation: 0 });
   });
 
-  it('does not offer an item that has been fully disposed of', () => {
-    Page = RetirementOfPpeEntry as never;
+  it('can retire a purchase that is only saved as a draft, and does not offer an item that has been fully disposed of', () => {
+    useRetirement();
     start(() => {
-      buyAdaptors();
-      finance.addJournalEntry('2026-10-02', 'Retirement of PPE - Adaptor', PROJECT, [{ accountCode: '1550', debit: 100, credit: 0 }, { accountCode: '5370', debit: 400, credit: 0 }, { accountCode: '1513', debit: 0, credit: 500 }], undefined, undefined, meta('Retirement of PPE', { ppeItemCode: '1513', ppeReferenceId: 'r-adaptor', ppeRetiredQuantity: 5, ppeRetiredCost: 500, ppeRetiredAccumulated: 100 }));
+      finance.addJournalEntry('2026-09-02', 'Purchase of Adaptor', PROJECT, [{ accountCode: '1513', debit: 200, credit: 0 }, { accountCode: '1010', debit: 0, credit: 200 }], undefined, undefined, meta('Purchase of Adaptor', { ppeQuantity: 2, ppeUnitCost: 100, ppeReferenceId: 'r-draft' }), true, 'd-buy');
     });
+    expect(renderer.root.findAllByType('option').map(option => text(option))).toContain('Adaptor');
+    act(() => { finance.addJournalEntry('2026-10-02', 'Retirement of PPE - Adaptor', PROJECT, [{ accountCode: '1513', debit: 0, credit: 200 }, { accountCode: '5370', debit: 200, credit: 0 }], undefined, undefined, meta('Retirement of PPE', { ppeItemCode: '1513', ppeReferenceId: 'r-draft', ppeRetiredQuantity: 2, ppeRetiredCost: 200, ppeRetiredAccumulated: 0 }), true, 'd-ret2'); });
     expect(renderer.root.findAllByType('option').map(option => text(option))).toEqual(['No PPE item has a remaining quantity']);
   });
 
-  it('shows the Return of Advances table and limits a return to that officer\'s remaining advance', () => {
-    Page = ReturnOfAdvancesEntry as never;
-    start(() => {
-      finance.addJournalEntry('2026-09-05', 'Advance to Alpha', PROJECT, [{ accountCode: '1250', debit: 1000, credit: 0 }, { accountCode: '1010', debit: 0, credit: 1000 }], undefined, undefined, meta('Cash Advance to Officer', { counterpartyName: 'Alpha' }));
-      finance.addJournalEntry('2026-09-06', 'Advance to Beta', PROJECT, [{ accountCode: '1250', debit: 300, credit: 0 }, { accountCode: '1010', debit: 0, credit: 300 }], undefined, undefined, meta('Cash Advance to Officer', { counterpartyName: 'Beta' }));
-    });
+  const advances = () => {
+    finance.addJournalEntry('2026-09-05', 'Advance to Alpha', PROJECT, [{ accountCode: '1250', debit: 1000, credit: 0 }, { accountCode: '1010', debit: 0, credit: 1000 }], undefined, undefined, meta('Cash Advance to Officer', { counterpartyName: 'Alpha' }));
+    finance.addJournalEntry('2026-09-06', 'Advance to Beta', PROJECT, [{ accountCode: '1250', debit: 300, credit: 0 }, { accountCode: '1010', debit: 0, credit: 300 }], undefined, undefined, meta('Cash Advance to Officer', { counterpartyName: 'Beta' }));
+  };
+
+  it('shows the Return of Advances table and journal preview, and limits a return to that officer remaining advance', () => {
+    useReturn();
+    start(advances);
     expect(text(renderer.root)).toContain('Summary of Advances per Accountable Officer');
+    expect(text(renderer.root)).toContain('Journal Entry Preview');
+    expect(text(renderer.root)).toContain('Save this transaction as a draft and do not post it yet');
     change('select', 0, 'Beta');
     change('input', 0, '301');
     submit();
     expect(text(renderer.root)).toContain('cannot exceed');
+    expect(finance.draftTransactions).toHaveLength(0);
     expect(finance.accountBalances['1250']).toBe(1300);
     change('input', 0, '100');
+    expect(text(renderer.root)).toContain('Advances to Officers');
     submit();
     expect(finance.accountBalances['1250']).toBe(1200);
     expect(finance.accountBalances['1010']).toBe(10000 - 1300 + 100);
     const returned = finance.journalEntries.find(entry => entry.transactionType === 'Return of Advances')!;
+    expect(returned.isDraft).toBe(true);
     expect(returned.transactionDetails?.counterpartyName).toBe('Beta');
     expect(returned.lines.map(line => [line.accountCode, line.debit, line.credit])).toEqual([['1010', 100, 0], ['1250', 0, 100]]);
+    expect(finance.draftTransactions).toHaveLength(1);
+    expect(finance.draftTransactions[0]).toMatchObject({ category: 'return-of-advances', journalEntryId: returned.id });
+    expect(saved).toBe(1);
+    // Re-saving replaces the same draft, and its own amount never counts against its limit (up to the full 300).
+    change('input', 0, '300');
+    submit();
+    expect(finance.draftTransactions).toHaveLength(1);
+    expect(finance.journalEntries.filter(entry => entry.transactionType === 'Return of Advances')).toHaveLength(1);
+    expect(finance.accountBalances['1250']).toBe(1000);
+  });
+
+  it('Review Post records the saved return as the same entry and clears the draft', () => {
+    useReturn();
+    start(() => {
+      advances();
+      const entry = finance.addJournalEntry('2026-10-12', 'Return of Advance - Beta', PROJECT, [{ accountCode: '1010', debit: 100, credit: 0 }, { accountCode: '1250', debit: 0, credit: 100 }], undefined, undefined,
+        meta('Return of Advances', { counterpartyName: 'Beta' }), true, 'd-ret');
+      finance.saveDraftTransaction({ id: 'd-ret', category: 'return-of-advances', label: 'Return of Advances - Beta', formState: { officer: 'Beta', amount: '100', date: '2026-10-12' }, journalEntryId: entry.id });
+    }, true);
+    expect(posted).toHaveLength(1);
+    expect(finance.draftTransactions).toHaveLength(0);
+    const returns = finance.journalEntries.filter(entry => entry.transactionType === 'Return of Advances');
+    expect(returns).toHaveLength(1);
+    expect(returns[0].isDraft).toBeFalsy();
+    expect(finance.accountBalances['1250']).toBe(1200);
+  });
+
+  it('shows the remaining advance after a saved return when the form is opened fresh', () => {
+    useReturn();
+    start(() => {
+      advances();
+      finance.addJournalEntry('2026-10-12', 'Return of Advance - Beta', PROJECT, [{ accountCode: '1010', debit: 100, credit: 0 }, { accountCode: '1250', debit: 0, credit: 100 }], undefined, undefined, meta('Return of Advances', { counterpartyName: 'Beta' }), true, 'd-x');
+    });
+    expect(renderer.root.findAllByType('option').map(option => text(option)).some(label => label.includes('Beta') && label.includes('200.00'))).toBe(true);
   });
 });

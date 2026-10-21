@@ -1,10 +1,10 @@
 import { ActivityFeeRecord, TransactionDraft } from '../types';
 import { buildInitialActivityFeeSchedule } from './activityFees';
 
-// Client (Oct 2026): an Activity Fees transaction saved only as a draft must still be "linked": the event's receivable
-// has to show up in Collection of Activity Fees Receivable, collections saved as drafts have to lower what is left, and
-// advance collections already used in a draft have to count against the Unearned Activity Fees beginning balance.
-// Drafts keep only their form fields (nothing is posted until Review), so these are derived from the saved fields.
+// Client (Oct 2026): an Activity Fees transaction saved only as a draft must still be "linked": collections of the
+// receivable beginning balance saved as drafts lower what is left, an event saved as a draft that collected more than its
+// fees shows up in the excess list, and advance collections already used in a draft count against the Unearned Activity
+// Fees beginning balance. Drafts keep only their form fields (nothing is posted until Review), so these are derived from them.
 export const DRAFT_RECORD_PREFIX = 'draft:';
 export const isDraftRecordId = (id: string): boolean => id.startsWith(DRAFT_RECORD_PREFIX);
 
@@ -17,8 +17,8 @@ const total = (rows: { amount: number }[]) => cents(rows.reduce((sum, row) => su
 const textOf = (value: unknown) => typeof value === 'string' ? value : '';
 
 export interface ActivityFeeDraftEffects {
-  /** Events with something left to collect, counting saved event drafts and saved collection drafts. */
-  receivableRecords: ActivityFeeRecord[];
+  /** What saved drafts of Collection of Activity Fees Receivable already take out of the beginning balance. */
+  reservedBeginningReceivableCollected: number;
   /** Events with an excess still to be refunded or recognised, counting drafts. */
   excessRecords: ActivityFeeRecord[];
   /** Advance collections already entered in saved event drafts (they use up the Unearned beginning balance). */
@@ -54,10 +54,9 @@ export function activityFeeDraftEffects(drafts: TransactionDraft[], records: Act
     }
   });
 
-  activity.filter(draft => draft.formState.transactionType === 'receivable').forEach(draft => {
-    const target = pool.find(record => record.id === draft.formState.selectedReceivableId);
-    if (target) target.receivableBalance = Math.max(0, cents(target.receivableBalance - total(rowsOf(draft.formState.receivableCollection))));
-  });
+  const reservedBeginningReceivableCollected = total(activity
+    .filter(draft => draft.formState.transactionType === 'receivable')
+    .flatMap(draft => rowsOf(draft.formState.receivableCollection)));
 
   activity.filter(draft => draft.formState.transactionType === 'excess-refund').forEach(draft => {
     const target = pool.find(record => record.id === draft.formState.selectedExcessId);
@@ -66,7 +65,7 @@ export function activityFeeDraftEffects(drafts: TransactionDraft[], records: Act
   });
 
   return {
-    receivableRecords: pool.filter(record => record.status === 'receivable' && record.receivableBalance > 0.005),
+    reservedBeginningReceivableCollected,
     excessRecords: pool.filter(record => (record.refundLiabilityBalance || 0) > 0.005),
     reservedPriorPeriodCollected,
   };

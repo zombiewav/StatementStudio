@@ -4,7 +4,7 @@ import { searchTransactionTypes, TransactionSearchEntry } from './transactionSea
 const entries: TransactionSearchEntry[] = [
   { label: 'Collection of Activity Fees Receivable', categoryId: 'activity-fees', categoryLabel: 'Activity Fees', activityFeeChoice: 'receivable' },
   { label: 'Collection of Activity / Event Fees', categoryId: 'activity-fees', categoryLabel: 'Activity Fees', activityFeeChoice: 'activity-fees' },
-  { label: 'Collections from Suppliers - Merchandise', categoryId: 'merchandise', categoryLabel: 'Merchandise Transactions', typeName: 'Collections from Suppliers - Merchandise' },
+  { label: 'Collection of Refund from Supplier for Excess Payment', categoryId: 'merchandise', categoryLabel: 'Merchandise Transactions', typeName: 'Collection of Refund from Supplier for Excess Payment' },
   { label: 'Purchase of Pins', categoryId: 'ppe-transactions', categoryLabel: 'PPE Transactions', typeName: 'Purchase of Pins' },
 ];
 
@@ -20,6 +20,6 @@ describe('transaction type search', () => {
 
   it('ranks names that start with the query first, and also matches the category name', () => {
     expect(searchTransactionTypes('ppe', entries).map(entry => entry.label)).toEqual(['Purchase of Pins']);
-    expect(searchTransactionTypes('suppliers', entries)[0].typeName).toBe('Collections from Suppliers - Merchandise');
+    expect(searchTransactionTypes('supplier', entries)[0].typeName).toBe('Collection of Refund from Supplier for Excess Payment');
   });
 });

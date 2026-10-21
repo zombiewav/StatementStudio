@@ -1,5 +1,6 @@
 import React from 'react';
 import { OfficerBreakdown } from '../lib/officerBreakdown';
+import { NO_OFFICER_PURCHASE_WARNING } from '../lib/officerReimbursement';
 
 interface OfficerBreakdownTableProps {
   officer: string;
@@ -11,8 +12,6 @@ const formatDate = (iso: string): string => {
   const parsed = new Date(`${iso}T00:00:00`);
   return Number.isNaN(parsed.getTime()) ? iso : parsed.toLocaleDateString();
 };
-
-export const NO_OFFICER_PURCHASE_WARNING = '⚠️ This officer has no recorded purchase of asset or payment of expense yet. Please record the purchase of asset or payment of expense first before recording the reimbursement.';
 
 // "Breakdown of Reimbursement to Specific Accountable Officer": every expense
 // or purchase the officer paid personally, the reimbursements so far, and what

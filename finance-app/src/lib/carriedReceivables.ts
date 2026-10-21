@@ -14,7 +14,7 @@ interface CarriedReceivableConfig {
 export const CARRIED_RECEIVABLES: CarriedReceivableConfig[] = [
   { code: '1200', collectionLabel: 'Collection of Unpaid Sold Merchandise', categoryId: 'merchandise', typeName: 'Collection of Unpaid Sold Merchandise' },
   { code: '1320', collectionLabel: 'Collection of Receivables from Officers - Merchandise', categoryId: 'merchandise', typeName: 'Collection of Receivables from Officers - Merchandise' },
-  { code: '1360', collectionLabel: 'Collections from Suppliers - Merchandise', categoryId: 'merchandise', typeName: 'Collections from Suppliers - Merchandise' },
+  { code: '1360', collectionLabel: 'Collection of Refund from Supplier for Excess Payment', categoryId: 'merchandise', typeName: 'Collection of Refund from Supplier for Excess Payment' },
   { code: '1300', collectionLabel: 'Membership Fees collections', categoryId: 'membership-fees' },
   { code: '1310', collectionLabel: 'Collection of Activity Fees Receivable', categoryId: 'activity-fees', activityFeeChoice: 'receivable' },
 ];

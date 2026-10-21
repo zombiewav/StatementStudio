@@ -47,7 +47,7 @@ export interface PpeReference {
 }
 
 const money = (value: number) => Math.round(value * 100) / 100;
-const active = (entry: JournalEntry) => !entry.isDraft && !entry.reversalOfEntryId && !entry.reversedByEntryId;
+const active = (entry: JournalEntry, includeDrafts: boolean) => (includeDrafts || !entry.isDraft) && !entry.reversalOfEntryId && !entry.reversedByEntryId;
 const lineTotal = (entry: JournalEntry, code: string, side: 'debit' | 'credit') =>
   entry.lines.filter(line => line.accountCode === code).reduce((sum, line) => sum + line[side] - line[side === 'debit' ? 'credit' : 'debit'], 0);
 
@@ -64,14 +64,19 @@ interface MutableReference { referenceId: string; item: PpeItem; quantity: numbe
  * cost worked out as cost / quantity. Depreciation and retirement entries name the reference they act on; older
  * depreciation without one is charged to that item's oldest reference. An opening balance with no carried detail
  * becomes one reference of a single unit so it can still be depreciated.
+ *
+ * Client (Oct 20 2026): a purchase, depreciation or retirement that is only saved as a draft already counts, so a draft purchase
+ * can be depreciated and the balances move on Save as Draft. Pass `includeDrafts: false` for what has really been posted
+ * (carrying items into a new semester).
  */
-export function buildPpeReferences(entries: JournalEntry[], openingBalances: Record<string, number> = {}): PpeReference[] {
+export function buildPpeReferences(entries: JournalEntry[], openingBalances: Record<string, number> = {}, options: { includeDrafts?: boolean } = {}): PpeReference[] {
+  const includeDrafts = options.includeDrafts ?? true;
   const references = new Map<string, MutableReference>();
   const carriedCost = new Map<string, number>();
   const firstFor = (item: PpeItem) => [...references.values()].find(reference => reference.item.code === item.code && reference.quantity > 0);
   const pendingDepreciation = new Map<string, number>();
 
-  entries.filter(active).forEach(entry => {
+  entries.filter(entry => active(entry, includeDrafts)).forEach(entry => {
     const details = entry.transactionDetails;
     if (details?.carriedForward && details.ppeItemCode) {
       const item = ppeItemForRetirement(details.ppeItemCode);
@@ -144,7 +149,7 @@ export function findMatchingPpeReference(references: PpeReference[], itemCode: s
 
 /** Zero-line entries that carry each held reference (quantity, unit cost, cost, depreciation) into a new semester. */
 export function carryForwardPpeItems(entries: JournalEntry[], openingBalances: Record<string, number>, date: string): JournalEntry[] {
-  return buildPpeReferences(entries, openingBalances).map(reference => ({
+  return buildPpeReferences(entries, openingBalances, { includeDrafts: false }).map(reference => ({
     id: `je-ppe-carried-${reference.referenceId}-${date}`,
     reference: 'B/F',
     date,

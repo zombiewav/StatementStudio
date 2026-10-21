@@ -110,6 +110,8 @@ export interface TransactionDetails {
   merchandiseAccountsReceivable?: number;
   merchandiseDueFromOfficer?: number;
   supplierReceivableCollectionAmount?: number;
+  /** Collection of Activity Fees Receivable: the amount collected against the beginning balance (it is what the cap is measured by). */
+  activityFeePriorReceivableCollected?: number;
   /** PPE purchase: units bought. On a carried-forward PPE detail entry: the item's asset account, units held, cost and depreciation to date. */
   ppeQuantity?: number;
   ppeItemCode?: string;

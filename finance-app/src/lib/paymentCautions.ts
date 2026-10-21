@@ -30,7 +30,7 @@ export const MERCHANDISE_SHORTFALL_CAUTION = '⚠️ Caution: The total amount p
 // Sale of Merchandise: the same note, worded for collections measured against the Total Sales.
 export const MERCHANDISE_SALE_SHORTFALL_CAUTION = '⚠️ Caution: The total amount collected is less than the Total Sales. The uncollected portion will be recorded as a receivable. If the remaining amount is collected later within the current reporting period, you may update this transaction in the Review section.';
 export const MERCHANDISE_TOTAL_COST_REMINDER = 'Enter the total amount spent to purchase and prepare the merchandise for sale. Include not only the purchase price but also other direct costs, such as design fees and labor costs for making the merchandise.';
-export const MERCHANDISE_EXCESS_CAUTION = '⚠️ Caution: Total Payment exceeded Total Cost of this Batch, excess payments will go to Receivable from Supplier';
+export const MERCHANDISE_EXCESS_CAUTION = '⚠️ Caution: Total Payment exceeded the Total Cost of this batch. The excess payment will be recorded under Accounts Receivable – Supplier. If any excess payment has been refunded, please select “Collection of Refund from Supplier for Excess Payment” from the dropdown and enter the amount of the refund collected.';
 
 export const OFFICER_REIMBURSEMENT_NOTE = 'Note: Any reimbursement to the officer should be recorded separately under the Reimbursement category.';
 

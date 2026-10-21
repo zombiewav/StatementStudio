@@ -235,8 +235,8 @@ login flag. This is still local-browser authentication, not secure multi-device 
   Because a saved draft is already in the ledger, the form reads every limit (officer payable,
   advances, cash, linked downpayment, inventory units, preview Before/After) from
   `ledgerWithoutDraftEntry` (`lib/draftLedger.ts`) so a draft never counts against itself. Drafts
-  are kept out of Transaction Review. Reimbursement to Officer is limited by the **total** Due to
-  Officers balance; the per-officer table is reference only. Journal lines are *displayed* debits
+  are kept out of Transaction Review. Reimbursement to Officer is limited by the **named officer's own** balance in
+  Due to Officers and the name must be in the Amount Payable to Officers table, also for drafts (client, Oct 20 2026: `lib/officerReimbursement.ts`; before, it was the total balance). Journal lines are *displayed* debits
   first (`orderLinesDebitsFirst`); stored order is unchanged because batch splitting relies on it.
 
 - **No negative balances after the fact**: besides the posting check, deleting a posted entry, deleting a saved draft,
@@ -260,7 +260,7 @@ login flag. This is still local-browser authentication, not secure multi-device 
   Depreciation / Dr Loss on Disposal of PPE (5370, new expense account) / Cr asset with a confirm step, NBV = 0 posts without a loss
   (confirm step), accumulated depreciation above cost is refused (`planPpeRetirement`); only that reference is reduced and it
   disappears at zero. **Return of Advances** (own tab, `ReturnOfAdvancesEntry`): shows the per-officer advance table, limits the
-  amount to that officer's remaining advance, posts Dr Cash / Cr Advances to Officers. Both tabs post directly (like Payables), no draft.
+  amount to that officer's remaining advance, posts Dr Cash / Cr Advances to Officers. Both tabs now follow the draft workflow (see the Oct 20 note below).
 
 - **Sale of Merchandise / Prepaid cautions and receivable collections (client, Oct 15-16 2026)**: the payment shortfall Caution also appears on Sale of Merchandise
   (collected < Total Sales, worded as a receivable; `MERCHANDISE_SALE_SHORTFALL_CAUTION`) and on Prepaid Expenses and Other Assets purchases (paid < Purchase Price
@@ -307,6 +307,17 @@ login flag. This is still local-browser authentication, not secure multi-device 
 
 - **Merchandise Transactions dropdowns (client, Oct 20 2026)**: like PPE's PPE/F&F pair, the type picker is two selects: **Purchase** (Acquisition of Merchandise for Sale, Collections from Suppliers - Merchandise,
   Downpayment to Suppliers for Pre-Ordered Merchandise: `MERCHANDISE_PURCHASE_TYPES`) and **Sales** (every remaining merchandise type). Picking from one clears the other.
+
+- **Tentative final revisions + additions (client, Oct 20-21 2026)**: *Reimbursement to Officers* is per officer (see above). *Merchandise*: "Collections from Suppliers - Merchandise" is now
+  "Collection of Refund from Supplier for Excess Payment" (old rules stay, hidden) and the excess-payment caution says the excess goes to Accounts Receivable - Supplier and to use that dropdown
+  choice for a refund. *Activity Fees*: "No - next semester" shows the advance-collections note; **Collection of Activity Fees Receivable** has no event dropdown any more: it is capped by the
+  BEGINNING balance of Activity Fees Receivable (1310) like Membership/Payables (`lib/activityFeeReceivable.ts`, `transactionDetails.activityFeePriorReceivableCollected` marks what was collected
+  against it; saved receivable drafts count via `activityFeeDraftEffects().reservedBeginningReceivableCollected`) and posts Dr Cash / Cr 1310 directly. *Expense and PPE / F&F purchases*: the PPE form now
+  has the same required Date of transaction at the top; the transaction date and every payment date are required, no payment before the transaction date, only Payment 1 may share it, payment dates
+  cannot repeat, payments cannot exceed the cost (`lib/guidedPurchaseDates.ts`). *Depreciation / Retirement*: `buildPpeReferences` counts saved drafts (`includeDrafts`, default true; carry-forward
+  passes false), so a draft purchase can be depreciated or retired and balances move on Save as Draft. *Return of Advances* and *Retirement of PPE* are draft forms like the rest: Save as Draft writes a
+  real draft ledger entry (category `return-of-advances` / `retirement-of-ppe`), the review note sits above the button, Return has a Journal Entry Preview, Review's Continue/Post resumes them
+  (Retirement still asks to confirm a loss when posted).
 
 ## Known bugs / gaps, not yet fixed (flagged, intentionally left alone)
 

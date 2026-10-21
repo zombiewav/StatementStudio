@@ -61,15 +61,23 @@ describe('PPE Item References', () => {
     expect(references.find(reference => reference.item.code === '1501')).toMatchObject({ quantity: 1, unitCost: 900 });
   });
 
-  it('charges depreciation recorded without a reference to the item\'s oldest reference, and ignores drafts and reversed entries', () => {
+  it('charges depreciation recorded without a reference to the item\'s oldest reference, and ignores reversed entries', () => {
     const references = buildPpeReferences([
       buy('a', 'Purchase Chairs', '1652', 1, 250, 'r1'), buy('c', 'Purchase Chairs', '1652', 1, 300, 'r2'),
       depreciate('d', 'Depreciation of Chairs', '5095', '1660', 40),
-      { ...buy('x', 'Purchase Chairs', '1652', 9, 100, 'r3'), isDraft: true },
       { ...buy('y', 'Purchase Chairs', '1652', 9, 100, 'r4'), reversedByEntryId: 'z' },
     ]);
     expect(references.map(reference => reference.referenceId)).toEqual(['r1', 'r2']);
     expect(references[0].accumulatedDepreciation).toBe(40);
+  });
+
+  it('counts saved drafts (a draft purchase can be depreciated, a draft depreciation lowers the balance), unless asked for posted entries only', () => {
+    const entries = [
+      { ...buy('x', 'Purchase Chairs', '1652', 2, 100, 'r3'), isDraft: true },
+      { ...depreciate('d', 'Depreciation of Chairs', '5095', '1660', 60, 'r3'), isDraft: true },
+    ];
+    expect(buildPpeReferences(entries)).toMatchObject([{ referenceId: 'r3', quantity: 2, cost: 200, accumulatedDepreciation: 60, netBookValue: 140 }]);
+    expect(buildPpeReferences(entries, {}, { includeDrafts: false })).toEqual([]);
   });
 
   it('treats an opening balance with no carried detail as one unit', () => {

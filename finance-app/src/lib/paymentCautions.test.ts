@@ -84,6 +84,6 @@ describe('merchandise acquisition cautions', () => {
     expect(MERCHANDISE_PAYMENT_WINDOW_CAUTION).toBe('Caution: Record only payments made on or after the date the merchandise was received and is already on hand. Exclude downpayments made before receipt.');
     expect(MERCHANDISE_TOTAL_COST_REMINDER).toBe('Enter the total amount spent to purchase and prepare the merchandise for sale. Include not only the purchase price but also other direct costs, such as design fees and labor costs for making the merchandise.');
     expect(MERCHANDISE_SHORTFALL_CAUTION).toContain('less than the Total Cost of the Batch.');
-    expect(MERCHANDISE_EXCESS_CAUTION).toBe('⚠️ Caution: Total Payment exceeded Total Cost of this Batch, excess payments will go to Receivable from Supplier');
+    expect(MERCHANDISE_EXCESS_CAUTION).toBe('⚠️ Caution: Total Payment exceeded the Total Cost of this batch. The excess payment will be recorded under Accounts Receivable – Supplier. If any excess payment has been refunded, please select “Collection of Refund from Supplier for Excess Payment” from the dropdown and enter the amount of the refund collected.');
   });
 });

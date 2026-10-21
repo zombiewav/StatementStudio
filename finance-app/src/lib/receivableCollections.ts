@@ -15,7 +15,7 @@ export interface ReceivableCollectionKind {
 
 export const RECEIVABLE_COLLECTION_KINDS: ReceivableCollectionKind[] = [
   {
-    creditCode: '1360', title: 'Collections from Suppliers - Merchandise', accountLabel: 'Accounts Receivable - Suppliers', amountLabel: 'Amount collected',
+    creditCode: '1360', title: 'Collection of Refund from Supplier for Excess Payment', accountLabel: 'Accounts Receivable - Suppliers', amountLabel: 'Amount collected',
     intro: 'Record cash returned or collected from suppliers against prior excess payments.',
     journalNote: 'Journal entry: Debit Cash on Hand, Credit Accounts Receivable - Suppliers. This balance is linked to the Accounts Receivable - Suppliers account in the General Ledger; the collection cannot exceed it.',
     outstandingLabel: 'Outstanding receivable (ledger balance)',
