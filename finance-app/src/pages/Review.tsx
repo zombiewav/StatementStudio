@@ -1,11 +1,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { ClipboardCheck, CheckCircle2, AlertCircle, Trash2, Undo2, Pencil, X } from 'lucide-react';
+import { ClipboardCheck, CheckCircle2, AlertCircle, Trash2, Undo2 } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import { JournalEntry } from '../types';
 import { ReceiptAttachments } from '../components/ReceiptAttachments';
 import { CustomerOrderFollowUp, CUSTOMER_ORDER_DRAFT } from '../components/CustomerOrderEntry';
 import {
-  isJournalEntryEditLocked,
   computeTransactionReviewStates,
   buildRestrictionReleaseLines,
   ReviewStatus,
@@ -25,7 +24,7 @@ interface ReviewProps {
 }
 
 export function Review({ onContinueDraft, onPostDraft, notice, onNoticeShown }: ReviewProps): React.ReactElement {
-  const { journalEntries, accounts, settings, closedFiscalYears, draftTransactions, deleteDraftTransaction, deleteJournalEntry, reverseJournalEntry, addJournalEntry, updateJournalEntry, formatCurrency } = useFinance();
+  const { journalEntries, accounts, settings, draftTransactions, deleteDraftTransaction, reverseJournalEntry, addJournalEntry, formatCurrency } = useFinance();
   const semesterKey = `${settings.reportingYear}::${settings.semester}`;
   // A saved draft is listed under Draft Transactions until it is posted, so it
   // is kept out of Transaction Review (where it would offer a second Edit and a
@@ -35,11 +34,6 @@ export function Review({ onContinueDraft, onPostDraft, notice, onNoticeShown }: 
   const [statusFilter, setStatusFilter] = useState<'all' | ReviewStatus>('all');
   const [settlementMessage, setSettlementMessage] = useState('');
   const [lastPostedSettlement, setLastPostedSettlement] = useState<{ id: string; reference: string } | null>(null);
-  const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
-  const [editDate, setEditDate] = useState('');
-  const [editDescription, setEditDescription] = useState('');
-  const [editAmount, setEditAmount] = useState('');
-  const [editError, setEditError] = useState('');
 
   useEffect(() => {
     if (!notice) return;
@@ -47,47 +41,6 @@ export function Review({ onContinueDraft, onPostDraft, notice, onNoticeShown }: 
     setLastPostedSettlement(null);
     onNoticeShown?.();
   }, [notice]);
-
-  const beginEdit = (entry: JournalEntry) => {
-    setEditingEntryId(entry.id);
-    setEditDate(entry.date);
-    setEditDescription(entry.description);
-    const debitLines = entry.lines.filter(line => line.debit > 0);
-    const creditLines = entry.lines.filter(line => line.credit > 0);
-    setEditAmount(debitLines.length === 1 && creditLines.length === 1 && Math.abs(debitLines[0].debit - creditLines[0].credit) < 0.005
-      ? String(debitLines[0].debit) : '');
-    setEditError('');
-  };
-
-  const saveEntryEdit = (entry: JournalEntry) => {
-    if (!editDate || !editDescription.trim()) {
-      setEditError('Enter a date and transaction description.');
-      return;
-    }
-    const debitLines = entry.lines.filter(line => line.debit > 0);
-    const creditLines = entry.lines.filter(line => line.credit > 0);
-    const canEditAmount = debitLines.length === 1 && creditLines.length === 1;
-    const amount = editAmount === '' ? NaN : Number(editAmount);
-    if (canEditAmount && (!Number.isFinite(amount) || amount <= 0)) {
-      setEditError('Enter an amount greater than zero.');
-      return;
-    }
-    const lines = entry.lines.map(line => {
-      const nextLine = line.date === entry.date ? { ...line, date: editDate } : { ...line };
-      if (canEditAmount && line === debitLines[0]) nextLine.debit = Math.round(amount * 100) / 100;
-      if (canEditAmount && line === creditLines[0]) nextLine.credit = Math.round(amount * 100) / 100;
-      return nextLine;
-    });
-    try {
-      updateJournalEntry({ ...entry, date: editDate, description: editDescription.trim(), lines });
-      setEditingEntryId(null);
-      setEditError('');
-      setSettlementMessage(`${entry.reference} was updated.`);
-      setLastPostedSettlement(null);
-    } catch (error) {
-      setEditError(error instanceof Error ? error.message : 'The transaction could not be updated.');
-    }
-  };
 
   const handleSettlementPosted = (entry: JournalEntry) => {
     setSettlementMessage(`Settlement posted as ${entry.reference}.`);
@@ -118,14 +71,6 @@ export function Review({ onContinueDraft, onPostDraft, notice, onNoticeShown }: 
     if (!window.confirm(`Delete the draft "${label}"? Its draft journal entry will also be removed from the ledger.`)) return;
     if (!deleteDraftTransaction(id)) return;
     setSettlementMessage(`Draft "${label}" was deleted.`);
-    setLastPostedSettlement(null);
-  };
-
-  const handleDeletePostedTransaction = (entry: JournalEntry) => {
-    const pairWarning = entry.transactionDetails?.customerOrder ? ' All linked deliveries, collections, refunds, and their inventory movements will also be deleted.' : entry.reversedByEntryId ? ' Its linked reversing entry will also be deleted.' : entry.reversalOfEntryId ? ' The original transaction will become active again.' : '';
-    if (!window.confirm(`Permanently delete ${entry.reference}?${pairWarning} This removes it from the journal and ledger, but the deletion remains in the audit log.`)) return;
-    if (!deleteJournalEntry(entry.id)) return;
-    setSettlementMessage(`${entry.reference} was permanently deleted.`);
     setLastPostedSettlement(null);
   };
 
@@ -242,8 +187,6 @@ export function Review({ onContinueDraft, onPostDraft, notice, onNoticeShown }: 
         ) : visibleStates.map(state => {
           const amount = state.entry.lines.reduce((sum, line) => sum + line.debit, 0);
           const isIncomplete = state.status === 'incomplete';
-          const editLocked = isJournalEntryEditLocked(state.entry, closedFiscalYears);
-          const amountEditable = state.entry.lines.filter(line => line.debit > 0).length === 1 && state.entry.lines.filter(line => line.credit > 0).length === 1;
           return (
             <article key={state.entry.id} className={`rounded-xl border p-4 ${isIncomplete ? 'border-rose-200 bg-rose-50 dark:border-rose-500/30 dark:bg-rose-500/10' : state.status === 'complete' ? 'border-emerald-100 bg-white dark:border-emerald-500/20 dark:bg-slate-900' : 'border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900/70'}`}>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -264,16 +207,6 @@ export function Review({ onContinueDraft, onPostDraft, notice, onNoticeShown }: 
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
                   <p className="text-sm font-black text-slate-900 dark:text-slate-100">{formatCurrency(amount)}</p>
-                  <button
-                    type="button"
-                    disabled={editLocked}
-                    onClick={() => editingEntryId === state.entry.id ? setEditingEntryId(null) : beginEdit(state.entry)}
-                    className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-[12px] font-bold text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-blue-500/30 dark:bg-slate-900 dark:text-blue-300 dark:hover:bg-blue-500/10"
-                    title={editLocked ? 'This transaction is finalized, reversed, carried forward, or in a closed period and cannot be edited.' : 'Edit this transaction'}
-                  >
-                    {editingEntryId === state.entry.id ? <X className="h-3 w-3" /> : <Pencil className="h-3 w-3" />}
-                    {editingEntryId === state.entry.id ? 'Close edit' : 'Edit'}
-                  </button>
                   {state.restrictedRemaining > 0 && (
                     <button
                       type="button"
@@ -283,37 +216,8 @@ export function Review({ onContinueDraft, onPostDraft, notice, onNoticeShown }: 
                       Event occurred — release {formatCurrency(state.restrictedRemaining)}
                     </button>
                   )}
-                  {!state.entry.description.startsWith('Closing Entries') && !state.entry.transactionDetails?.carriedForward && (
-                    <button
-                      type="button"
-                      onClick={() => handleDeletePostedTransaction(state.entry)}
-                      className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-[12px] font-bold text-rose-700 transition-colors hover:bg-rose-50 dark:border-rose-500/30 dark:bg-slate-900 dark:text-rose-300 dark:hover:bg-rose-500/10"
-                      title="Permanently delete this posted transaction"
-                    >
-                      <Trash2 className="h-3 w-3" /> Delete
-                    </button>
-                  )}
                 </div>
               </div>
-              {editingEntryId === state.entry.id && (
-                <div className="mt-4 grid grid-cols-1 gap-3 rounded-xl border border-blue-200 bg-blue-50/70 p-3 dark:border-blue-500/30 dark:bg-blue-500/5 sm:grid-cols-2">
-                  <label className="text-[12px] font-bold text-slate-700 dark:text-slate-300">Date
-                    <input type="date" value={editDate} onChange={event => setEditDate(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-200 bg-white p-2 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
-                  </label>
-                  <label className="text-[12px] font-bold text-slate-700 dark:text-slate-300">Transaction description
-                    <input value={editDescription} onChange={event => setEditDescription(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-200 bg-white p-2 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
-                  </label>
-                  <label className="text-[12px] font-bold text-slate-700 dark:text-slate-300 sm:col-span-2">Amount
-                    <input type="number" min="0.01" step="0.01" value={editAmount} disabled={!amountEditable} onChange={event => setEditAmount(event.target.value)} placeholder="Amount editing is available for a single debit and credit line" className="mt-1 block w-full rounded-lg border border-slate-200 bg-white p-2 text-xs disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800" />
-                    {!amountEditable && <span className="mt-1 block font-medium text-slate-500">This entry has multiple lines; the amount is locked to preserve its accounting split.</span>}
-                  </label>
-                  {editError && <p role="alert" className="text-[12px] font-bold text-rose-700 sm:col-span-2">{editError}</p>}
-                  <div className="flex justify-end gap-2 sm:col-span-2">
-                    <button type="button" onClick={() => setEditingEntryId(null)} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-[12px] font-bold text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">Cancel</button>
-                    <button type="button" onClick={() => saveEntryEdit(state.entry)} className="rounded-lg bg-blue-700 px-3 py-1.5 text-[12px] font-bold text-white hover:bg-blue-800">Save changes</button>
-                  </div>
-                </div>
-              )}
               <ReceiptAttachments entryId={state.entry.id} allowAdd={state.status !== 'reversed'} />
               {state.entry.transactionDetails?.customerOrder && state.status !== 'reversed' && <CustomerOrderFollowUp entry={state.entry} />}
             </article>
