@@ -32,4 +32,21 @@ describe('Statement of Financial Position - Property and Equipment', () => {
     ['Microphone', 'Less: Accumulated Depreciation - Equipment', 'Chairs'].forEach(label => expect(page.indexOf(label)).toBeGreaterThan(ppe));
     expect(page.indexOf('Total Assets')).toBeGreaterThan(page.indexOf('Chairs'));
   });
+
+  it('separates Equipment and Furniture and Fixtures, each ending with its own accumulated depreciation', () => {
+    act(() => { renderer = create(createElement(FinanceProvider, null, createElement(Probe))); });
+    act(() => {
+      finance.updateSettings({ semester: '1st Semester', reportingYear: 2026 } as never);
+      finance.addJournalEntry('2026-10-01', 'Capital', 'General Fund Operations', [{ accountCode: '1010', debit: 5000, credit: 0 }, { accountCode: '4040', debit: 0, credit: 5000 }]);
+      finance.addJournalEntry('2026-10-02', 'Microphone', 'General Fund Operations', [{ accountCode: '1508', debit: 600, credit: 0 }, { accountCode: '1010', debit: 0, credit: 600 }]);
+      finance.addJournalEntry('2026-10-03', 'Chairs', 'General Fund Operations', [{ accountCode: '1652', debit: 150, credit: 0 }, { accountCode: '1010', debit: 0, credit: 150 }]);
+      finance.addJournalEntry('2026-10-04', 'Depreciation', 'General Fund Operations', [{ accountCode: '5090', debit: 30, credit: 0 }, { accountCode: '1550', debit: 0, credit: 30 }]);
+      finance.addJournalEntry('2026-10-05', 'Depreciation', 'General Fund Operations', [{ accountCode: '5095', debit: 20, credit: 0 }, { accountCode: '1660', debit: 0, credit: 20 }]);
+    });
+    const page = text(renderer.root);
+    const at = (label: string) => page.indexOf(label);
+    const order = ['Equipment Microphone', 'Less: Accumulated Depreciation - Equipment', 'Furniture and Fixtures Chairs', 'Less: Accumulated Depreciation - Furniture and Fixtures', 'Total Assets'].map(at);
+    expect(order.every(index => index > -1)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
 });

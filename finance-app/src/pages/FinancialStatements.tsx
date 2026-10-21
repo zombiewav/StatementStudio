@@ -14,7 +14,7 @@ import { computeTransactionReviewStates } from '../lib/reviewEngine';
 import { buildCashFlowStatement, EQUIPMENT_PURCHASE_LABEL, FURNITURE_PURCHASE_LABEL, netCashLabel } from '../lib/cashFlowStatement';
 import { CASH_ACCOUNT_CODES } from '../lib/cashAccounts';
 import { accumulatedNetPosition } from '../lib/fundBalancePresentation';
-import { isPropertyAndEquipmentAccount } from '../lib/propertyEquipmentAccounts';
+import { comparePpeAccounts, isPropertyAndEquipmentAccount, ppeSectionOf } from '../lib/propertyEquipmentAccounts';
 import { excludeClosingEntries } from '../lib/closingEntries';
 import { periodEndedLabel, periodForSemester, reportingPeriodBounds } from '../lib/reportingPeriod';
 import { combineOpeningAndPeriodBalances, entriesThroughPeriodEnd, periodEndingBalances } from '../lib/reportingPeriodBalances';
@@ -203,7 +203,10 @@ export function FinancialStatements({ onNavigate }: FinancialStatementsProps = {
     const assigned = new Set(groups.flatMap(([, codes]) => codes));
     // Accounts with a zero balance are left off the statement, and a heading with no accounts left goes with them.
     const visible = (list: Account[]) => list.filter(account => hasBalance(cumulativeToEndBalances[account.code]));
-    const grouped = [...groups.map(([label, codes]) => [label, visible(accounts.filter(account => codes.includes(account.code)))] as const), ['Other Assets', visible(accounts.filter(account => account.type === 'Assets' && !assigned.has(account.code)))] as const];
+    const grouped = [...groups.map(([label, codes]) => {
+      const list = visible(accounts.filter(account => codes.includes(account.code)));
+      return [label, label === 'Property and Equipment' ? [...list].sort(comparePpeAccounts) : list] as const;
+    }), ['Other Assets', visible(accounts.filter(account => account.type === 'Assets' && !assigned.has(account.code)))] as const];
     return grouped.filter(([, list]) => list.length > 0);
   }, [accounts, cumulativeToEndBalances]);
   const positionLiabilityGroups = useMemo(() => {
@@ -500,14 +503,19 @@ export function FinancialStatements({ onNavigate }: FinancialStatementsProps = {
                   <div className="space-y-1">
                     {positionAssetGroups.map(([group, groupAccounts]) => <React.Fragment key={group}>
                     <p className="px-2 pt-2 text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-400">{group}</p>
-                    {groupAccounts.map(acc => {
+                    {groupAccounts.map((acc, index) => {
                       const bal = cumulativeToEndBalances[acc.code] || 0;
                       const isContra = isContraAccount(acc);
+                      const ppeSection = group === 'Property and Equipment' ? ppeSectionOf(acc.code) : undefined;
+                      const startsPpeSection = ppeSection !== undefined && (index === 0 || ppeSectionOf(groupAccounts[index - 1].code) !== ppeSection);
                       return (
-                        <div key={acc.code} className="flex justify-between py-1.5 px-4 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                          <span>{isContra ? `Less: ${acc.name}` : acc.name}</span>
-                          <span className="font-bold">{formatCurrency(isContra ? -bal : bal)}</span>
-                        </div>
+                        <React.Fragment key={acc.code}>
+                          {startsPpeSection && <p className="px-4 pt-2 text-sm font-bold text-slate-700 dark:text-slate-300">{ppeSection}</p>}
+                          <div className={`flex justify-between py-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50 ${ppeSection ? 'px-8' : 'px-4'}`}>
+                            <span>{isContra ? `Less: ${acc.name}` : acc.name}</span>
+                            <span className="font-bold">{formatCurrency(isContra ? -bal : bal)}</span>
+                          </div>
+                        </React.Fragment>
                       );
                     })}
                     </React.Fragment>)}
