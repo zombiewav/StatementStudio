@@ -32,11 +32,21 @@ export const RECEIVABLE_COLLECTION_KINDS: ReceivableCollectionKind[] = [
     journalNote: 'Journal entry: Debit Cash on Hand, Credit Accounts Receivable - Merchandise. The amount is linked to what is still receivable from buyers and cannot exceed it.',
     outstandingLabel: 'Still receivable from buyers (ledger balance)',
   },
+  {
+    // Miscellaneous Transactions (client, Oct 21 2026): an officer remits collections that were moved to Due from Officers.
+    creditCode: '1320', title: 'Remittance of Collections by Officers', accountLabel: 'Due from Officers', amountLabel: 'Amount',
+    intro: 'Record cash remitted by an officer against collections that were recorded as Due from Officers.',
+    journalNote: 'Journal entry: Debit Cash on Hand, Credit Due from Officers. The amount cannot exceed the Due from Officers balance.',
+    outstandingLabel: 'Outstanding Due from Officers (ledger balance)',
+  },
 ];
 
-/** The collection kind a type's accounts describe (Dr Cash on Hand / Cr receivable), if any. */
-export const receivableCollectionKind = (debitCode: string | undefined, creditCode: string | undefined): ReceivableCollectionKind | undefined =>
-  debitCode === '1010' ? RECEIVABLE_COLLECTION_KINDS.find(kind => kind.creditCode === creditCode) : undefined;
+/** The collection kind a type's accounts describe (Dr Cash on Hand / Cr receivable), if any. Two kinds credit Due from Officers, so the type name picks between them. */
+export const receivableCollectionKind = (debitCode: string | undefined, creditCode: string | undefined, typeName?: string): ReceivableCollectionKind | undefined => {
+  if (debitCode !== '1010') return undefined;
+  const candidates = RECEIVABLE_COLLECTION_KINDS.filter(kind => kind.creditCode === creditCode);
+  return candidates.find(kind => kind.title === typeName) || candidates[0];
+};
 
 export const receivableCollectionLimitMessage = (kind: ReceivableCollectionKind, outstanding: number, formatCurrency: (value: number) => string): string =>
   `Collection cannot exceed the outstanding ${kind.accountLabel} balance of ${formatCurrency(outstanding)}.`;

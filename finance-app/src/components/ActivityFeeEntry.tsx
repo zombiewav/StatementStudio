@@ -11,6 +11,7 @@ import { buildAccountPeriodHistory } from '../lib/transactionHistory';
 import { JournalLine, TransactionDraft } from '../types';
 import { DatedAmountInputRow, DatedAmountRows } from './DatedAmountRows';
 import { ReviewLaterNote } from './ReviewLaterNote';
+import { UnremittedCollectionNote } from './UnremittedCollectionNote';
 import { FinancialPreviewPanels } from './FinancialPreviewPanels';
 
 const firstRow = (): DatedAmountInputRow[] => [{ id: `activity-fee-${Date.now()}`, date: '', amount: '' }];
@@ -339,6 +340,7 @@ export function ActivityFeeEntry({ defaultOpen = false, requestedType, draftToRe
           {transactionType === 'activity-fees' ? (
         <form onSubmit={event => { event.preventDefault(); saveAsDraft(); }} className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2"><label className="mb-1 block text-[12px] font-bold uppercase text-slate-500">Has the event already taken place, or is it scheduled to take place during this reporting period?</label><div className="flex flex-wrap gap-2">{(['yes','no'] as const).map(answer => <button key={answer} type="button" onClick={() => setEventOccursThisPeriod(answer)} className={`rounded-lg px-4 py-2 text-xs font-bold ${eventOccursThisPeriod === answer ? 'bg-blue-700 text-white' : 'border border-slate-300 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'}`}>{answer === 'yes' ? 'Yes - current semester' : 'No - next semester'}</button>)}</div></div>
+          <div className="sm:col-span-2"><UnremittedCollectionNote /></div>
           <label className="text-[12px] font-bold uppercase text-slate-500">Event Name<input value={eventName} onChange={event => setEventName(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" required /></label>
           {eventOccursThisPeriod === 'yes' && <label className="text-[12px] font-bold uppercase text-slate-500">Date of Event<input type="date" value={eventDate} onChange={event => setEventDate(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" required /></label>}
           {eventOccursThisPeriod === 'yes' && <>

@@ -621,7 +621,8 @@ export const DEFAULT_RULES: ClassificationRuleWithWorkflow[] = [
   { keyword: 'hardware', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Computer Hardware' },
   { keyword: 'server', debitAccountCode: '1500', creditAccountCode: '1010', description: 'Hosting Server Equipment' },
   { keyword: 'furniture', debitAccountCode: '1651', creditAccountCode: '1010', description: 'Furniture & Fixtures Purchase' },
-  { keyword: 'receivable from custodian', debitAccountCode: '1330', creditAccountCode: '1010', description: 'Receivable from Custodian' },
+  { keyword: 'remittance of collections by officers', debitAccountCode: '1010', creditAccountCode: '1320', description: 'Remittance of Collections by Officers' },
+  { keyword: 'unremitted collections by an officer', debitAccountCode: '1320', creditAccountCode: '1010', description: 'Unremitted Collections by an Officer' },
 
   // --- Inventory (goods for resale) ---------------------------------------------
   { keyword: 'acquisition of merchandise', debitAccountCode: '1700', creditAccountCode: '1010', description: 'Acquisition of Merchandise for Sale - Goods Received and On Hand' },

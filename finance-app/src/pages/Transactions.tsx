@@ -30,6 +30,8 @@ import { CUSTOMER_ORDER_DRAFT } from '../components/CustomerOrderEntry';
 import { InventorySummaryCard } from '../components/InventorySummaryCard';
 import { DatedAmountInputRow, DatedAmountRows, hasDuplicateEnteredDates } from '../components/DatedAmountRows';
 import { ReviewLaterNote } from '../components/ReviewLaterNote';
+import { UnremittedCollectionNote } from '../components/UnremittedCollectionNote';
+import { showsUnremittedCollectionNote } from '../lib/unremittedCollectionNote';
 import { EXPENSE_ITEMS, expenseItemByLabel, expenseItemForAccount } from '../lib/expenseItems';
 import { advanceCaution, ADVANCE_NO_RECORD_CAUTION, guidedPaymentCautions, MERCHANDISE_EXCESS_CAUTION, MERCHANDISE_PAYMENT_WINDOW_CAUTION, MERCHANDISE_SALE_SHORTFALL_CAUTION, MERCHANDISE_SHORTFALL_CAUTION, MERCHANDISE_TOTAL_COST_REMINDER, OFFICER_REIMBURSEMENT_NOTE, paymentExceedsCaution, paymentShortfallCaution } from '../lib/paymentCautions';
 import { MerchandisePaymentRows } from '../components/MerchandisePaymentRows';
@@ -461,7 +463,11 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
     : isExcessRefundStatus && membershipRefundStatus === 'nonrefundable'
       ? '4050'
       : creditCode;
-  const receivableCollection = selectedCategory === 'merchandise' ? receivableCollectionKind(debitCode, effectiveCreditCode) : undefined;
+  const receivableCollection = selectedCategory === 'merchandise'
+    ? receivableCollectionKind(debitCode, effectiveCreditCode, classificationPreview?.defaultDesc)
+    : selectedCategory === 'other' && classificationPreview?.defaultDesc === 'Remittance of Collections by Officers'
+      ? receivableCollectionKind(debitCode, effectiveCreditCode, classificationPreview.defaultDesc)
+      : undefined;
   const isReceivableCollection = !!receivableCollection;
   const acquisitionUsesAdvance = isMerchandiseAcquisition && (merchandisePaymentMethod === 'organization-advance' || merchandisePaymentMethod === 'advance-and-personal');
   const merchandiseUsesOfficer = isMerchandiseAcquisition && (merchandisePaymentMethod === 'officer-personal' || merchandisePaymentMethod === 'organization-advance' || merchandisePaymentMethod === 'advance-and-personal');
@@ -1997,6 +2003,7 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               )}
 
               <p className="text-[12px] text-slate-500 mt-1 font-medium dark:text-slate-400">Select a known type. Its accounting rule determines the accounts automatically.</p>
+              {showsUnremittedCollectionNote(selectedCategory, classificationPreview?.defaultDesc) && <div className="mt-3"><UnremittedCollectionNote /></div>}
               </>}
 
               {isSmartMatched && selectedCategory !== 'event-program-expenses' && (

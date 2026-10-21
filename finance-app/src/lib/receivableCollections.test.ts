@@ -5,9 +5,9 @@ import { categorizeTransactionRule } from './transactionCategories';
 const kind = (code: string) => receivableCollectionKind('1010', code)!;
 
 describe('receivable collections in Merchandise Transactions', () => {
-  it('recognises the three collection types by their accounts', () => {
+  it('recognises the collection types (three in Merchandise, plus the Miscellaneous remittance) by their accounts', () => {
     expect(RECEIVABLE_COLLECTION_KINDS.map(item => item.title)).toEqual([
-      'Collection of Refund from Supplier for Excess Payment', 'Collection of Receivables from Officers - Merchandise', 'Collection of Unpaid Sold Merchandise',
+      'Collection of Refund from Supplier for Excess Payment', 'Collection of Receivables from Officers - Merchandise', 'Collection of Unpaid Sold Merchandise', 'Remittance of Collections by Officers',
     ]);
     expect(receivableCollectionKind('1010', '1320')?.accountLabel).toBe('Due from Officers');
     expect(receivableCollectionKind('1010', '1200')?.accountLabel).toBe('Accounts Receivable - Merchandise');

@@ -9,9 +9,9 @@ describe('StatementStudio Part 2 system rules', () => {
     expect(OBLIGATION_ACCOUNT_CODES).toEqual(['1260', '1280', '1285', '1295', '1298']);
   });
 
-  it('maps custodian receivables to cash automatically', () => {
-    expect(DEFAULT_RULES.find(rule => rule.description === 'Receivable from Custodian')).toMatchObject({
-      debitAccountCode: '1330',
+  it('moves unremitted officer collections from Cash to Due from Officers automatically', () => {
+    expect(DEFAULT_RULES.find(rule => rule.description === 'Unremitted Collections by an Officer')).toMatchObject({
+      debitAccountCode: '1320',
       creditAccountCode: '1010',
     });
   });
