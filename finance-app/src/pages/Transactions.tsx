@@ -2003,8 +2003,10 @@ export function Transactions({ draftToResume = null, onDraftResumed, onDraftSave
               )}
 
               <p className="text-[12px] text-slate-500 mt-1 font-medium dark:text-slate-400">Select a known type. Its accounting rule determines the accounts automatically.</p>
-              {showsUnremittedCollectionNote(selectedCategory, classificationPreview?.defaultDesc) && <div className="mt-3"><UnremittedCollectionNote /></div>}
               </>}
+
+              {/* Outside the pickers so it also shows under the Merchandise Purchase / Sales dropdowns. */}
+              {showsUnremittedCollectionNote(selectedCategory, classificationPreview?.defaultDesc) && <div className="mt-3"><UnremittedCollectionNote /></div>}
 
               {isSmartMatched && selectedCategory !== 'event-program-expenses' && (
                 <div className="mt-2 text-xs font-semibold text-emerald-600">
