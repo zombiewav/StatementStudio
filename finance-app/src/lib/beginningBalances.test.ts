@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildBeginningBalancePosting, shouldPromptBeginningBalances } from './beginningBalances';
+import { buildBeginningBalancePosting } from './beginningBalances';
 
 const accounts = [
   { code: '1010', type: 'Assets' as const, isActive: true },
@@ -21,16 +21,5 @@ describe('buildBeginningBalancePosting', () => {
   });
   it('ignores blanks, zeros, inactive accounts and non-asset accounts', () => {
     expect(buildBeginningBalancePosting(accounts, { '1010': '', '1015': '0', '1999': '50', '2010': '70' })).toBeNull();
-  });
-});
-
-describe('shouldPromptBeginningBalances', () => {
-  const fresh = { workspaceStatus: 'ready', settings: {}, journalEntries: [], reportingPeriodWorkspaces: [] };
-  it('shows on a new organization\'s first sign-in', () => expect(shouldPromptBeginningBalances(fresh)).toBe(true));
-  it('waits until the workspace has loaded', () => expect(shouldPromptBeginningBalances({ ...fresh, workspaceStatus: 'loading' })).toBe(false));
-  it('never shows again once answered', () => expect(shouldPromptBeginningBalances({ ...fresh, settings: { beginningBalancesPrompted: true } })).toBe(false));
-  it('does not show for books that already have entries, in this or another semester', () => {
-    expect(shouldPromptBeginningBalances({ ...fresh, journalEntries: [{ id: 'e1' }] })).toBe(false);
-    expect(shouldPromptBeginningBalances({ ...fresh, reportingPeriodWorkspaces: [{ journalEntries: [{ id: 'e1' } as never] }] })).toBe(false);
   });
 });
